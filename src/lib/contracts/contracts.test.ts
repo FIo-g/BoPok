@@ -3,10 +3,12 @@ import {
   CoordSchema,
   JudgeResultSchema,
   legKey,
+  OpinionInputSchema,
   OpinionSchema,
   PlaceSegmentSchema,
   StopSchema,
   TravelerSchema,
+  TripVersionSchema,
   type JudgeResult,
   type LegRequest,
   type Opinion,
@@ -158,6 +160,38 @@ describe('Opinion', () => {
   })
   it('의견 101자 거부', () => {
     expect(OpinionSchema.safeParse({ ...opinion, comment: '가'.repeat(101) }).success).toBe(false)
+  })
+})
+
+describe('OpinionInput (의견 남기기 요청 본문)', () => {
+  it('반응도 의견도 없으면 거부', () => {
+    expect(OpinionInputSchema.safeParse({ stopKey: 's1', reactions: [] }).success).toBe(false)
+  })
+  it('반응만 있어도 통과', () => {
+    expect(OpinionInputSchema.parse({ stopKey: null, reactions: ['need_rest'] })).toEqual({
+      stopKey: null,
+      reactions: ['need_rest'],
+    })
+  })
+})
+
+describe('TripVersion (DB에서 비어 있는 칸)', () => {
+  const version = {
+    id: 'v1',
+    tripId: 'trip1',
+    number: 1,
+    parentId: null,
+    madeBy: 'user',
+    stops: [stop],
+    createdAt: '2026-11-01T10:00:00.000Z',
+  }
+  it('판정 요약·메모·만든 사람이 null이어도 통과 (엔진 연결 전 저장)', () => {
+    expect(TripVersionSchema.safeParse({ ...version, summary: null, note: null, madeByUserId: null }).success).toBe(
+      true,
+    )
+  })
+  it('반영 버전이 null인 의견도 통과', () => {
+    expect(OpinionSchema.safeParse({ ...opinion, appliedInVersionId: null }).success).toBe(true)
   })
 })
 

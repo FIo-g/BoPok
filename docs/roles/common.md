@@ -30,7 +30,7 @@
 
 ## 3. 공용 타입 초안 (`src/lib/contracts`)
 
-**코드 초안: `src/lib/contracts`** (zod 스키마가 원본, 타입은 `z.infer`). 아래는 처음 합의용 요약이고, 코드와 다르면 코드가 기준이다. 코드에서 더 정한 것: `StopResult`·`SegmentResult`·`LegResult` 필드, API 에러 모양(`ApiErrorSchema`), 숫자 범위(나이 0~120, 키 50~250, 시간 `HH:mm`, 의견 100자), 빈 의견 거부. 버전·의견은 순환 import를 피하려고 `version.ts`에 따로 있다.
+**코드 초안: `src/lib/contracts`** (zod 스키마가 원본, 타입은 `z.infer`). 아래는 처음 합의용 요약이고, 코드와 다르면 코드가 기준이다. 코드에서 더 정한 것: `StopResult`·`SegmentResult`·`LegResult` 필드, API 에러 모양(`ApiErrorSchema`), 숫자 범위(나이 0~120, 키 50~250, 시간 `HH:mm`, 의견 100자), 빈 의견 거부(`OpinionSchema`, 요청 본문용 `OpinionInputSchema`), 조각 길이·정수·양수 제약(구간 경로는 점 2개 이상, 이름은 빈 문자열 불가, 버전 번호 1 이상 정수, 속도 0 초과). 버전·의견은 순환 import를 피하려고 `version.ts`에 따로 있고, DB에서 비어 있을 수 있는 칸(판정 요약·메모 등)은 `null`도 받는다.
 
 단위: 거리 m, 시간 분, 속도 m/s, 좌표 `[경도, 위도]`.
 
