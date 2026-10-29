@@ -1,0 +1,14 @@
+# 브레인스토밍 화면 임시 파일
+.superpowers/
+
+# 키·환경 변수
+.env
+.env*.local
+
+# 의존성·빌드
+node_modules/
+.next/
+out/
+
+# OS
+.DS_Store
