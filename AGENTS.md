@@ -109,3 +109,13 @@ PR을 올리기 전에 `pnpm lint && pnpm test && pnpm build`가 모두 통과�
 
 - 30분 이상 막히면 팀에 공유한다(노션 팀 규칙).
 - 설계 문서·역할 문서에 없는 결정이 필요하면 추측으로 구현하지 말고 사용자에게 묻는다. 정해지면 문서에 적는다.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+## This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

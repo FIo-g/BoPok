@@ -1,0 +1,6 @@
+@import 'tailwindcss';
+
+/* 부모님도 읽기 쉽게 기본 글자를 크게 둔다 (설계 3장). 가/가+ 버튼은 프론트에서 추가 */
+body {
+  font-size: 18px;
+}
