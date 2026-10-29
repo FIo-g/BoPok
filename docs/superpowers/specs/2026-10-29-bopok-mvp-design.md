@@ -323,7 +323,7 @@ TMAP의 '계단 제외' 옵션은 노션 테스트에서 일반 경로와 같은
 | 지도 | MapLibre GL + OpenFreeMap (+ three.js) | [결정] |
 | AI | Upstage Solar Pro → opencode 대체 | [결정] |
 | 경로 | TMAP 보행자 경로·POI 검색 | [결정] |
-| 배포 | Vercel + Neon 연동 | [제안] |
+| 배포 | Vercel + Neon 연동. 개발은 각자 로컬에서 하고, 배포·Neon 연결은 마지막에 한다 | [제안] + [결정: 배포는 마지막] |
 
 > 시안 레포의 `AGENTS.md`: 이 Next.js 버전은 이전과 API가 다를 수 있으니 코드를 쓰기 전에 `node_modules/next/dist/docs/`를 확인할 것.
 
