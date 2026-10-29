@@ -4,13 +4,14 @@
 
 ## 1. 0단계 — 함께 준비할 것
 
-| 할 일 | 주도 | 완료 기준 |
-| --- | --- | --- |
-| 레포 초기화: Next.js 16 + TypeScript + Tailwind 4 + pnpm + eslint + vitest, `src/` 구조(설계 10.2), `.env.example` | 김경선 | `pnpm dev`, `pnpm test`, `pnpm build` 통과, main에 머지 |
-| Neon 프로젝트 만들기, Drizzle 설정, 팀원별 Neon 브랜치 | 김경선 | 각자 `.env.local`의 `DATABASE_URL`로 접속됨 |
-| Vercel 연결 (main 머지 시 배포, PR마다 미리보기) | 김경선 | PR 미리보기 URL이 뜸 |
-| `src/lib/contracts` 확정 — 아래 3장 초안을 코드로 | 김태형(엔진·AI 타입), 이동주(장소·경로 타입), 김경선(그룹·여행·버전·의견 타입), 오하연(리뷰) | zod 스키마 + 타입, 네 명 모두 PR 승인 |
-| 목업 데이터 `src/mocks` (한밭수목원 등 2~3곳, 버전 2개, 의견 몇 개) | 오하연 | 프론트가 API 없이 일정 화면을 그릴 수 있음 |
+| 할 일 | 주도 | 완료 기준 | 상태 |
+| --- | --- | --- | --- |
+| 레포 초기화: Next.js 16 + TypeScript + Tailwind 4 + pnpm + eslint + vitest, `src/` 구조(설계 10.2), `.env.example` | 김태형 | `pnpm dev`, `pnpm test`, `pnpm build` 통과, main에 머지 | **완료** |
+| Drizzle 설정과 DB 연결 코드 (`src/lib/db/client.ts`의 `getDb()`) | 김태형 | DB 주소 없이도 빌드 통과, 있으면 연결 | **완료** |
+| Neon 프로젝트 만들기, 팀원별 Neon 브랜치 | 김태형(계정) → 김경선 | 각자 `.env.local`의 `DATABASE_URL`로 접속됨 | 계정 필요 — 김태형이 직접 |
+| Vercel 연결 (main 머지 시 배포, PR마다 미리보기) | 김태형(계정) → 김경선 | PR 미리보기 URL이 뜸 | 계정 필요 — 김태형이 직접 |
+| `src/lib/contracts` 확정 — 아래 3장 초안을 코드로 | 김태형(엔진·AI 타입), 이동주(장소·경로 타입), 김경선(그룹·여행·버전·의견 타입), 오하연(리뷰) | zod 스키마 + 타입, 네 명 모두 확인 | **초안이 main에 있음** — 각자 자기 타입을 확인하고, 고칠 점은 PR로 |
+| 목업 데이터 `src/mocks` (한밭수목원 등 2~3곳, 버전 2개, 의견 몇 개) | 오하연 | 프론트가 API 없이 일정 화면을 그릴 수 있음 | 오하연 대기 |
 
 > 레포를 `create-next-app`으로 만들 때 이미 있는 `AGENTS.md`, `CLAUDE.md`, `docs/`와 충돌하면, 임시 폴더에 만들어 필요한 파일만 옮긴다. `pnpm dev`가 `AGENTS.md` 끝에 Next.js 안내 블록을 자동으로 붙이는데, 그대로 커밋해도 된다.
 
@@ -29,7 +30,9 @@
 
 ## 3. 공용 타입 초안 (`src/lib/contracts`)
 
-0단계에서 이 초안을 zod 스키마로 옮기며 확정한다. 단위: 거리 m, 시간 분, 속도 m/s, 좌표 `[경도, 위도]`.
+**코드 초안: `src/lib/contracts`** (zod 스키마가 원본, 타입은 `z.infer`). 아래는 처음 합의용 요약이고, 코드와 다르면 코드가 기준이다. 코드에서 더 정한 것: `StopResult`·`SegmentResult`·`LegResult` 필드, API 에러 모양(`ApiErrorSchema`), 숫자 범위(나이 0~120, 키 50~250, 시간 `HH:mm`, 의견 100자), 빈 의견 거부. 버전·의견은 순환 import를 피하려고 `version.ts`에 따로 있다.
+
+단위: 거리 m, 시간 분, 속도 m/s, 좌표 `[경도, 위도]`.
 
 ```ts
 // ── 기본 ──
