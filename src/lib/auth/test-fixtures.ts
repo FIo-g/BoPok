@@ -3,7 +3,7 @@
 import 'server-only'
 import type { GroupRole } from '@/lib/contracts'
 import type { Db } from '@/lib/db/client'
-import { groupMembers, groups, user } from '@/lib/db/schema'
+import { groupInvites, groupMembers, groups, user } from '@/lib/db/schema'
 import { getAuth } from './auth'
 
 const BASE_URL = 'http://localhost:3000'
@@ -53,6 +53,30 @@ export function requestWith(cookie?: string): Request {
   })
 }
 
+// 몸체가 있는 요청 (POST·DELETE 등). body를 안 주면 몸체 없이 보낸다.
+export function jsonRequestWith(
+  args: { method: string; cookie?: string; body?: unknown; path?: string },
+): Request {
+  return new Request(`${BASE_URL}${args.path ?? '/api/groups'}`, {
+    method: args.method,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(args.cookie ? { cookie: args.cookie } : {}),
+    },
+    body: args.body === undefined ? undefined : JSON.stringify(args.body),
+  })
+}
+
+// route 함수의 두 번째 인자. Next.js 16은 주소 안의 값을 Promise로 준다.
+export function routeParams<T extends Record<string, string>>(params: T): { params: Promise<T> } {
+  return { params: Promise.resolve(params) }
+}
+
+// 응답 본문을 읽는다. 테스트에서 상태 코드와 내용을 같이 보기 쉽게.
+export async function readBody<T = unknown>(response: Response): Promise<T> {
+  return (await response.json()) as T
+}
+
 // 그룹을 만들고 만든 사람을 owner로 넣는다 (2단계 POST /api/groups가 할 일을 테스트에서 미리).
 export async function createGroup(db: Db, args: { name: string; ownerId: string }): Promise<string> {
   const [row] = await db.insert(groups).values({ name: args.name, createdBy: args.ownerId }).returning({ id: groups.id })
@@ -75,4 +99,19 @@ export async function addMember(
 // 계정 없이 user 행만 필요할 때 (비밀번호·세션 없이 id만 쓰는 경우)
 export async function insertUser(db: Db, args: { id: string; name: string; email: string }): Promise<void> {
   await db.insert(user).values({ id: args.id, name: args.name, email: args.email })
+}
+
+// 만료된 초대를 직접 넣는다 — 시계를 조작하지 않고 만료 동작(410)을 검사하려고.
+export async function insertExpiredInvite(
+  db: Db,
+  args: { groupId: string; createdBy: string; token?: string },
+): Promise<string> {
+  const token = args.token ?? 'expired-token-for-test'
+  await db.insert(groupInvites).values({
+    groupId: args.groupId,
+    token,
+    createdBy: args.createdBy,
+    expiresAt: new Date(Date.now() - 60 * 1000), // 1분 전에 만료됨
+  })
+  return token
 }
