@@ -17,7 +17,7 @@ import { AiCallError } from './client'
 import type { AiDeps } from './deps'
 import { HttpError, handle, readJson } from './http'
 import { planJudgeSave, type PlanAttempt } from './plan-and-save'
-import type { DraftStop } from './stops'
+import { enforceMustStops, restoreMustStops, samePlaceName, type DraftStop } from './stops'
 
 // AI가 돌려줄 모양. 걷는 시간·거리·계단 칸은 두지 않는다 (엔진이 계산한다).
 const AiStopsSchema = z.object({
@@ -58,12 +58,18 @@ function scheduleLine(stop: Stop): string {
 
 type MustNeed = { placeId: string | null; name: string; reservedAt?: string; coord?: Coord }
 
-// 공백을 뺀 뒤 한쪽이 다른 쪽을 포함하면 같은 곳으로 본다 (예: 성심당·성심당 본점).
-function samePlaceName(a: string, b: string): boolean {
-  const na = a.replace(/\s+/g, '')
-  const nb = b.replace(/\s+/g, '')
-  if (na.length === 0 || nb.length === 0) return false
-  return na.includes(nb) || nb.includes(na)
+// 빠진 꼭 갈 곳은 예약 시간 순서에 맞는 자리에 넣는다. 표시는 공용 도우미가 원래 값으로 맞춘다 (설계 6.4).
+function applyMustVisit(drafts: DraftStop[], musts: MustNeed[]): DraftStop[] {
+  const mustDrafts: DraftStop[] = musts.map(must => ({
+    placeId: must.placeId,
+    name: must.name,
+    mustVisit: true,
+    ...(must.reservedAt !== undefined ? { reservedAt: must.reservedAt, startTime: must.reservedAt } : {}),
+    ...(must.coord !== undefined ? { coord: must.coord } : {}),
+  }))
+  const { drafts: enforced, missing } = enforceMustStops(drafts, mustDrafts)
+  if (missing.length === 0) return enforced
+  return restoreMustStops(enforced, missing)
 }
 
 // 목록 밖 placeId는 버린다. 후보 안이면 DB 이름·좌표로 덮어쓴다.
@@ -118,53 +124,6 @@ function dedupConsecutive(drafts: DraftStop[]): DraftStop[] {
       continue
     }
     out.push(draft)
-  }
-  return out
-}
-
-function findMustIndex(drafts: DraftStop[], must: MustNeed): number {
-  return drafts.findIndex(draft => {
-    if (must.placeId !== null) {
-      if (draft.placeId === must.placeId) return true
-      return samePlaceName(draft.name, must.name)
-    }
-    return draft.placeId === null && samePlaceName(draft.name, must.name)
-  })
-}
-
-// 빠진 꼭 갈 곳은 예약 시간 순서에 맞는 자리에 넣고 startTime = reservedAt.
-// 이미 있는 꼭 갈 곳도 startTime = reservedAt로 맞춘다 (설계 6.4).
-function applyMustVisit(drafts: DraftStop[], musts: MustNeed[]): DraftStop[] {
-  const out = [...drafts]
-  for (const must of musts) {
-    const index = findMustIndex(out, must)
-    if (index >= 0) {
-      const existing = out[index]!
-      existing.mustVisit = true
-      if (must.reservedAt !== undefined) {
-        existing.reservedAt = must.reservedAt
-        existing.startTime = must.reservedAt
-      }
-      continue
-    }
-    const fresh: DraftStop = {
-      placeId: must.placeId,
-      name: must.name,
-      mustVisit: true,
-      ...(must.reservedAt !== undefined
-        ? { reservedAt: must.reservedAt, startTime: must.reservedAt }
-        : {}),
-      ...(must.coord !== undefined ? { coord: must.coord } : {}),
-    }
-    if (must.reservedAt !== undefined) {
-      const at = out.findIndex(
-        draft => draft.startTime !== undefined && draft.startTime > must.reservedAt!,
-      )
-      if (at >= 0) out.splice(at, 0, fresh)
-      else out.push(fresh)
-    } else {
-      out.push(fresh)
-    }
   }
   return out
 }

@@ -177,7 +177,8 @@ export type ReviseRequest = z.infer<typeof ReviseRequestSchema>
 export const ReviseResponseSchema = PlanResponseSchema.extend({ appliedOpinionIds: z.array(z.string()) })
 export type ReviseResponse = z.infer<typeof ReviseResponseSchema>
 
-// changes 칸은 Task 3(QuickFixChangeSchema) 커밋 뒤 Task 7A가 추가한다
+// 바뀐 점 한 줄은 요청에 온 판정 결과로 만든 문장이라 화면에만 보여 주고 저장하지 않는다
+// (prev·next·changes의 숫자를 그대로 믿고 새 숫자를 만들지 않는다)
 export const ExplainRequestSchema = z.object({
   tripId: z.string().min(1),
   prev: JudgeResultSchema,

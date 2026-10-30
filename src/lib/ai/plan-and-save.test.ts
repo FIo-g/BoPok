@@ -192,4 +192,57 @@ describe('planJudgeSave', () => {
     expect(calls[1]).toContain('앞 일정:')
     expect(calls[1]).toContain('한밭수목원(id: hanbat)')
   })
+
+  it('선택된 시도의 note·appliedOpinionIds를 저장 (중복 제거)', async () => {
+    const deps = createDevDeps()
+    const seen: { note?: string | null; appliedOpinionIds?: string[] }[] = []
+    const spied: AiDeps = {
+      ...deps,
+      createVersion: (async (tripId: string, input: Parameters<AiDeps['createVersion']>[1]) => {
+        seen.push({ note: input.note, appliedOpinionIds: input.appliedOpinionIds })
+        return deps.createVersion(tripId, input)
+      }) as AiDeps['createVersion'],
+    }
+    const attempt: PlanAttempt = async () => ({
+      drafts: [science],
+      note: '첫',
+      appliedOpinionIds: ['o1', 'o1'],
+    })
+    const out = await planJudgeSave(
+      { tripId: 'trip-dev', travelers: [mom], transport: 'car', attempt, parentId: null },
+      spied,
+    )
+    expect(out.result.verdict).toBe('ok')
+    expect(seen).toHaveLength(1)
+    expect(seen[0]?.note).toBe('첫')
+    expect(seen[0]?.appliedOpinionIds).toEqual(['o1'])
+  })
+
+  it('시도가 메타를 주지 않으면 인자 note·appliedOpinionIds를 기본값으로', async () => {
+    const deps = createDevDeps()
+    const seen: { note?: string | null; appliedOpinionIds?: string[] }[] = []
+    const spied: AiDeps = {
+      ...deps,
+      createVersion: (async (tripId: string, input: Parameters<AiDeps['createVersion']>[1]) => {
+        seen.push({ note: input.note, appliedOpinionIds: input.appliedOpinionIds })
+        return deps.createVersion(tripId, input)
+      }) as AiDeps['createVersion'],
+    }
+    const attempt: PlanAttempt = async () => [science]
+    await planJudgeSave(
+      {
+        tripId: 'trip-dev',
+        travelers: [mom],
+        transport: 'car',
+        attempt,
+        parentId: null,
+        note: '기본 메모',
+        appliedOpinionIds: ['o9'],
+      },
+      spied,
+    )
+    expect(seen).toHaveLength(1)
+    expect(seen[0]?.note).toBe('기본 메모')
+    expect(seen[0]?.appliedOpinionIds).toEqual(['o9'])
+  })
 })

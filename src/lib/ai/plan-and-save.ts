@@ -16,7 +16,13 @@ import type { AiDeps } from './deps'
 import { draftsToStops, type DraftStop } from './stops'
 
 // feedback이 null이면 처음 초안, 문자열이면 앞 판정의 위반을 알려 주고 다시 고른 초안.
-export type PlanAttempt = (feedback: string | null) => Promise<DraftStop[]>
+// 초안과 함께 그 시도의 메모·반영 의견도 돌려줄 수 있다 — 저장된 시도(첫 번째나 두 번째)의 것을 쓴다 (설계 6.4).
+export type PlanAttemptResult = { drafts: DraftStop[]; note?: string; appliedOpinionIds?: string[] }
+export type PlanAttempt = (feedback: string | null) => Promise<DraftStop[] | PlanAttemptResult>
+
+function normalizeAttempt(out: DraftStop[] | PlanAttemptResult): PlanAttemptResult {
+  return Array.isArray(out) ? { drafts: out } : out
+}
 
 type JudgeArgs = {
   tripId: string
@@ -102,51 +108,70 @@ function verdictRank(verdict: JudgeResult['verdict']): number {
 export async function planJudgeSave(
   args: JudgeArgs,
   deps: AiDeps,
-): Promise<{ version: TripVersion; summary: JudgeSummary; result: JudgeResult }> {
+): Promise<{
+  version: TripVersion
+  summary: JudgeSummary
+  result: JudgeResult
+  note?: string
+  appliedOpinionIds?: string[]
+}> {
   // 빈 초안은 고른 장소가 하나도 없는 것으로 AI 실패로 본다 (설계 6.4).
-  const firstDrafts = await args.attempt(null)
-  if (firstDrafts.length === 0) {
+  const firstMeta = normalizeAttempt(await args.attempt(null))
+  if (firstMeta.drafts.length === 0) {
     throw new AiCallError('invalid_output', 'AI가 빈 일정을 돌려줬어요')
   }
-  const first = await runAttempt(firstDrafts, args, deps)
+  const first = await runAttempt(firstMeta.drafts, args, deps)
   let chosen = first
+  let chosenMeta = firstMeta
 
   if (first.result.verdict === 'adjust') {
     try {
-      const secondDrafts = await args.attempt(feedbackText(first.result, first.stops))
+      const secondMeta = normalizeAttempt(await args.attempt(feedbackText(first.result, first.stops)))
       // 두 번째가 비면 첫 결과를 쓴다.
-      if (secondDrafts.length === 0) {
+      if (secondMeta.drafts.length === 0) {
         chosen = first
+        chosenMeta = firstMeta
       } else {
-        const second = await runAttempt(secondDrafts, args, deps)
+        const second = await runAttempt(secondMeta.drafts, args, deps)
         // 판정 순위(ok > info > adjust) 먼저, 같으면 위반 수 적은 쪽, 같으면 두 번째.
         const firstRank = verdictRank(first.result.verdict)
         const secondRank = verdictRank(second.result.verdict)
         if (secondRank < firstRank) {
           chosen = second
+          chosenMeta = secondMeta
         } else if (secondRank > firstRank) {
           chosen = first
+          chosenMeta = firstMeta
+        } else if (second.result.violations.length <= first.result.violations.length) {
+          chosen = second
+          chosenMeta = secondMeta
         } else {
-          chosen = second.result.violations.length <= first.result.violations.length ? second : first
+          chosen = first
+          chosenMeta = firstMeta
         }
       }
     } catch (error) {
       // 두 번째 실패는 첫 결과를 저장한다. 첫 번째 실패만 밖으로 나간다 (설계 6.4).
       if (error instanceof AiCallError) {
         chosen = first
+        chosenMeta = firstMeta
       } else {
         throw error
       }
     }
   }
 
+  // 실제로 저장된 시도의 메모·반영 의견을 쓴다. 시도가 주지 않으면 인자 값을 기본값으로 쓴다.
+  const note = chosenMeta.note ?? args.note
+  const applied = chosenMeta.appliedOpinionIds ?? args.appliedOpinionIds
+  const appliedOpinionIds = applied === undefined ? undefined : [...new Set(applied)]
   const version = await deps.createVersion(args.tripId, {
     parentId: args.parentId,
     stops: chosen.stops,
     madeBy: 'ai',
     ...(args.madeByUserId !== undefined ? { madeByUserId: args.madeByUserId } : {}),
-    ...(args.note !== undefined ? { note: args.note } : {}),
-    ...(args.appliedOpinionIds !== undefined ? { appliedOpinionIds: args.appliedOpinionIds } : {}),
+    ...(note !== undefined ? { note } : {}),
+    ...(appliedOpinionIds !== undefined ? { appliedOpinionIds } : {}),
   })
 
   const summary: JudgeSummary = {
@@ -156,5 +181,11 @@ export async function planJudgeSave(
     longest: chosen.result.longest,
   }
 
-  return { version, summary, result: chosen.result }
+  return {
+    version,
+    summary,
+    result: chosen.result,
+    ...(note !== undefined ? { note } : {}),
+    ...(appliedOpinionIds !== undefined ? { appliedOpinionIds } : {}),
+  }
 }
