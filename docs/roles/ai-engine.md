@@ -17,8 +17,8 @@
 | 파일 | 내용 |
 | --- | --- |
 | `constants.ts` | 모든 숫자와 출처 주석: 나이·성별 속도표(Andrews 2023), 키 보정(Pua 2022, 10 cm당 0.07 m/s, 기준 키·상한), '천천히' 상한 0.85 m/s·보조기구 상한 0.73 m/s(한음 2020), 계단 가중치 2.0·경사 1.5(임시, 근거 없음 표시), 여유율 0.2, 걷기 조건 기본값 |
-| `speed.ts` | `travelerSpeedMps(traveler)`, `groupProfile(travelers, tuned)` → 가장 느린 속도 + 가장 엄격한 조건 |
-| `condition.ts` | 인터뷰 생활 예시 답 → 분 값 (시안 `Bopok/src/lib/plan-data.ts`·`judge.ts`의 `conditionFromAnswers` 이식) |
+| `speed.ts` | `travelerSpeedMps(traveler)`, `groupProfile(travelers, tuned)` → 가장 느린 속도 + 일행 조건(부모님 답 80% 비중, 자녀 답은 더 엄격하게 만들 때만 — 설계 7.1.1) + 칸별 출처 + 부모님 확인이 필요한 칸(설계 7.1.3) |
+| `condition.ts` | 인터뷰 생활 예시 질문·선택지와 답 → 분 값 (시안 `Bopok/src/lib/plan-data.ts`·`judge.ts`의 `conditionFromAnswers` 이식, 설계 7.1.2). '잘 모르겠어요'는 칸을 비워 둔다 |
 | `route.ts` | 하루 걷는 길 만들기: 장소별 출발 지점(이동수단에 맞는 주차장·정류장) → 입구 → 볼거리 → 출구, 다음이 탈것이면 출발 지점으로 돌아가는 구간 포함(같은 구간 역방향), 빼기·우회로 반영, 장소 사이 경로 끼우기 |
 | `required-legs.ts` | `requiredLegs(stops, places): LegRequest[]` — 판정에 필요한 장소 사이 경로 목록 (프론트·김경선이 이걸로 `/api/legs`·`getLegs`를 부름) |
 | `judge.ts` | `judge(input: JudgeInput): JudgeResult` — 설계 7.3 그대로: 연속 걷기는 쉼터·탈것·`seated` 장소에서만 끊김(관람 장소 사이 걷기는 이어짐), 범위 최댓값으로 비교, 계단 3상태(`unknown`은 위반 아님, `unrecordedStairs`에 모음), 부분 판정, 판정 이유 한 문장(노션 4-2 규칙) |

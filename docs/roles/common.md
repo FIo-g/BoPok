@@ -61,6 +61,7 @@ type Traveler = {
   sex?: Sex
   pace: Pace
   mobilityAid: boolean                         // 지팡이·보행 보조기구
+  isParent: boolean                            // 부모님(모시고 가는 분). 걷기 조건에 80% 비중 (설계 7.1.1)
   condition: Partial<Condition>                // 비어 있으면 기본값 ('잘 모르겠어요')
   filledBySelf: boolean                        // 본인이 직접 채웠는지
 }
@@ -121,16 +122,20 @@ type JudgeInput = {
 }
 type JudgeResult = {
   verdict: Verdict; reason: string
-  condition: Condition; speedMps: number       // 실제로 쓴 조건과 속도 (가장 느린 사람 기준)
-  day: Minutes; longest: Minutes & { fromStopKey: string; toStopKey: string }
+  condition: Condition; speedMps: number       // 실제로 쓴 조건(설계 7.1.1)과 속도(가장 느린 사람 기준)
+  conditionFrom: Record<keyof Condition, 'parent' | 'blend' | 'other' | 'default' | 'tuned'>   // 칸마다 값의 출처
+  speedTravelerId: string                      // 속도 기준이 된 여행자
+  pendingConsents: { field: keyof Condition; parentTravelerId: string; proposedValue: number | boolean; fromTravelerId: string; askCreator: boolean }[]   // 부모님 확인이 필요한 칸 (설계 7.1.3)
+  day: Minutes; longest: Minutes & { fromStopKey: string | null; toStopKey: string | null }   // 걷는 구간이 없으면 null
   restTotalMin: number
   stops: StopResult[]                          // 장소별 구간 결과 (지도·목록용)
   legs: LegResult[]
   violations: Violation[]
   unknownStopKeys: string[]                    // 장소 안 정보가 없는 곳
   unrecordedStairs: { segmentId?: string; legKey?: string }[]   // '계단 기록 없음' 구간 (배지 아래 n곳)
+  missingLegs: { fromStopKey: string; toStopKey: string; legKey: string | null }[]   // 받지 못했거나 만들 수 없는 장소 사이 경로 (legKey null = 좌표 없음)
 }
-// StopResult, LegResult의 세부 필드는 김태형이 0단계에서 정한다 (구간별 시간 범위, 상태 ok|warn, 출처 포함).
+// StopResult, LegResult의 세부 필드는 코드(src/lib/contracts/judge.ts) 참고. SegmentResult.reverse는 주차장·정류장으로 돌아가는 길처럼 같은 구간을 거꾸로 걷는 줄.
 type JudgeSummary = Pick<JudgeResult, 'verdict' | 'reason' | 'day' | 'longest'>
 
 // ── 버전과 의견 (김경선) ──
