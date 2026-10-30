@@ -1,6 +1,4 @@
-// 그룹과 구성원. 담당: 김경선. 설계 10.3.
-// 1단계에서는 requireMember/requireOwner가 "이 사람이 이 그룹 구성원인가"를 볼 때만 쓴다.
-// 초대(group_invites)는 2단계에서 더한다.
+// 그룹·구성원·초대. 담당: 김경선. 설계 10.3.
 import { index, pgTable, primaryKey, text, timestamp } from 'drizzle-orm/pg-core'
 import { user } from './auth'
 
@@ -40,4 +38,27 @@ export const groupMembers = pgTable(
     // '내 그룹 목록'은 user_id로 찾는다 (GET /api/groups).
     index('group_members_userId_idx').on(table.userId),
   ],
+)
+
+// 초대 링크. 링크 하나로 여러 명이 참가할 수 있고, 7일 뒤 만료된다 (설계 10.3).
+// '사용함' 표시를 두지 않는 이유: 가족 단톡방에 링크를 한 번 올리면 엄마·아빠·동생이
+// 각각 눌러 들어와야 한다.
+export const groupInvites = pgTable(
+  'group_invites',
+  {
+    id: text('id').primaryKey().$defaultFn(uuid),
+    groupId: text('group_id')
+      .notNull()
+      .references(() => groups.id, { onDelete: 'cascade' }),
+    // 32바이트 무작위를 base64url로 적은 값(43글자). 링크로 찾으므로 unique.
+    token: text('token').notNull().unique(),
+    createdBy: text('created_by')
+      .notNull()
+      .references(() => user.id),
+    // 만료는 지울 때가 아니라 읽을 때 현재 시각과 비교한다 (지나간 링크는 410).
+    expiresAt: timestamp('expires_at').notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  // 그룹 화면에서 '이 그룹의 초대 링크'를 찾을 때 쓴다.
+  table => [index('group_invites_groupId_idx').on(table.groupId)],
 )

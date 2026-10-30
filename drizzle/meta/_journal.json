@@ -8,6 +8,13 @@
       "when": 1793367804164,
       "tag": "0000_rainy_dust",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1793370462755,
+      "tag": "0001_melted_starbolt",
+      "breakpoints": true
     }
   ]
 }
