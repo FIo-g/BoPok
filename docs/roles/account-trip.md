@@ -83,7 +83,7 @@ getOpinions(versionId): Promise<Opinion[]>
 
 | 단계 | 할 일 | 완료 기준 |
 | --- | --- | --- |
-| 0 | 레포 초기화·DB 연결 코드는 이미 main에 있음(김태형). Neon·Vercel 연결이 끝나면 이어받아 확인. contracts 중 `trip.ts`·`version.ts`(일정·버전·의견) 확인 | 모두가 `pnpm dev`로 띄우고 DB에 접속 |
+| 0 | 레포 초기화·DB 연결 코드는 이미 main에 있음(김태형). 로컬 DB는 PGlite(설치 없음), Neon·Vercel은 마지막 배포 때. contracts 중 `trip.ts`·`version.ts`(일정·버전·의견) 확인 | `pnpm dev`로 띄우고 로컬 DB에 테이블이 생김 |
 | 1 | Better Auth 가입·로그인, `requireUser/requireMember/requireOwner` + 테스트 | 가입 → 로그인 → 세션 확인 |
 | 2 | 그룹·구성원·초대 API + 권한 테스트 | 초대 링크로 다른 계정이 참가 |
 | 3 | 여행·여행자 API | 여행 만들고 여행자 저장·수정 |

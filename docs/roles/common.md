@@ -7,10 +7,10 @@
 | 할 일 | 주도 | 완료 기준 | 상태 |
 | --- | --- | --- | --- |
 | 레포 초기화: Next.js 16 + TypeScript + Tailwind 4 + pnpm + eslint + vitest, `src/` 구조(설계 10.2), `.env.example` | 김태형 | `pnpm dev`, `pnpm test`, `pnpm build` 통과, main에 머지 | **완료** |
-| Drizzle 설정과 DB 연결 코드 (`src/lib/db/client.ts`의 `getDb()`) | 김태형 | DB 주소 없이도 빌드 통과, 있으면 연결 | **완료** |
+| Drizzle 설정과 DB 연결 코드 (`src/lib/db/client.ts`의 `getDb()`) — `DATABASE_URL`이 없으면 로컬 PGlite, 있으면 Neon | 김태형 | 설치 없이 `pnpm dev`로 로컬 DB 사용 | **완료** |
 | Neon 프로젝트 만들기 | 김태형(계정) | 배포용 `DATABASE_URL` | **보류 — 로컬에서 개발하고 마지막 배포 때 연결** |
 | Vercel 연결 | 김태형(계정) | 배포 URL | **보류 — 마지막 배포 때 연결** |
-| `src/lib/contracts` 확정 — 아래 3장 초안을 코드로 | 김태형(엔진·AI 타입), 이동주(장소·경로 타입), 김경선(그룹·여행·버전·의견 타입), 오하연(리뷰) | zod 스키마 + 타입, 네 명 모두 확인 | **초안이 main에 있음** — 각자 자기 타입을 확인하고, 고칠 점은 PR로 |
+| `src/lib/contracts` 확정 — 아래 3장 초안을 코드로 | 김태형(엔진·AI 타입), 이동주(장소·경로 타입), 김경선(그룹·여행·버전·의견 타입), 오하연(리뷰) | zod 스키마 + 타입, 각자 자기 파일 확인 (고치는 PR은 팀원 한 명 승인) | **초안이 main에 있음** — 각자 자기 타입을 확인하고, 고칠 점은 PR로 |
 | 목업 데이터 `src/mocks` (한밭수목원 등 2~3곳, 버전 2개, 의견 몇 개) | 오하연 | 프론트가 API 없이 일정 화면을 그릴 수 있음 | 오하연 대기 |
 
 > 레포를 `create-next-app`으로 만들 때 이미 있는 `AGENTS.md`, `CLAUDE.md`, `docs/`와 충돌하면, 임시 폴더에 만들어 필요한 파일만 옮긴다. `pnpm dev`가 `AGENTS.md` 끝에 Next.js 안내 블록을 자동으로 붙이는데, 그대로 커밋해도 된다.
@@ -19,7 +19,8 @@
 
 | 이름 | 쓰는 곳 |
 | --- | --- |
-| `DATABASE_URL` | Drizzle (Neon) |
+| `DATABASE_URL` | 비워 두면 로컬 PGlite. 배포 때만 Neon 주소 |
+| `PGLITE_DIR` | 로컬 PGlite 폴더 (선택, 기본 `.pglite`) |
 | `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` | 로그인 |
 | `UPSTAGE_API_KEY` | AI (기본) |
 | `OPENCODE_API_KEY` | AI (대체) |

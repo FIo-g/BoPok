@@ -16,6 +16,9 @@
 next-env.d.ts
 *.tsbuildinfo
 
+# 로컬 DB (PGlite) — 각자 컴퓨터에만
+/.pglite/
+
 # 키·환경 변수 (.env.example은 커밋한다)
 .env
 .env*.local

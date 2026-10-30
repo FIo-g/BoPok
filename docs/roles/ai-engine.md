@@ -50,7 +50,7 @@ AI 실패 시: 붙여넣기는 "장소를 직접 골라 주세요"로, 처음부
 
 | 단계 | 할 일 | 완료 기준 |
 | --- | --- | --- |
-| 0 | contracts 중 Traveler·Condition·Stop·JudgeInput/Result·StopResult·LegResult 확정 | 네 명 승인 |
+| 0 | contracts 중 `traveler.ts`·`judge.ts` 확인 (초안은 main에 있음) | 고칠 점이 있으면 PR, 팀원 한 명 승인 |
 | 1 | 엔진: constants·speed·condition + 테스트 | 속도 표 경계값 테스트 통과 |
 | 2 | 엔진: route·required-legs·judge + 테스트 (시안·노션 예시) | 노션 4-2 예시가 테스트로 재현 |
 | 3 | 엔진: quick-fix·diff + 테스트 | A 부족 → B 해결 테스트 |

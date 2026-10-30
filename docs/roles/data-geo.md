@@ -72,7 +72,7 @@ TourAPI 대전 관광지 → 유명한 곳을 골라 팀에 확인받는다. **�
 
 | 단계 | 할 일 | 완료 기준 |
 | --- | --- | --- |
-| 0 | contracts 중 Place·PlaceNode·PlaceSegment·Leg·LegRequest·`legKey` 확정, `schema/places.ts`(places, place_nodes, place_segments, leg_cache) | 네 명 승인, 마이그레이션 |
+| 0 | contracts 중 `place.ts`·`leg.ts` 확인 (초안은 main에 있음), `schema/places.ts`(places, place_nodes, place_segments, leg_cache) | 로컬 PGlite에 마이그레이션 적용, PR은 팀원 한 명 승인 |
 | 1 | `fetch-osm.ts`(계단·벤치·쉼터·화장실), `fetch-tourapi.ts` | 대전 데이터가 `data/`에 생김. 노션 `daejeon_stairs.geojson`과 개수 비교 |
 | 2 | `lib/geo/tmap.ts`, `stairs.ts` + 테스트(저장한 TMAP 응답으로) | 한 구간의 거리·계단 상태가 나옴 |
 | 3 | 시범 3~5곳 장소 파일 + `build-segments` + `load-db` | DB에 시범 장소 지점·구간이 들어감 |

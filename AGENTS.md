@@ -53,7 +53,7 @@ PR을 올리기 전에 `pnpm lint && pnpm test && pnpm build`가 모두 통과�
 | `src/app/api/{auth,groups,invites,trips,versions,opinions}/**`, `src/lib/auth`, `src/lib/trips`, `src/lib/db/client.ts`, `src/lib/db/schema/{auth,groups,trips}.ts` | 김경선 |
 | `src/app/api/ai/**`, `src/lib/ai`, `src/lib/engine` | 김태형 |
 | `src/app/api/{places,legs}/**`, `src/lib/places`, `src/lib/geo`, `src/lib/db/schema/places.ts`, `scripts/data`, `data/` | 이동주 |
-| `src/lib/contracts` | **모두** — 바꾸면 프론트와 관련 백엔드 담당이 함께 리뷰 |
+| `src/lib/contracts` | **모두** — 바꾸면 PR에 프론트와 관련 백엔드 담당을 리뷰어로 넣어 알린다 |
 
 - **내 담당이 아닌 폴더는 고치지 않는다.** 꼭 필요하면 그 담당에게 말하고, PR 리뷰어로 그 사람을 넣는다.
 - 다른 역할의 기능이 아직 없으면 기다리지 말고 `src/lib/contracts`의 타입대로 가짜 구현(목업)으로 진행한다.
@@ -94,16 +94,17 @@ PR을 올리기 전에 `pnpm lint && pnpm test && pnpm build`가 모두 통과�
 
 ## 8. 브랜치와 PR
 
-- **`main`에는 직접 push할 수 없다.** 모든 변경은 브랜치 → PR → **다른 팀원 1명 이상의 승인** → 머지. (GitHub 브랜치 보호로 강제된다. 자기 PR은 자기가 승인할 수 없다.)
+- **`main`에는 직접 push할 수 없다.** 모든 변경은 브랜치 → PR → **다른 팀원 중 한 명의 승인** → 머지. 모두가 승인할 필요는 없다. (GitHub 브랜치 보호로 강제된다. 자기 PR은 자기가 승인할 수 없다.)
 - **예외: 레포 관리자 김태형은 PR 없이 `main`에 바로 push할 수 있다** (공통 문서·설정 정리용). 기능 코드는 김태형도 브랜치 → PR로 올리는 것을 원칙으로 한다.
 - **각자 자기 브랜치에서만 작업한다.** 이름은 `접두어/내용` — 예) `fe/trip-screen`, `acct/invite-link`, `ai/engine-speed`, `geo/places-pilot`. 기능 하나에 브랜치 하나, 작게.
 - 커밋 메시지: `종류(접두어): 내용` — 예) `feat(acct): 초대 링크 만들기`. 종류는 feat, fix, refactor, test, docs, chore, data.
 - PR을 올리기 전에 `main`의 최신 내용을 받아 충돌을 풀고(`git pull origin main` 또는 rebase), 2장의 검사를 통과시킨다.
 - PR 설명은 `.github/pull_request_template.md` 양식대로: 무엇을, 왜, 어떻게 확인했는지(테스트·화면 캡처), 다른 역할에 영향 주는 것.
-- 리뷰어: 최소 1명. `src/lib/contracts`나 다른 역할의 폴더를 건드렸으면 그 담당을 반드시 리뷰어로 넣는다.
+- 승인은 팀원 한 명이면 된다. 다만 `src/lib/contracts`나 다른 역할의 폴더를 건드렸으면 그 담당을 리뷰어로 넣어 알리고, 가능하면 그 사람의 승인을 받는다.
 - 승인 후 머지는 **PR을 올린 사람이** 한다(squash merge). 새 커밋을 올리면 이전 승인은 무효가 되니 다시 승인받는다.
 - **AI 도구의 권한**: 작업 브랜치 만들기는 바로 해도 된다. 커밋·push·PR 생성은 사용자가 시킬 때만 한다. 머지·승인·force push는 하지 않는다. `main` push는 사용자가 김태형이고 직접 시킬 때만 한다.
-- DB 마이그레이션은 Neon 개인 브랜치에서 먼저 돌려 보고, 공용 DB에는 PR 머지 후에만 적용한다. 데이터를 지우는 마이그레이션은 팀에 먼저 알린다.
+- **DB는 각자 로컬 PGlite**(`.pglite` 폴더, `DATABASE_URL`을 비워 두면 자동)로 개발한다. Neon은 마지막 배포 때만 연결한다. 마이그레이션 파일(`drizzle/`)은 커밋하고, `pnpm db:migrate`·`db:studio` 전에는 개발 서버를 끈다(PGlite는 한 번에 한 프로그램만 연다). 데이터를 지우는 마이그레이션은 팀에 먼저 알린다.
+- `db.transaction()`은 쓰지 않는다. 배포에서 쓰는 Neon HTTP 드라이버가 지원하지 않는다. 꼭 필요하면 팀에 말한다(배포 때 드라이버를 바꿔야 함).
 
 ## 9. 막히면
 

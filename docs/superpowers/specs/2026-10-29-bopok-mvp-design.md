@@ -317,7 +317,7 @@ TMAP의 '계단 제외' 옵션은 노션 테스트에서 일반 경로와 같은
 | 패키지 | pnpm | [제안: 시안과 같게] |
 | 스타일 | Tailwind 4 | [제안: 시안과 같게] |
 | 테스트 | vitest | [제안] |
-| DB | Neon (PostgreSQL) | [결정] |
+| DB | 개발은 각자 로컬 PGlite(파일로 도는 PostgreSQL), 배포는 Neon (PostgreSQL). 같은 PostgreSQL이라 코드는 그대로 | [결정] |
 | DB 도구 | Drizzle ORM + 마이그레이션 | [제안] |
 | 로그인 | Better Auth, 이메일·비밀번호 | [제안] |
 | 지도 | MapLibre GL + OpenFreeMap (+ three.js) | [결정] |
