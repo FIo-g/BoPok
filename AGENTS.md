@@ -52,7 +52,7 @@ PR을 올리기 전에 `pnpm lint && pnpm test && pnpm build`가 모두 통과�
 | 폴더 | 담당 |
 | --- | --- |
 | `src/app/**/page.tsx`, `layout.tsx`, `src/components/**`, `src/lib/api-client`, `src/mocks`, `public/**`, `scripts/map` | 오하연 |
-| `src/app/api/{auth,groups,invites,trips,versions,opinions}/**`, `src/lib/auth`, `src/lib/trips`, `src/lib/db/client.ts`, `src/lib/db/schema/{auth,groups,trips}.ts` | 김경선 |
+| `src/app/api/{auth,groups,invites,trips,versions,opinions}/**`, `src/lib/auth`, `src/lib/groups`, `src/lib/trips`, `src/lib/db/client.ts`, `src/lib/db/schema/{auth,groups,trips}.ts` | 김경선 |
 | `src/app/api/ai/**`, `src/lib/ai`, `src/lib/engine` | 김태형 |
 | `src/app/api/{places,legs}/**`, `src/lib/places`, `src/lib/geo`, `src/lib/db/schema/places.ts`, `scripts/data`, `data/` | 이동주 |
 | `src/lib/contracts` | **모두** — 바꾸면 PR에 프론트와 관련 백엔드 담당을 리뷰어로 넣어 알린다 |

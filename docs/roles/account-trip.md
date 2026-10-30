@@ -8,7 +8,7 @@
 
 ## 맡는 폴더
 
-`src/app/api/{auth,groups,invites,trips,versions,opinions}/**`, `src/lib/auth`, `src/lib/trips`, `src/lib/db/client.ts`, `src/lib/db/schema/{auth,groups,trips}.ts`
+`src/app/api/{auth,groups,invites,trips,versions,opinions}/**`, `src/lib/auth`, `src/lib/groups`, `src/lib/trips`, `src/lib/db/client.ts`, `src/lib/db/schema/{auth,groups,trips}.ts`
 
 ## 설계 가이드
 
@@ -35,7 +35,7 @@
 | `POST /api/groups/:id/invites` | 초대 링크 만들기 (토큰 32바이트 base64url, 7일, 여러 명 사용 가능) | owner |
 | `DELETE /api/groups/:id/members/:userId` | 내보내기 | owner |
 | `GET /api/invites/:token` | 그룹 이름 미리보기 (만료면 410) | 누구나 |
-| `POST /api/invites/:token/accept` | 참가 (이미 구성원이면 그대로 성공) | 로그인 |
+| `POST /api/invites/:token/accept` | 참가 `{ relation? }` (이미 구성원이면 그대로 성공 — role·relation을 덮어쓰지 않는다) | 로그인 |
 | `GET /api/groups/:id/trips` | 여행 목록 + 각 여행의 최신·확정 버전 요약 | 구성원 |
 | `POST /api/trips` | 여행 만들기 `{ groupId, title, date, mode: 'paste' \| 'scratch' }` | 구성원 |
 | `GET /api/trips/:id` | 여행 + 여행자 + 버전 목록(요약만) | 구성원 |
@@ -52,6 +52,12 @@
 | `GET /api/trips/:id/share-text` | 확정 버전의 공유 글 | 구성원 |
 
 요청·응답 모양은 모두 `src/lib/contracts`에 zod로 정하고, 서버에서 검사한다.
+
+2단계에서 정한 것 **[결정: 김경선 10/30]**:
+- 참가할 때 `relation`을 선택 값으로 받는다. 설계 10.3의 `group_members.relation`을 채우는 곳이 다른 데 없어서, 안 받으면 그 칸이 영원히 빈다. 안 보내도(또는 `null`로 보내도) 참가는 된다.
+- `GroupDetail`에 `myRole`을 넣는다. 상세 화면이 '초대 링크 만들기'·'내보내기' 버튼을 보여줄지 이것만 보고 정하게.
+- 내보내기는 두 겹으로 막는다: 그룹장이 자기 자신을 내보내면 400, 내보낸 뒤 그룹장이 0명이 되면 400. 그룹장 넘기기·그룹 삭제·스스로 나가기는 MVP 밖.
+- 초대 링크의 전체 주소는 프론트가 만든다(`location.origin + '/invite/' + token`). API는 `{ token, expiresAt }`만 준다.
 
 ### 다른 역할이 부르는 서버 함수 (`src/lib/trips`)
 
