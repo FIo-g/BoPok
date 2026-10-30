@@ -1,0 +1,4 @@
+// 엔진의 모든 공개 함수·상수. 바깥 코드(프론트·서버)는 내부 파일 대신 @/lib/engine 이 문 하나로만 접근한다.
+export * from './constants'
+export * from './speed'
+export * from './condition'
