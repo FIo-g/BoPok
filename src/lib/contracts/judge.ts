@@ -124,3 +124,41 @@ export type JudgeResult = z.infer<typeof JudgeResultSchema>
 // 버전에 저장하는 요약 (목록 표시용)
 export const JudgeSummarySchema = JudgeResultSchema.pick({ verdict: true, reason: true, day: true, longest: true })
 export type JudgeSummary = z.infer<typeof JudgeSummarySchema>
+
+// 빠른 수정안 한 단계에서 바꾼 것 (설계 7.4). 화면 문장은 fixedChangeSentence가 만든다.
+export const QuickFixChangeSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('detour'),
+    stopKey: z.string(),
+    segmentId: z.string(),
+    detourSegmentId: z.string(),
+  }),
+  z.object({ kind: z.literal('skip'), stopKey: z.string(), segmentId: z.string() }),
+  z.object({ kind: z.literal('rest'), stopKey: z.string(), nodeId: z.string() }),
+  z.object({ kind: z.literal('taxi'), toStopKey: z.string() }),
+])
+export type QuickFixChange = z.infer<typeof QuickFixChangeSchema>
+
+// A 동선 조정 → B 휴식 추가 → C 이동수단 변경. 적용하면 새 버전이 된다.
+export const QuickFixSchema = z.object({
+  level: z.enum(['A', 'B', 'C']),
+  stops: z.array(StopSchema),
+  result: JudgeResultSchema,
+  enough: z.boolean(), // 위반이 모두 사라졌는지
+  changes: z.array(QuickFixChangeSchema),
+})
+export type QuickFix = z.infer<typeof QuickFixSchema>
+
+// 버전 비교 카드. 바뀐 항목만 이 순서대로 담는다.
+export const DiffItemSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('verdict'), before: VerdictSchema, after: VerdictSchema }),
+  z.object({
+    kind: z.literal('stairs'),
+    before: z.number().int().min(0),
+    after: z.number().int().min(0),
+  }),
+  z.object({ kind: z.literal('longest'), before: MinutesSchema, after: MinutesSchema }),
+  z.object({ kind: z.literal('day'), before: MinutesSchema, after: MinutesSchema }),
+  z.object({ kind: z.literal('restTotal'), before: nonNegative, after: nonNegative }),
+])
+export type DiffItem = z.infer<typeof DiffItemSchema>

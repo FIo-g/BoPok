@@ -17,5 +17,9 @@
 - `required-legs.test.ts` — 같은 경로 중복 제거·좌표 없는 경로 제외 테스트.
 - `judge.ts` — 판정 `judge` (연속 걷기·하루 총·계단 세 상태·부분 판정·판정 이유 문장).
 - `judge.test.ts` — 노션 4-2 예시·묶음 끊김·빠진 경로·판정 문장 테스트.
+- `quick-fix.ts` — 빠른 수정안 `quickFixes` (A 우회로·선택 구간 빼기 → B 쉼터 → C 택시, 위반이 처음 사라진 단계까지).
+- `quick-fix.test.ts` — 노션 4-2 "A 부족 → B 해결"·건너뛰는 단계·계약 통과 테스트.
+- `diff.ts` — 버전 비교 숫자 `diffSummary`, 한 줄 `formatDiffItem`, 고정 문장 `fixedChangeSentence`.
+- `diff.test.ts` — 바뀐 항목만·순서·문장 테스트.
 - `test-fixtures.ts` — 테스트에서만 쓰는 장소 데이터(한밭수목원·과학관).
 - `purity.test.ts` — 엔진 폴더의 `.ts` 파일을 검사해 React·DB·fetch·환경 변수를 안 쓰는지 확인.
