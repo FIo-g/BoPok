@@ -1,4 +1,4 @@
-import 'server-only'
+// drizzle-kit이 일반 Node로 읽는 파일이라 server-only를 두지 않는다 (auth.ts·groups.ts도 같음). 서버 전용 보호는 client.ts가 맡는다.
 import { sql } from 'drizzle-orm'
 import {
   boolean, check, doublePrecision, foreignKey, index, integer, jsonb,

@@ -12,14 +12,13 @@
 프로젝트 루트에서 실행한다. Windows PowerShell에서 `pnpm.ps1` 실행이 막히면 `pnpm.cmd`를 쓴다.
 
 ```powershell
-# 비밀 파일과 DATABASE_URL을 사용하지 않는 로컬 전용 설정
-node --conditions=react-server node_modules/drizzle-kit/bin.cjs generate --config=scripts/data/drizzle-local.config.ts --name=place-schema
+# 기본 설정과 같은 통합 스키마를 쓰되 .env.local·DATABASE_URL을 읽지 않는 로컬 전용 설정
+pnpm exec drizzle-kit generate --config=scripts/data/drizzle-local.config.ts --name=place-schema
 # .pglite를 쓰는 개발 서버와 DB 도구를 먼저 종료한 뒤 적용
-node --conditions=react-server node_modules/drizzle-kit/bin.cjs migrate --config=scripts/data/drizzle-local.config.ts
+pnpm exec drizzle-kit migrate --config=scripts/data/drizzle-local.config.ts
 pnpm exec vitest run src/lib/db/schema/places.test.ts
 ```
 
-`server-only` 표시가 있는 스키마를 일반 Node.js에서 읽으므로 `--conditions=react-server`가 필요하다.
 전용 설정은 `.env.local`을 읽지 않으며, DB 경로를 프로젝트의 `.pglite`로 고정한다.
 
 `schema/index.ts`에 장소 스키마를 등록했으며, 기존 `getDb()`와 기본 Drizzle 설정,
