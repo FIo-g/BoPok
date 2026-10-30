@@ -3,6 +3,7 @@
 // 김태형의 src/lib/ai/http.ts와 역할이 같다(그쪽은 AI 실패 fallback이 더 붙는다).
 // 나중에 한 곳으로 합칠 수 있다 — 합칠 때는 두 담당이 함께 본다.
 import 'server-only'
+import type { z } from 'zod'
 import type { ApiErrorCode } from '@/lib/contracts'
 import { ApiErrorSchema } from '@/lib/contracts'
 
@@ -17,6 +18,26 @@ export class HttpError extends Error {
     super(message)
     this.name = 'HttpError'
   }
+}
+
+// 받은 값을 스키마로 검사한다 (AGENTS.md 4장). 검사 실패는 모두 invalid_request 하나로 묶어,
+// 요청 내용(내부 값·키 이름)이 응답에 새어 나가지 않게 한다.
+// allowEmpty: 몸체가 아예 없어도 되는 요청(선택 값만 받는 POST)에서 빈 객체로 본다.
+export async function readJson<T>(
+  request: Request,
+  schema: z.ZodType<T>,
+  opts?: { allowEmpty?: boolean },
+): Promise<T> {
+  let unknownBody: unknown
+  try {
+    unknownBody = await request.json()
+  } catch {
+    if (!opts?.allowEmpty) throw new HttpError(400, 'invalid_request', '요청 내용을 읽을 수 없어요')
+    unknownBody = {}
+  }
+  const result = schema.safeParse(unknownBody)
+  if (!result.success) throw new HttpError(400, 'invalid_request', '요청 내용이 형식에 맞지 않아요')
+  return result.data
 }
 
 export function errorResponse(error: unknown): Response {
