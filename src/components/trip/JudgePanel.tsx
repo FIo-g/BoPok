@@ -38,6 +38,8 @@ export function JudgePanel({
   const dayOver = result.violations.some(v => v.kind === 'day')
   const longestOver = result.violations.some(v => v.kind === 'continuous')
   const stairsOver = result.violations.filter(v => v.kind === 'stairs').length
+  // 모든 구간·장소의 계단 기록이 있을 때만 "계단 구간 없음"이라고 말한다 (AGENTS.md 6장)
+  const stairsFullyRecorded = result.stops.length > 0 && result.unrecordedStairs.length === 0 && result.unknownStopKeys.length === 0 && result.missingLegs.length === 0
   const longestRoute = result.longest.fromStopKey
     ? result.longest.fromStopKey === result.longest.toStopKey
       ? stopNames[result.longest.fromStopKey]
@@ -71,7 +73,7 @@ export function JudgePanel({
         <SummaryCard
           title="계단"
           value={stairsOver > 0 ? `${stairsOver}곳` : condition.avoidStairs ? '피하는 중' : '상관없어요'}
-          sub={condition.avoidStairs ? (stairsOver > 0 ? '피해야 할 계단 구간이 있어요' : '계단 구간 없음') : '계단은 조건에 넣지 않았어요'}
+          sub={condition.avoidStairs ? (stairsOver > 0 ? '피해야 할 계단 구간이 있어요' : stairsFullyRecorded ? '확인된 모든 구간에 계단 없음' : '계단 기록 없음 (지도 데이터 기준)') : '계단은 조건에 넣지 않았어요'}
           over={stairsOver > 0}
         />
       </div>
@@ -110,7 +112,7 @@ export function JudgePanel({
 
       {diff.length > 0 && (
         <p className="rounded-xl bg-brand-soft px-4 py-3 font-semibold text-brand-strong">
-          이전 안과 달라진 점: {diff.join(' · ')}
+          이전 안과 달라진 점(추정치): {diff.join(' · ')}
         </p>
       )}
 

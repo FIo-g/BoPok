@@ -150,7 +150,7 @@ function ReviewStep({ tripId, stops, unmatched, onNext }: { tripId: string; stop
       )}
       {unmatched.length > 0 && (
         <Notice tone="info">
-          장소 목록에서 찾지 못한 것: {unmatched.join(', ')}. 이 곳들은 일정에 넣지 않았어요. 일정 화면에서 비슷한 장소를 직접 더할 수 있어요.
+          우리 장소 목록에 없는 곳: {unmatched.join(', ')}. 일정에는 넣었지만 길 정보가 없어서 걷는 시간은 계산하지 않고 판정이 “정보 부족”으로 나와요. 필요 없으면 위에서 “빼기”를 눌러 주세요.
         </Notice>
       )}
       {error && <ErrorNotice message={error} />}
@@ -206,7 +206,18 @@ function InterviewStep({ tripId, onDone }: { tripId: string; onDone: () => void 
       setStyles([])
       setCustomStyle('')
       setMessages(m => [...m, { role: 'assistant', text: res.text }])
-      if (res.done) onDone()
+      if (res.done) {
+        // 서버 인터뷰는 여행자만 저장한다. 여행 칸은 화면이 PATCH로 저장 (docs/roles/frontend.md)
+        const { date, transport, styles: filledStyles, budget } = res.filled
+        const patch = {
+          ...(date ? { date } : {}),
+          ...(transport ? { transport } : {}),
+          ...(filledStyles.length ? { styles: filledStyles } : {}),
+          ...(budget ? { budget } : {}),
+        }
+        if (Object.keys(patch).length > 0) await api.trips.update(tripId, patch).catch(() => undefined)
+        onDone()
+      }
     } catch (e) {
       setError(isApiError(e) && e.fallback ? 'AI가 답을 이해하지 못했어요. 아래 버튼에서 골라 주세요.' : errorMessage(e))
     }
@@ -279,25 +290,22 @@ function InterviewStep({ tripId, onDone }: { tripId: string; onDone: () => void 
   )
 }
 
-function MakingStep({ tripId, mode }: { tripId: string; mode: StartMode }) {
+function MakingStep({ tripId }: { tripId: string }) {
   const router = useRouter()
   const [error, setError] = useState<{ message: string; fallback: boolean } | null>(null)
   const [attempt, setAttempt] = useState(0)
+  const [pick, setPick] = useState(false)
   const ran = useRef(-1)
 
   useEffect(() => {
     if (ran.current === attempt) return
     ran.current = attempt
-    // A(붙여넣기)는 이미 일정이 저장돼 있어서 바로 일정 화면으로 간다. B(처음부터)만 AI 가 일정을 짠다
-    if (mode === 'paste') {
-      router.replace(`/trips/${tripId}`)
-      return
-    }
+    // A(붙여넣기)도 저장된 일정을 AI 가 다듬는다 (설계 6.4). 처음부터(B)와 같은 경로
     api.ai
       .generate({ tripId })
       .then(() => router.replace(`/trips/${tripId}`))
       .catch(e => setError({ message: errorMessage(e), fallback: isApiError(e) && Boolean(e.fallback) }))
-  }, [attempt, mode, tripId, router])
+  }, [attempt, tripId, router])
 
   if (error) {
     return (
@@ -305,8 +313,24 @@ function MakingStep({ tripId, mode }: { tripId: string; mode: StartMode }) {
         <ErrorNotice message={`일정을 짜지 못했어요. ${error.message}`} />
         <div className="flex flex-wrap gap-2">
           <Button onClick={() => { setError(null); setAttempt(a => a + 1) }}>다시 시도</Button>
-          <Button variant="secondary" onClick={() => router.replace(`/trips/${tripId}`)}>장소를 직접 고르기</Button>
+          <Button variant="secondary" onClick={() => setPick(true)}>장소를 직접 고르기</Button>
         </div>
+        {pick && (
+          <PlacePicker
+            title="일정에 넣을 장소 고르기"
+            usedIds={[]}
+            onClose={() => setPick(false)}
+            onPick={async place => {
+              setPick(false)
+              try {
+                await api.trips.saveVersion(tripId, { parentId: null, stops: [stopFromPlace(place, [])], madeBy: 'user', note: '직접 고른 일정' })
+                router.replace(`/trips/${tripId}`)
+              } catch (e) {
+                setError({ message: errorMessage(e), fallback: true })
+              }
+            }}
+          />
+        )}
       </div>
     )
   }
@@ -332,7 +356,7 @@ export function NewTripScreen() {
       {step.name === 'paste' && <PasteStep tripId={step.tripId} onParsed={(stops, unmatched) => setStep({ name: 'review', tripId: step.tripId, stops, unmatched })} />}
       {step.name === 'review' && <ReviewStep tripId={step.tripId} stops={step.stops} unmatched={step.unmatched} onNext={() => setStep({ name: 'interview', tripId: step.tripId })} />}
       {step.name === 'interview' && <InterviewStep tripId={step.tripId} onDone={() => setStep({ name: 'making', tripId: step.tripId })} />}
-      {step.name === 'making' && <MakingStep tripId={step.tripId} mode={mode} />}
+      {step.name === 'making' && <MakingStep tripId={step.tripId} />}
     </PageShell>
   )
 }

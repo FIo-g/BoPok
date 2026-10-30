@@ -17,6 +17,7 @@ import {
   type TripVersion,
 } from '@/lib/contracts'
 import { diffSummary, fixedChangeSentence, formatDiffItem, quickFixes } from '@/lib/engine'
+import { ApiRequestError } from '@/lib/api-client/http'
 import { judgeWithMocks } from './judge-helper'
 import { mockPlaceDetails, mockPlaces } from './places'
 import { makeStop } from './seed'
@@ -232,6 +233,11 @@ export function mockParseSchedule(text: string): ParseScheduleResponse {
       }))
     } else if (!place && token.length > 1 && !/^[\d:\s시분]+$/.test(token)) {
       unmatched.push(token)
+      // 실제 서버처럼 못 찾은 곳도 일정에 넣는다 (길 정보가 없어 placeId 는 null)
+      stops.push(makeStop({
+        key: `s-free-${stops.length + 1}`, name: token.replace(/\d{1,2}:\d{2}/, '').trim() || token,
+        startTime: time ? `${time[1].padStart(2, '0')}:${time[2]}` : undefined,
+      }))
     }
   }
   return { stops, unmatched }
@@ -247,6 +253,13 @@ const ARRIVE_BY = { car: 'car', transit: 'bus', taxi: 'taxi' } as const
 
 export function mockGenerate(trip: Trip, travelers: Traveler[]): PlanResponse {
   const db = getDb()
+  // 붙여넣기(A)는 저장된 최신 버전을 바탕으로 다듬는다 (설계 6.4)
+  if (trip.mode === 'paste') {
+    const latest = [...db.versions.filter(v => v.tripId === trip.id)].sort((a, b) => b.number - a.number)[0]
+    if (!latest) throw new ApiRequestError(400, 'invalid_request', '붙여 넣은 일정을 먼저 저장해 주세요')
+    const version = saveMockVersion(trip.id, latest.id, 'ai', structuredClone(latest.stops), '고치고 싶은 곳을 반영해 다듬었어요', null, travelers)
+    return { version, summary: judgeWithMocks(version.stops, travelers).summary }
+  }
   const filled = db.interviews[trip.id]?.filled
   const styles = filled?.styles.length ? filled.styles : trip.styles
   const arriveBy = ARRIVE_BY[filled?.transport ?? trip.transport ?? 'car']

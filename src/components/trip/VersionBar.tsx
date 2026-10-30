@@ -68,8 +68,8 @@ function CompareColumn({ title, version, judged }: { title: string; version: Ver
       {judged ? (
         <dl className="space-y-1">
           <div><VerdictBadge verdict={judged.result.verdict} /></div>
-          <div className="flex justify-between gap-2"><dt className="text-muted">하루 걷기</dt><dd className="font-bold">{formatRange(judged.result.day)}</dd></div>
-          <div className="flex justify-between gap-2"><dt className="text-muted">가장 긴 연속</dt><dd className="font-bold">{formatRange(judged.result.longest)}</dd></div>
+          <div className="flex justify-between gap-2"><dt className="text-muted">하루 걷기</dt><dd className="font-bold">{formatRange(judged.result.day)}<span className="ml-1 text-sm font-semibold text-muted">추정치</span></dd></div>
+          <div className="flex justify-between gap-2"><dt className="text-muted">가장 긴 연속</dt><dd className="font-bold">{formatRange(judged.result.longest)}<span className="ml-1 text-sm font-semibold text-muted">추정치</span></dd></div>
           <div className="flex justify-between gap-2"><dt className="text-muted">쉬는 시간</dt><dd className="font-bold">{judged.result.restTotalMin}분</dd></div>
           <div className="flex justify-between gap-2"><dt className="text-muted">조건 넘는 곳</dt><dd className="font-bold">{judged.result.violations.length}곳</dd></div>
           <p className="pt-1 text-sm text-muted">{judged.result.reason}</p>
@@ -114,7 +114,7 @@ export function VersionCompare({ tripId, versions, travelers, initialA, initialB
       </div>
       {diff && (
         <p className="mt-4 rounded-xl bg-brand-soft px-4 py-3 font-semibold text-brand-strong">
-          {diff.length > 0 ? `앞 안에서 뒤 안으로: ${diff.join(' · ')}` : '두 안의 걷기 숫자는 같아요'}
+          {diff.length > 0 ? `앞 안에서 뒤 안으로(추정치): ${diff.join(' · ')}` : '두 안의 걷기 숫자는 같아요'}
         </p>
       )}
     </Dialog>

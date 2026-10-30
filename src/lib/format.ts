@@ -1,5 +1,5 @@
 // 화면에 보이는 문장을 만드는 작은 함수들. 판정·걷는 시간 숫자는 만들지 않고 엔진 결과를 글로만 바꾼다.
-import type { Confidence, Reaction, StairsStatus, Transport, VersionSummary } from '@/lib/contracts'
+import type { Confidence, Reaction, SegmentResult, StairsStatus, Transport, VersionSummary } from '@/lib/contracts'
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토']
 
@@ -36,6 +36,13 @@ export function stairsText(status: StairsStatus, count?: number): string {
   if (status === 'present') return count ? `계단 ${count}칸` : '계단 있음'
   if (status === 'confirmed_none') return '계단 없음'
   return '계단 기록 없음 (지도 데이터 기준)'
+}
+
+// 장소 하나의 계단 상태. 구간이 없거나 기록 없는 구간이 섞이면 'unknown' — "계단 없음"은 모두 확인됐을 때만
+export function stopStairsState(segments: Pick<SegmentResult, 'stairsStatus' | 'reverse'>[]): 'present' | 'confirmed_none' | 'unknown' {
+  if (segments.some(s => !s.reverse && s.stairsStatus === 'present')) return 'present'
+  if (segments.length > 0 && segments.every(s => s.stairsStatus === 'confirmed_none')) return 'confirmed_none'
+  return 'unknown'
 }
 
 export const TRANSPORT_TEXT: Record<Transport, string> = { walk: '걸어서', car: '자가용', taxi: '택시', bus: '버스' }

@@ -5,7 +5,7 @@
 import { useEffect, useRef } from 'react'
 import type { JudgeResult, Leg, Opinion, OpinionInput, PlaceDetail, Stop, StopResult, Transport } from '@/lib/contracts'
 import { formatRange } from '@/lib/engine'
-import { CONFIDENCE_TEXT, TRANSPORT_TEXT, sourceLine, stairsText } from '@/lib/format'
+import { CONFIDENCE_TEXT, TRANSPORT_TEXT, sourceLine, stairsText, stopStairsState } from '@/lib/format'
 import { legItemId, segmentItemId, stopItemId } from '@/components/map'
 import { Badge, Button, cx } from '@/components/ui'
 import { OpinionForm, OpinionList } from './OpinionBox'
@@ -134,7 +134,7 @@ export function StopList(props: Props) {
           .map(id => place?.nodes.find(n => n.id === id))
           .filter((n): n is NonNullable<typeof n> => Boolean(n))
         const restOptions = place?.nodes.filter(n => n.kind === 'rest') ?? []
-        const hasStairs = stopResult?.segments.some(s => !s.reverse && s.stairsStatus === 'present')
+        const stairsState = stopStairsState(stopResult?.segments ?? [])
         return (
           <li key={stop.key}>
             <article
@@ -173,8 +173,8 @@ export function StopList(props: Props) {
                 {stopResult?.known ? (
                   <>
                     <Badge tone="neutral">걷기 {formatRange(stopResult.walk)} · 추정치</Badge>
-                    <Badge tone={hasStairs ? 'warn' : stopResult.segments.some(s => s.stairsStatus === 'unknown') ? 'info' : 'ok'}>
-                      {hasStairs ? '! 계단 있음' : stopResult.segments.some(s => s.stairsStatus === 'unknown') ? '? 계단 기록 없음' : '✓ 계단 없음'}
+                    <Badge tone={stairsState === 'present' ? 'warn' : stairsState === 'confirmed_none' ? 'ok' : 'info'}>
+                      {stairsState === 'present' ? '! 계단 있음' : stairsState === 'confirmed_none' ? '✓ 계단 없음' : '? 계단 기록 없음 (지도 데이터 기준)'}
                     </Badge>
                   </>
                 ) : (

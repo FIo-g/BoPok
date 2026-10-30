@@ -95,9 +95,20 @@ describe('목업 API', () => {
   it('붙여넣은 일정은 장소로 정리하고 못 찾은 것은 따로 돌려준다', async () => {
     await loginDemo()
     const res = await api.ai.parseSchedule({ tripId: 't-daejeon', text: '10:00 한밭수목원\n12:00 점심\n14:00 과학관\n저녁에 불꽃놀이' })
-    expect(res.stops.map(s => s.placeId)).toEqual(['hanbat', 'lunch-dorong', 'science'])
+    expect(res.stops.map(s => s.placeId)).toEqual(['hanbat', 'lunch-dorong', 'science', null])
     expect(res.stops[0].startTime).toBe('10:00')
     expect(res.unmatched).toEqual(['저녁에 불꽃놀이'])
+  })
+
+  it('붙여넣기(A)도 저장된 일정을 AI가 다듬어 새 버전을 만든다', async () => {
+    await loginDemo()
+    const trip = await api.trips.create({ groupId: 'g-family', title: '붙여넣기 테스트', mode: 'paste' })
+    const detail = await api.trips.get('t-daejeon')
+    await api.trips.putTravelers(trip.id, detail.travelers)
+    const parsed = await api.ai.parseSchedule({ tripId: 't-daejeon', text: '10:00 한밭수목원\n14:00 과학관' })
+    const saved = await api.trips.saveVersion(trip.id, { parentId: null, stops: parsed.stops, madeBy: 'user', note: null })
+    const res = await api.ai.generate({ tripId: trip.id })
+    expect(res.version.parentId).toBe(saved.id)
   })
 
   it('인터뷰는 칸 순서대로 질문하고, 같은 질문에 답이 두 번 와도 건너뛰지 않는다', async () => {

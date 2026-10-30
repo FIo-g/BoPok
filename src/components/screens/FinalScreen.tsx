@@ -92,7 +92,7 @@ export function FinalScreen({ tripId }: { tripId: string }) {
                             {rests.map(n => ` · ${n.name}${n.restType === 'indoor' ? '(실내)' : n.restType === 'outdoor' ? '(야외)' : ''}에서 쉬기`).join('')}
                           </p>
                           {place?.phone && <p className="text-sm text-muted">연락처 {place.phone}</p>}
-                          {leg && <p className="mt-1 font-semibold">↓ {TRANSPORT_TEXT[leg.mode]}{leg.rideMin !== null ? ` 약 ${Math.round(leg.rideMin)}분` : leg.walkTime ? ` 걷기 ${formatRange(leg.walkTime)}` : ''}</p>}
+                          {leg && <p className="mt-1 font-semibold">↓ {TRANSPORT_TEXT[leg.mode]}{leg.rideMin !== null ? ` 약 ${Math.round(leg.rideMin)}분` : leg.walkTime ? ` 걷기 ${formatRange(leg.walkTime)} · 추정치` : ''}</p>}
                         </div>
                       </li>
                     )
