@@ -16,7 +16,9 @@
 
 - 이메일·비밀번호 + 이름. 비밀번호 찾기·이메일 인증·소셜 로그인은 MVP에서 뺀다
 - Drizzle 어댑터로 Neon에 저장, 핸들러는 `src/app/api/auth/[...all]/route.ts`
-- `src/lib/auth`에 서버 함수: `requireUser()`(로그인 안 했으면 401), `requireMember(groupId)`(구성원 아니면 403), `requireOwner(groupId)`
+- `src/lib/auth`에 서버 함수: `requireUser(request)`(로그인 안 했으면 401), `requireMember(request, groupId)`(구성원 아니면 403), `requireOwner(request, groupId)`
+  - 쿠키를 `request.headers`에서 읽으므로 route 핸들러가 받은 `request`를 그대로 넘긴다. 그래야 테스트에서 가짜 함수 없이 쿠키를 끼워 넣을 수 있고, 김태형의 `requireTripMember(request, tripId)`에 바로 끼워진다 **[결정: 김경선 10/30]**
+  - 구성원이 아닐 때와 그룹이 아예 없을 때 모두 403으로 답한다 — 404로 나누면 '그 그룹이 있긴 하다'는 사실이 새어 나간다 **[결정: 김경선 10/30]**
 - **모든 API는 이 함수로 권한을 먼저 검사한다.** Neon에는 행 단위 보안이 기본으로 없으므로 서버 코드가 유일한 방어선이다
 
 ### 테이블 (설계 10.3, 세부 컬럼은 정해도 됨)
