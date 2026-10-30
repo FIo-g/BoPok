@@ -40,18 +40,49 @@ const TRAVELER_PRESETS = [
   { label: '아빠·나', labels: ['아빠', '나'] },
 ] as const
 
-// 이름표로 부모님 여부·성별을 정한다 (설계 6.3 인터뷰 진행) — 공백을 뺀 뒤 정확히 같을 때만
-const FEMALE_PARENT_NAMES = ['엄마', '어머니', '어머님', '할머니', '외할머니', '친할머니', '장모님', '시어머니']
-const MALE_PARENT_NAMES = ['아빠', '아버지', '아버님', '할아버지', '외할아버지', '친할아버지', '장인어른', '시아버지']
+// 이름표로 부모님 여부·성별을 정한다 (설계 6.3 인터뷰 진행) — 공백·앞말을 뗀 뒤 정확히 같을 때만
+const FEMALE_PARENT_NAMES = ['엄마', '어머니', '어머님', '할머니', '외할머니', '친할머니', '장모님', '시어머니', '시어머님']
+const MALE_PARENT_NAMES = ['아빠', '아버지', '아버님', '할아버지', '외할아버지', '친할아버지', '장인어른', '시아버지', '시아버님']
+
+const RELATION_VALUES = ['mother', 'father', 'grandmother', 'grandfather', 'self', 'child', 'sibling', 'spouse', 'friend', 'other'] as const
+type Relation = (typeof RELATION_VALUES)[number]
 
 function stripSpaces(text: string): string {
   return text.replace(/\s+/g, '')
 }
 
+// 앞의 '우리'·'저희'·'내'와 공백을 뗀다 — '우리 엄마'는 '엄마'로 본다
+function baseName(text: string): string {
+  return stripSpaces(text).replace(/^(우리|저희|내)/, '')
+}
+
+// '님' 존칭을 기본형으로 — '시아버님'은 '시아버지'로, '어머님'은 '어머니'로 본다
+function canonicalName(text: string): string {
+  const base = baseName(text)
+  const honor: Record<string, string> = {
+    '어머님': '어머니',
+    '아버님': '아버지',
+    '시아버님': '시아버지',
+    '시어머님': '시어머니',
+    '할머님': '할머니',
+    '할아버님': '할아버지',
+  }
+  if (honor[base] !== undefined) return honor[base]
+  return base
+}
+
 function flagsFromLabel(label: string): { isParent: boolean; sex: 'female' | 'male' | undefined } {
-  const norm = stripSpaces(label)
+  const norm = canonicalName(label)
   if (FEMALE_PARENT_NAMES.some(name => norm === stripSpaces(name))) return { isParent: true, sex: 'female' }
   if (MALE_PARENT_NAMES.some(name => norm === stripSpaces(name))) return { isParent: true, sex: 'male' }
+  return { isParent: false, sex: undefined }
+}
+
+// AI 관계 값으로 부모님 여부·성별을 정한다 — mother·grandmother는 부모님·여성, father·grandfather는 부모님·남성
+function flagsFromRelation(relation: Relation | undefined): { isParent: boolean; sex: 'female' | 'male' | undefined } | null {
+  if (relation === undefined) return null
+  if (relation === 'mother' || relation === 'grandmother') return { isParent: true, sex: 'female' }
+  if (relation === 'father' || relation === 'grandfather') return { isParent: true, sex: 'male' }
   return { isParent: false, sex: undefined }
 }
 
@@ -61,8 +92,12 @@ function isSelfLabel(label: string): boolean {
   return norm === '나' || norm === '본인' || norm === '저'
 }
 
-function newTraveler(id: string, label: string): Traveler {
-  const { isParent, sex } = flagsFromLabel(label)
+function newTraveler(id: string, label: string, relation?: Relation): Traveler {
+  const byRelation = flagsFromRelation(relation)
+  const byLabel = flagsFromLabel(label)
+  // 둘 중 하나라도 부모님이면 부모님으로 본다 (안전한 쪽). 성별은 이름표가 우선이다
+  const isParent = (byRelation?.isParent ?? false) || byLabel.isParent
+  const sex = byLabel.sex ?? byRelation?.sex
   return {
     id,
     label,
@@ -160,7 +195,15 @@ const DATE_CHOICES = ['이번 주말', '다음 주말']
 
 // AI가 돌려줄 모양. 걷는 시간·거리 칸은 두지 않는다
 const TravelersAiSchema = z.object({
-  travelers: z.array(z.object({ label: z.string().trim().min(1) })).min(1).max(8),
+  travelers: z
+    .array(
+      z.object({
+        label: z.string().trim().min(1),
+        relation: z.enum(RELATION_VALUES).optional(),
+      }),
+    )
+    .min(1)
+    .max(8),
 })
 const AgeAiSchema = z.object({ age: z.number().int().min(0).max(120).nullable() })
 const DateAiSchema = z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) })
@@ -171,7 +214,9 @@ const MustVisitAiSchema = z.object({
 
 const TRAVELERS_SYSTEM =
   "'부모님'은 엄마와 아빠 두 명으로 나눠라. 말하는 본인은 '나'로 넣어라. " +
-  '함께 가는 사람을 이름표 목록으로 바꿔라. 반드시 JSON으로만 답하라. 모양: {"travelers":[{"label":"엄마"}]}'
+  '함께 가는 사람을 이름표와 관계 값 목록(mother, father, grandmother, grandfather, self, child, sibling, spouse, friend, other)으로 바꿔라. ' +
+  '시어머니·장모님은 mother, 시아버지·장인어른은 father로 넣어라. ' +
+  '반드시 JSON으로만 답하라. 모양: {"travelers":[{"label":"엄마","relation":"mother"}]}'
 const AGE_SYSTEM =
   '나이 답을 0~120 사이 숫자로 바꿔라. 알 수 없으면 null. 반드시 JSON으로만 답하라. 모양: {"age":72}'
 const TIME_SYSTEM =
@@ -436,13 +481,13 @@ export async function applyAnswer(
 
   switch (slot) {
     case 'travelers': {
-      let labels: string[] | null = null
+      let entries: { label: string; relation?: Relation }[] | null = null
       if (answer.choiceIndex !== undefined) {
-        labels = [...TRAVELER_PRESETS[answer.choiceIndex]!.labels]
+        entries = TRAVELER_PRESETS[answer.choiceIndex]!.labels.map(label => ({ label }))
       } else if (answer.text !== undefined) {
-        const preset = TRAVELER_PRESETS.find(p => stripSpaces(p.label) === stripSpaces(answer.text!))
+        const preset = TRAVELER_PRESETS.find(p => canonicalName(p.label) === canonicalName(answer.text!))
         if (preset) {
-          labels = [...preset.labels]
+          entries = preset.labels.map(label => ({ label }))
         } else {
           const parsed = await askAi(
             deps,
@@ -452,14 +497,14 @@ export async function applyAnswer(
             ],
             TravelersAiSchema,
           )
-          const names = parsed?.travelers.map(t => t.label.trim()).filter(label => label.length > 0) ?? []
-          if (names.length === 0) return retry
-          labels = names
+          const list = parsed?.travelers.map(t => ({ label: t.label.trim(), relation: t.relation })).filter(entry => entry.label.length > 0) ?? []
+          if (list.length === 0) return retry
+          entries = list
         }
       } else {
         return { state }
       }
-      filled.travelers = labels.map((label, i) => newTraveler(`t${i + 1}`, label))
+      filled.travelers = entries.map((entry, i) => newTraveler(`t${i + 1}`, entry.label, entry.relation))
       return next({ slot: 'traveler_age', travelerIndex: 0, questionIndex: 0 })
     }
 
@@ -821,8 +866,20 @@ function toInterviewResponse(state: InterviewState, question: { slot: InterviewS
   })
 }
 
-export async function handleInterview(request: Request, deps: AiDeps): Promise<Response> {
+export async function handleInterview(
+  request: Request,
+  deps: AiDeps,
+  opts?: { now?: () => number },
+): Promise<Response> {
   return handle(async () => {
+    const nowFn = opts?.now ?? Date.now
+    const deadlineAt = nowFn() + 25000
+    // 요청 예산 안에서 AI 호출을 나눠 쓴다.
+    const budgeted: AiDeps = {
+      ...deps,
+      callJson: ((req: Parameters<AiDeps['callJson']>[0], extra?: Parameters<AiDeps['callJson']>[1]) =>
+        deps.callJson(req, { ...extra, deadlineMs: Math.max(1, deadlineAt - nowFn()) })) as AiDeps['callJson'],
+    }
     const input = await readJson(request, InterviewRequestSchema)
     await deps.requireTripMember(request, input.tripId)
     let state = await deps.interviews.get(input.tripId)
@@ -851,7 +908,7 @@ export async function handleInterview(request: Request, deps: AiDeps): Promise<R
       }
       const userText =
         input.answer.choiceIndex !== undefined ? question.choices[input.answer.choiceIndex]! : (input.answer.text ?? '')
-      const applied = await applyAnswer(state, input.answer, deps)
+      const applied = await applyAnswer(state, input.answer, budgeted)
       if (applied.retryText) {
         const text = `${applied.retryText}${question.text}`
         const retryState: InterviewState = {

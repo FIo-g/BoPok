@@ -33,6 +33,11 @@ type JudgeArgs = {
   note?: string
   appliedOpinionIds?: string[]
   madeByUserId?: string
+  // 남은 시간이 모자라면 두 번째 시도를 건너뛰고 첫 결과를 저장한다 (설계 6.4).
+  shouldTrySecond?: () => boolean
+  now?: () => number
+  // 다시 짜기에서 앞뒤가 그대로인 구간의 이동수단을 지키는 데 쓴다.
+  originalStops?: Stop[]
 }
 
 type Run = { stops: Stop[]; result: JudgeResult }
@@ -58,7 +63,7 @@ async function runAttempt(drafts: DraftStop[], args: JudgeArgs, deps: AiDeps): P
     details = []
   }
   const places = placeRecords(details)
-  const stops = draftsToStops(drafts, args.transport, places)
+  const stops = preserveArriveBy(draftsToStops(drafts, args.transport, places), args.originalStops)
   let legs: Leg[] = []
   try {
     legs = await deps.getLegs(requiredLegs(stops, places))
@@ -68,6 +73,32 @@ async function runAttempt(drafts: DraftStop[], args: JudgeArgs, deps: AiDeps): P
   }
   const result = judge({ travelers: args.travelers, stops, places, legs: legRecords(legs) })
   return { stops, result }
+}
+
+// 다시 짜기 이동수단 지키기 — 새 i번째가 원래 j번째와 짝이고
+// i−1번째가 원래 j−1번째와 짝이면 원래[j]의 arriveBy를 쓴다.
+function matchesKeep(a: Pick<Stop, 'placeId' | 'name'>, b: Pick<Stop, 'placeId' | 'name'>): boolean {
+  if (a.placeId !== null && b.placeId !== null) return a.placeId === b.placeId
+  if (a.placeId !== null || b.placeId !== null) return false
+  const na = a.name.replace(/\s+/g, '')
+  const nb = b.name.replace(/\s+/g, '')
+  if (na.length === 0 || nb.length === 0) return false
+  return na.includes(nb) || nb.includes(na)
+}
+
+function preserveArriveBy(stops: Stop[], original: Stop[] | undefined): Stop[] {
+  if (!original || original.length === 0) return stops
+  return stops.map((stop, i) => {
+    if (i === 0) return stop
+    const prev = stops[i - 1]!
+    for (let j = 1; j < original.length; j++) {
+      if (matchesKeep(stop, original[j]!) && matchesKeep(prev, original[j - 1]!)) {
+        if (original[j]!.arriveBy === stop.arriveBy) return stop
+        return { ...stop, arriveBy: original[j]!.arriveBy }
+      }
+    }
+    return stop
+  })
 }
 
 function stopName(stops: Stop[], key: string | null | undefined): string {
@@ -124,7 +155,9 @@ export async function planJudgeSave(
   let chosen = first
   let chosenMeta = firstMeta
 
-  if (first.result.verdict === 'adjust') {
+  // 남은 시간이 15초보다 적으면 두 번째 시도를 건너뛰고 첫 결과를 저장한다.
+  const wantsSecond = args.shouldTrySecond === undefined ? true : args.shouldTrySecond()
+  if (first.result.verdict === 'adjust' && wantsSecond) {
     try {
       const secondMeta = normalizeAttempt(await args.attempt(feedbackText(first.result, first.stops)))
       // 두 번째가 비면 첫 결과를 쓴다.

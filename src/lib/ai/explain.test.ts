@@ -105,6 +105,29 @@ describe('explainChange', () => {
     expect(out).toEqual({ text, source: 'ai' })
   })
 
+  it('약 28~34분 → 약 19~23분 입력이면 구절 그대로만 ai', async () => {
+    const { prev } = pair()
+    const customPrev = { ...prev, longest: { base: 28, high: 34, fromStopKey: 'k1', toStopKey: 'k1' } }
+    const customNext = { ...prev, longest: { base: 19, high: 23, fromStopKey: 'k1', toStopKey: 'k1' } }
+    const lines = diffSummary(customPrev, customNext).map(formatDiffItem)
+    expect(lines.join(', ')).toContain('약 28~34분')
+    expect(lines.join(', ')).toContain('약 19~23분')
+
+    const fixed1 = await explainChange(customPrev, customNext, undefined, depsWithAi({ text: '연속 걷기가 3분 줄어요' }))
+    expect(fixed1.source).toBe('fixed')
+    const fixed2 = await explainChange(customPrev, customNext, undefined, depsWithAi({ text: '약 8~34분에서 줄었어요' }))
+    expect(fixed2.source).toBe('fixed')
+    const fixed3 = await explainChange(customPrev, customNext, undefined, depsWithAi({ text: '계단을 모두 없앴어요' }))
+    expect(fixed3.source).toBe('fixed')
+    const ai = await explainChange(
+      customPrev,
+      customNext,
+      undefined,
+      depsWithAi({ text: '약 28~34분에서 약 19~23분으로 줄어요' }),
+    )
+    expect(ai).toEqual({ text: '약 28~34분에서 약 19~23분으로 줄어요', source: 'ai' })
+  })
+
   it('없는 숫자를 쓰면 고정 문장', async () => {
     const { prev, next } = pair()
     const lines = diffSummary(prev, next).map(formatDiffItem)
@@ -220,6 +243,28 @@ describe('explainChange', () => {
     for (const text of ['계단이 없어졌어요', '계단 없이 편해졌어요']) {
       const out = await explainChange(prev, next, undefined, depsWithAi({ text }))
       expect(out.source).toBe('fixed')
+    }
+  })
+
+  it('callJson에 넘어간 deadlineMs는 15000 이하', async () => {
+    const { prev, next } = pair()
+    const seen: (number | undefined)[] = []
+    const base = createDevDeps()
+    const deps: AiDeps = {
+      ...base,
+      callJson: (async (req: { schema: z.ZodType<unknown> }, extra?: { deadlineMs?: number }) => {
+        seen.push(extra?.deadlineMs)
+        return req.schema.parse({ text: '가'.repeat(10) })
+      }) as unknown as AiDeps['callJson'],
+    }
+    const response = await handleExplain(makeRequest({ tripId: 'trip-dev', prev, next }), deps, {
+      now: () => 1000,
+    })
+    expect(response.status).toBe(200)
+    expect(seen.length).toBeGreaterThan(0)
+    for (const deadlineMs of seen) {
+      expect(deadlineMs).toBeDefined()
+      expect(deadlineMs!).toBeLessThanOrEqual(15000)
     }
   })
 })

@@ -1,5 +1,5 @@
 // 붙여넣은 일정 정리 API 검사. AI는 가짜 callJson으로만 부른다.
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 import {
   AiErrorSchema,
@@ -152,6 +152,35 @@ describe('handleParseSchedule', () => {
     expect(body.stops[0].startTime).toBeUndefined()
     expect(body.stops[0].reservedAt).toBeUndefined()
     expect(body.stops[0].placeId).toBe('hanbat')
+  })
+
+  it('조회 실패해도 unmatched로 200', async () => {
+    const deps = depsWithCallJson([{ name: '어딘가' }])
+    const failing: AiDeps = {
+      ...deps,
+      matchPlaceByName: (async () => {
+        throw new Error('DB 실패')
+      }) as AiDeps['matchPlaceByName'],
+      searchPoi: (async () => {
+        throw new Error('POI 실패')
+      }) as AiDeps['searchPoi'],
+    }
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      await failing.interviews.save('trip-dev', await pastedState('car'))
+      const response = await handleParseSchedule(
+        makeRequest({ tripId: 'trip-dev', text: '어딘가' }),
+        failing,
+      )
+      expect(response.status).toBe(200)
+      const body = ParseScheduleResponseSchema.parse(await response.json())
+      expect(body.stops[0].placeId).toBeNull()
+      expect(body.stops[0].coord).toBeUndefined()
+      expect(body.unmatched).toEqual(['어딘가'])
+      expect(errorSpy).toHaveBeenCalledWith('[ai]', '장소 조회 실패', expect.anything())
+    } finally {
+      errorSpy.mockRestore()
+    }
   })
 })
 

@@ -905,4 +905,72 @@ describe('POST /api/ai/interview', () => {
     expect(second.status).toBe(200)
     InterviewResponseSchema.parse(await second.json())
   })
+
+  it('관계 mother면 부모님·여성 (우리 엄마)', async () => {
+    const out = await applyAnswer(
+      initialState('scratch', []),
+      { text: '우리 엄마랑 갈 거야' },
+      { callJson: stubCallJson({ travelers: [{ label: '우리 엄마', relation: 'mother' }] }) },
+    )
+    expect(out.state.filled.travelers[0]).toMatchObject({ label: '우리 엄마', isParent: true, sex: 'female' })
+  })
+
+  it('이름표가 부모님이면 관계 self·other여도 부모님·여성', async () => {
+    const momSelf = await applyAnswer(
+      initialState('scratch', []),
+      { text: '엄마랑 갈 거야' },
+      { callJson: stubCallJson({ travelers: [{ label: '엄마', relation: 'self' }] }) },
+    )
+    expect(momSelf.state.filled.travelers[0]).toMatchObject({ label: '엄마', isParent: true, sex: 'female' })
+    const grandOther = await applyAnswer(
+      initialState('scratch', []),
+      { text: '할머니랑 갈 거야' },
+      { callJson: stubCallJson({ travelers: [{ label: '할머니', relation: 'other' }] }) },
+    )
+    expect(grandOther.state.filled.travelers[0]).toMatchObject({
+      label: '할머니',
+      isParent: true,
+      sex: 'female',
+    })
+  })
+
+  it('callJson에 넘어간 deadlineMs는 25000 이하', async () => {
+    const seen: (number | undefined)[] = []
+    const deps = depsForFlow(
+      'scratch',
+      (async (req: { schema: z.ZodType<unknown> }, extra?: { deadlineMs?: number }) => {
+        seen.push(extra?.deadlineMs)
+        return req.schema.parse({ travelers: [{ label: '엄마', relation: 'self' }] })
+      }) as unknown as AiDeps['callJson'],
+    )
+    await handleInterview(makeRequest({ tripId: 'trip-dev' }), deps, { now: () => 1000 })
+    const response = await handleInterview(
+      makeRequest({ tripId: 'trip-dev', answer: { text: '엄마랑 갈 거야' } }),
+      deps,
+      { now: () => 1000 },
+    )
+    expect(response.status).toBe(200)
+    expect(seen.length).toBeGreaterThan(0)
+    for (const deadlineMs of seen) {
+      expect(deadlineMs).toBeDefined()
+      expect(deadlineMs!).toBeLessThanOrEqual(25000)
+    }
+  })
+
+  it("이미 있는 여행자 '시아버님'은 부모님·남성", async () => {
+    const bare: Traveler = {
+      id: 't1',
+      label: '시아버님',
+      pace: 'unknown',
+      mobilityAid: false,
+      isParent: true,
+      condition: {},
+      filledBySelf: false,
+    }
+    let state = initialState('scratch', [bare])
+    expect(state.filled.travelers[0]?.sex).toBeUndefined()
+    state = (await applyAnswer(state, { choiceIndex: 1 }, { callJson: throwingCallJson() })).state
+    expect(state.filled.travelers[0]?.sex).toBe('male')
+    expect(state.filled.travelers[0]?.isParent).toBe(true)
+  })
 })

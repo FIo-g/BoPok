@@ -245,4 +245,26 @@ describe('planJudgeSave', () => {
     expect(seen[0]?.note).toBe('기본 메모')
     expect(seen[0]?.appliedOpinionIds).toEqual(['o9'])
   })
+
+  it('남은 시간 부족이면 callJson 1번만, 첫 결과 저장', async () => {
+    let calls = 0
+    const attempt: PlanAttempt = async feedback => {
+      calls += 1
+      return feedback === null ? [hanbat] : [science]
+    }
+    const out = await planJudgeSave(
+      {
+        tripId: 'trip-dev',
+        travelers: [mom],
+        transport: 'car',
+        attempt,
+        parentId: null,
+        shouldTrySecond: () => false,
+      },
+      createDevDeps(),
+    )
+    expect(calls).toBe(1)
+    expect(out.version.stops.map(stop => stop.placeId)).toEqual(['hanbat'])
+    expect(out.result.verdict).toBe('adjust')
+  })
 })

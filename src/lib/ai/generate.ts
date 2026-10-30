@@ -18,6 +18,7 @@ import type { AiDeps } from './deps'
 import { HttpError, handle, readJson } from './http'
 import { planJudgeSave, type PlanAttempt } from './plan-and-save'
 import { enforceMustStops, restoreMustStops, samePlaceName, type DraftStop } from './stops'
+import { hasNumberOrStairsClaim, sanitizePromptText } from './text-guard'
 
 // AI가 돌려줄 모양. 걷는 시간·거리·계단 칸은 두지 않는다 (엔진이 계산한다).
 const AiStopsSchema = z.object({
@@ -49,7 +50,7 @@ function candidateLine(place: PlaceSummary): string {
 }
 
 function scheduleLine(stop: Stop): string {
-  const parts = [`이름: ${stop.name}`, `id: ${stop.placeId ?? '없음'}`]
+  const parts = [`이름: ${sanitizePromptText(stop.name)}`, `id: ${stop.placeId ?? '없음'}`]
   if (stop.startTime !== undefined) parts.push(`시간 ${stop.startTime}`)
   if (stop.mustVisit) parts.push('꼭 갈 곳')
   if (stop.reservedAt !== undefined) parts.push(`예약 ${stop.reservedAt}`)
@@ -72,32 +73,63 @@ function applyMustVisit(drafts: DraftStop[], musts: MustNeed[]): DraftStop[] {
   return restoreMustStops(enforced, missing)
 }
 
-// 목록 밖 placeId는 버린다. 후보 안이면 DB 이름·좌표로 덮어쓴다.
-// DB에 없는 자리(null)는 앉는 자리(seated)이고 이름에 숫자가 없을 때만 둔다 (설계 6.4).
+// 목록 밖 placeId는 버린다. 이름은 후보 DB 이름 · 바탕 일정 이름 순으로만 정한다.
+// AI가 쓴 stop.name은 쓰지 않는다. 둘 다 없으면 그 자리를 버린다 (설계 6.4).
+// DB에 없는 자리(null)는 앉는 자리(seated)이고 이름에 숫자·계단 약속이 없을 때만 둔다.
+// 붙여넣기 바탕의 null 자리와 이름이 같으면 원래 이름·좌표·seated·visitMin을 옮겨 받는다.
 function filterDrafts(
   stops: z.infer<typeof AiStopsSchema>['stops'],
   candidates: PlaceSummary[],
   allowedIds?: Set<string>,
+  baseStops?: Stop[],
 ): DraftStop[] {
   const byId = new Map(candidates.map(candidate => [candidate.id, candidate] as const))
   const allowed = allowedIds ?? new Set(candidates.map(candidate => candidate.id))
+  // 바탕 일정 placeId → 이름. 같은 곳을 두 번 들르면 처음 이름으로 둔다
+  const baseNames = new Map<string, string>()
+  for (const base of baseStops ?? []) {
+    if (base.placeId !== null && !baseNames.has(base.placeId)) baseNames.set(base.placeId, base.name)
+  }
+  const remainingBase = [...(baseStops ?? []).filter(stop => stop.placeId === null)]
   const drafts: DraftStop[] = []
   for (const stop of stops) {
     if (stop.placeId !== null) {
       if (!allowed.has(stop.placeId)) continue
       const candidate = byId.get(stop.placeId)
+      // 후보 DB 이름이 없으면 바탕 이름, 그래도 없으면 버린다
+      const name = candidate?.name ?? baseNames.get(stop.placeId)
+      if (name === undefined) continue
       drafts.push({
         placeId: stop.placeId,
-        // 후보 DB 이름으로 바꿔 저장한다.
-        name: candidate?.name ?? stop.name,
+        name,
         ...(stop.startTime !== undefined ? { startTime: stop.startTime } : {}),
-        ...(stop.visitMin !== undefined ? { visitMin: stop.visitMin } : {}),
+        // 머무는 시간은 DB visitMin이 있으면 그것이 우선이다.
+        ...(candidate?.visitMin !== undefined
+          ? { visitMin: candidate.visitMin }
+          : stop.visitMin !== undefined
+            ? { visitMin: stop.visitMin }
+            : {}),
         ...(stop.seated !== undefined ? { seated: stop.seated } : {}),
         ...(candidate?.coord !== undefined ? { coord: candidate.coord } : {}),
       })
     } else {
+      // 바탕 null 자리와 이름이 같으면 원래 값을 옮겨 받는다 (TMAP 좌표 자리가 사라지지 않게).
+      const baseIndex = remainingBase.findIndex(base => samePlaceName(base.name, stop.name))
+      if (baseIndex >= 0) {
+        const [base] = remainingBase.splice(baseIndex, 1)
+        if (base === undefined) continue
+        drafts.push({
+          placeId: null,
+          name: base.name,
+          ...(stop.startTime !== undefined ? { startTime: stop.startTime } : {}),
+          ...(base.visitMin !== undefined ? { visitMin: base.visitMin } : {}),
+          seated: base.seated ?? stop.seated ?? true,
+          ...(base.coord !== undefined ? { coord: base.coord } : {}),
+        })
+        continue
+      }
       if (stop.seated !== true) continue
-      if (/\d/.test(stop.name)) continue
+      if (hasNumberOrStairsClaim(stop.name)) continue
       drafts.push({
         placeId: null,
         name: stop.name,
@@ -128,8 +160,18 @@ function dedupConsecutive(drafts: DraftStop[]): DraftStop[] {
   return out
 }
 
-export async function handleGenerate(request: Request, deps: AiDeps): Promise<Response> {
-  return handle(async () => {
+export async function handleGenerate(
+  request: Request,
+  deps: AiDeps,
+  opts?: { now?: () => number },
+): Promise<Response> {
+  return handle(
+    async () => {
+      const nowFn = opts?.now ?? Date.now
+      // 요청마다 50초 예산을 두고 두 번째 시도와 나눠 쓴다 (설계 6.4).
+      const deadlineAt = nowFn() + 50000
+      const deadlineMs = (): number => Math.max(1, deadlineAt - nowFn())
+      const shouldTrySecond = (): boolean => deadlineAt - nowFn() >= 15000
     const input = await readJson(request, GenerateRequestSchema)
     const user = await deps.requireTripMember(request, input.tripId)
     const ctx = await deps.getTripContext(input.tripId)
@@ -218,8 +260,7 @@ export async function handleGenerate(request: Request, deps: AiDeps): Promise<Re
         ? `꼭 갈 곳: ${filled.mustVisit.map(must => (must.reservedAt ? `${must.name} (예약 ${must.reservedAt})` : must.name)).join(', ')}`
         : '꼭 갈 곳 없음'
 
-    // AI가 돌려준 한 줄 메모는 버전 note로 저장한다. 숫자가 하나라도 있으면 버린다 (설계 6.4).
-    // 두 번 물으면 마지막 답을 쓴다. planJudgeSave가 버전을 만들 때 이 객체를 그대로 읽으므로 미리 복사해 두면 안 된다.
+    // AI가 돌려준 한 줄 메모는 저장된 시도의 것으로 쓴다 — planJudgeSave가 고른 시도의 메타를 읽는다.
     const args: {
       tripId: string
       travelers: Traveler[]
@@ -227,7 +268,7 @@ export async function handleGenerate(request: Request, deps: AiDeps): Promise<Re
       attempt: PlanAttempt
       parentId: string | null
       madeByUserId: string
-      note?: string
+      shouldTrySecond: () => boolean
     } = {
       tripId: input.tripId,
       travelers: ctx.travelers,
@@ -245,34 +286,39 @@ export async function handleGenerate(request: Request, deps: AiDeps): Promise<Re
           (feedback === null
             ? ''
             : `앞 일정은 이런 이유로 부모님 조건을 넘었다:\n${feedback}\n덜 걷게 다시 골라라.`)
-        let parsed: z.infer<typeof AiStopsSchema>
-        try {
-          parsed = await deps.callJson({
+        // attempt 안에서는 AiCallError를 그대로 던진다 — 502 변환은 handle이 한다.
+        const parsed: z.infer<typeof AiStopsSchema> = await deps.callJson(
+          {
             messages: [
               { role: 'system', content: SYSTEM_PROMPT },
               { role: 'user', content: userText },
             ],
             schema: AiStopsSchema,
-          })
-        } catch (error) {
-          if (error instanceof AiCallError) {
-            throw new HttpError(502, 'ai_failed', 'AI 요청이 실패했어요', 'retry_or_pick')
-          }
-          throw error
-        }
-        if (parsed.note !== undefined && !/\d/.test(parsed.note)) args.note = parsed.note
-        const filtered = filterDrafts(parsed.stops, candidates, allowedIds)
+          },
+          { deadlineMs: deadlineMs() },
+        )
+        // 메모에 숫자·계단 약속이 있으면 버린다 — 숫자는 엔진에서만 나온다 (설계 6.4).
+        const note =
+          parsed.note !== undefined && !hasNumberOrStairsClaim(parsed.note) ? parsed.note : undefined
+        const filtered = filterDrafts(parsed.stops, candidates, allowedIds, isPaste ? baseStops : undefined)
         // 고른 장소가 하나도 남지 않으면 AI 실패로 본다 (설계 6.4).
         if (filtered.length === 0) {
-          throw new HttpError(502, 'ai_failed', 'AI 요청이 실패했어요', 'retry_or_pick')
+          throw new AiCallError('invalid_output', 'AI가 고른 장소가 없어요')
         }
-        return dedupConsecutive(applyMustVisit(filtered, musts))
+        const drafts = dedupConsecutive(applyMustVisit(filtered, musts))
+        if (drafts.length === 0) {
+          throw new AiCallError('invalid_output', 'AI가 고른 장소가 없어요')
+        }
+        return note === undefined ? { drafts } : { drafts, note }
       },
       parentId,
       madeByUserId: user.userId,
+      shouldTrySecond,
     }
 
-    const { version, summary } = await planJudgeSave(args, deps)
-    return PlanResponseSchema.parse({ version, summary })
-  })
+      const { version, summary } = await planJudgeSave(args, deps)
+      return PlanResponseSchema.parse({ version, summary })
+    },
+    { aiFallback: 'retry_or_pick' },
+  )
 }

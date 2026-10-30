@@ -51,7 +51,7 @@ export const CONDITION_QUESTIONS: readonly ConditionQuestion[] = [
     id: 'avoidStairs',
     title: '계단은 피하시는 게 좋을까요?',
     choices: [
-      { label: '피하고 싶어요', note: '계단 없는 길을 찾아요', value: true },
+      { label: '피하고 싶어요', note: '계단을 피하는 길로 계산해요', value: true },
       { label: '괜찮아요', note: '계단도 포함해요', value: false },
     ],
     allowUnknown: true,

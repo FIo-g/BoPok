@@ -206,4 +206,18 @@ describe('restoreMustStops', () => {
     )
     expect(out.map(d => d.placeId)).toEqual(['science', 'hanbat', 'museum'])
   })
+
+  it('꼭 갈 곳 한밭수목원(14:00)에 null 벤치는 짝 아님', () => {
+    const must: DraftStop = { placeId: 'hanbat', name: '한밭수목원', mustVisit: true, reservedAt: '14:00', startTime: '14:00' }
+    const { drafts, missing } = enforceMustStops(
+      [{ placeId: null, name: '한밭수목원 앞 벤치', seated: true }],
+      [must],
+    )
+    // placeId가 있으면 같은 id끼리만 짝 — 이름이 비슷해도 짝이 아니다
+    expect(missing).toHaveLength(1)
+    expect(drafts).toHaveLength(1)
+    const restored = restoreMustStops(drafts, missing)
+    expect(restored.filter(d => d.placeId === 'hanbat')).toHaveLength(1)
+    expect(restored.find(d => d.placeId === 'hanbat')).toMatchObject({ reservedAt: '14:00', startTime: '14:00' })
+  })
 })

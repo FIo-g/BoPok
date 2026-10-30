@@ -93,11 +93,11 @@ export function draftsToStops(
 }
 
 // 초안과 원래 꼭 갈 곳·예약이 같은 곳인지 본다.
-// placeId가 양쪽에 있으면 id로 먼저 맞추고, 아니면 공백을 뺀 이름 포함으로 본다.
+// 꼭 갈 곳이 DB 장소면 같은 id끼리만 짝짓는다 (비슷한 이름의 다른 자리로 바뀌지 않게).
+// placeId가 없을 때만 이름 포함으로 본다.
 function matchesMust(must: DraftStop, draft: DraftStop): boolean {
-  if (must.placeId !== null && draft.placeId !== null) {
-    if (must.placeId === draft.placeId) return true
-    return samePlaceName(draft.name, must.name)
+  if (must.placeId !== null) {
+    return draft.placeId !== null && draft.placeId === must.placeId
   }
   return samePlaceName(draft.name, must.name)
 }

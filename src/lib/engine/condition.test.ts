@@ -36,4 +36,9 @@ describe('condition', () => {
   it('결과는 여행자 스키마의 조건으로 통과', () => {
     expect(TravelerSchema.shape.condition.safeParse(conditionFromAnswers({ continuousMin: 2 }).condition).success).toBe(true)
   })
+
+  it("계단 피하기 선택지 note는 '계단을 피하는 길로 계산해요'", () => {
+    const avoid = CONDITION_QUESTIONS.find(q => q.id === 'avoidStairs')!
+    expect(avoid.choices[0]).toMatchObject({ label: '피하고 싶어요', note: '계단을 피하는 길로 계산해요' })
+  })
 })

@@ -13,10 +13,12 @@ import {
   type Stop,
 } from '@/lib/contracts'
 import { groupProfile } from '@/lib/engine'
+import { AiCallError } from './client'
 import type { AiDeps } from './deps'
 import { HttpError, handle, readJson, requireVersionInTrip } from './http'
 import { planJudgeSave, type PlanAttempt, type PlanAttemptResult } from './plan-and-save'
 import { enforceMustStops, restoreMustStops, samePlaceName, type DraftStop } from './stops'
+import { hasNumberOrStairsClaim, sanitizePromptText } from './text-guard'
 
 // AI가 돌려줄 모양. 걷는 시간·거리·계단 칸은 두지 않고 (엔진이 계산한다),
 // 꼭 갈 곳·예약 표시도 받지 않는다 — 원래 버전에서만 가져온다 (설계 6.4).
@@ -59,7 +61,7 @@ function candidateLine(place: PlaceSummary): string {
 }
 
 function scheduleLine(stop: Stop): string {
-  const parts = [`이름: ${stop.name}`, `id: ${stop.placeId ?? '없음'}`]
+  const parts = [`이름: ${sanitizePromptText(stop.name)}`, `id: ${stop.placeId ?? '없음'}`]
   if (stop.startTime !== undefined) parts.push(`시간 ${stop.startTime}`)
   if (stop.mustVisit) parts.push('꼭 갈 곳')
   if (stop.reservedAt !== undefined) parts.push(`예약 ${stop.reservedAt}`)
@@ -116,24 +118,37 @@ function matchesOriginal(stop: Stop, draft: DraftStop): boolean {
 
 // placeId 이름은 후보·원래 일정의 DB 이름으로 덮어쓰고,
 // 그대로 남은 장소는 원래 stop의 좌표·머무는 시간·앉는 표시·우회로·빼기·쉼터 설정을 옮긴다 (설계 6.4).
+// 머무는 시간은 원래 값·DB 값 순으로 AI 값보다 우선한다.
 function applyNamesAndCarry(drafts: DraftStop[], original: Stop[], candidates: PlaceSummary[]): DraftStop[] {
   const byId = new Map(candidates.map(candidate => [candidate.id, candidate] as const))
   const remaining = [...original]
   return drafts.map(draft => {
     const out = { ...draft }
+    const candidateVisit = out.placeId !== null ? byId.get(out.placeId)?.visitMin : undefined
     if (out.placeId !== null) {
       out.name = byId.get(out.placeId)?.name ?? out.name
     }
     // 같은 장소를 두 번 들르면 순서대로 짝짓는다.
     const index = remaining.findIndex(stop => matchesOriginal(stop, out))
-    if (index < 0) return out
+    if (index < 0) {
+      // 원래에 없던 새 장소는 DB visitMin이 있으면 그것이 AI 값보다 우선이다.
+      if (out.placeId !== null && candidateVisit !== undefined) out.visitMin = candidateVisit
+      return out
+    }
     const [found] = remaining.splice(index, 1)
     if (found === undefined) return out
-    if (out.placeId !== null) out.name = byId.get(out.placeId)?.name ?? found.name
+    if (out.placeId !== null) {
+      out.name = byId.get(out.placeId)?.name ?? found.name
+    } else {
+      // null 자리는 원래 이름으로 되돌린다 (붙여넣기 다듬기 이름 유지).
+      out.name = found.name
+    }
+    // 원래 값이 있으면 그대로, 없으면 DB 값, 그래도 없으면 AI 값을 둔다.
+    const carriedVisit = found.visitMin ?? candidateVisit ?? out.visitMin
     return {
       ...out,
       ...(found.coord !== undefined ? { coord: found.coord } : {}),
-      ...(found.visitMin !== undefined ? { visitMin: found.visitMin } : {}),
+      ...(carriedVisit !== undefined ? { visitMin: carriedVisit } : {}),
       ...(found.seated !== undefined ? { seated: found.seated } : {}),
       skipSegmentIds: [...found.skipSegmentIds],
       detourMap: { ...found.detourMap },
@@ -142,21 +157,56 @@ function applyNamesAndCarry(drafts: DraftStop[], original: Stop[], candidates: P
   })
 }
 
-// 의견 한 줄을 프롬프트에 넣기 전 줄바꿈·탭을 공백으로, 대괄호를 지우고 따옴표 안에 넣는다.
-// 다른 사람이 '[부모님]' 표시를 흉내 내지 못하게 한다 (설계 6.4).
-function sanitizeOpinionText(text: string): string {
-  return text.replace(/[\r\n\t]/g, ' ').replace(/[\[\]]/g, '')
+// null 자리 걸러내기 — 원래 일정의 null 자리와 이름이 같으면 살리고,
+// 그 밖은 앉는 자리이고 숫자·계단 약속이 없을 때만 둔다 (설계 6.4).
+function filterNullDrafts(drafts: DraftStop[], original: Stop[]): DraftStop[] {
+  const remainingNull = original.filter(stop => stop.placeId === null)
+  const out: DraftStop[] = []
+  for (const draft of drafts) {
+    if (draft.placeId !== null) {
+      out.push(draft)
+      continue
+    }
+    // 같은 원래 자리를 두 번 짝짓지 않게 쓴 자리는 버린다
+    const at = remainingNull.findIndex(base => samePlaceName(base.name, draft.name))
+    if (at >= 0) {
+      remainingNull.splice(at, 1)
+      out.push(draft)
+      continue
+    }
+    if (draft.seated === true && !hasNumberOrStairsClaim(draft.name)) {
+      out.push(draft)
+    }
+  }
+  return out
 }
 
-export async function handleRevise(request: Request, deps: AiDeps): Promise<Response> {
+// 의견 한 줄을 프롬프트에 넣기 전 공용 정리로 대괄호를 지운다.
+// 다른 사람이 '[부모님]' 표시를 흉내 내지 못하게 한다 (설계 6.4).
+function sanitizeOpinionText(text: string): string {
+  return sanitizePromptText(text)
+}
+
+export async function handleRevise(
+  request: Request,
+  deps: AiDeps,
+  opts?: { now?: () => number },
+): Promise<Response> {
   return handle(
     async () => {
+      const nowFn = opts?.now ?? Date.now
+      const deadlineAt = nowFn() + 50000
+      const deadlineMs = (): number => Math.max(1, deadlineAt - nowFn())
+      const shouldTrySecond = (): boolean => deadlineAt - nowFn() >= 15000
       const input = await readJson(request, ReviseRequestSchema)
       const session = await deps.requireTripMember(request, input.tripId)
       const ctx = await deps.getTripContext(input.tripId)
 
       // 그 여행의 버전이 맞는지 확인한다 — 다른 그룹 버전 id로 의견이 새는 것을 막는다
       const version = requireVersionInTrip(ctx, input.versionId)
+      if (ctx.travelers.length === 0) {
+        throw new HttpError(400, 'invalid_request', '함께 가는 분 정보를 먼저 채워 주세요')
+      }
 
       const opinions = await deps.getOpinions(input.versionId)
       const pending = opinions.filter(opinion => opinion.appliedInVersionId == null)
@@ -237,10 +287,14 @@ export async function handleRevise(request: Request, deps: AiDeps): Promise<Resp
         transport: 'car' | 'transit' | 'taxi'
         attempt: PlanAttempt
         parentId: string | null
+        originalStops: Stop[]
+        shouldTrySecond: () => boolean
       } = {
         tripId: input.tripId,
         travelers: ctx.travelers,
         transport,
+        originalStops: version.stops,
+        shouldTrySecond,
         attempt: async feedback => {
           const withFeedback =
             feedback === null
@@ -250,19 +304,34 @@ export async function handleRevise(request: Request, deps: AiDeps): Promise<Resp
             mustWarning: string | null,
           ): Promise<PlanAttemptResult & { missing: DraftStop[] }> => {
             const user = mustWarning === null ? withFeedback : `${withFeedback}\n${mustWarning}`
-            const parsed = await deps.callJson({
-              messages: [
-                { role: 'system', content: SYSTEM_PROMPT },
-                { role: 'user', content: user },
-              ],
-              schema: AiReviseSchema,
-            })
-            // 메모에 숫자가 하나라도 있으면 버린다 — 숫자는 엔진에서만 나온다 (설계 6.4).
+            const parsed = await deps.callJson(
+              {
+                messages: [
+                  { role: 'system', content: SYSTEM_PROMPT },
+                  { role: 'user', content: user },
+                ],
+                schema: AiReviseSchema,
+              },
+              { deadlineMs: deadlineMs() },
+            )
+            // 메모에 숫자·계단 약속이 있으면 버린다 — 숫자는 엔진에서만 나온다 (설계 6.4).
             const note =
-              parsed.note !== undefined && !/\p{Nd}/u.test(parsed.note) ? parsed.note : undefined
+              parsed.note !== undefined && !hasNumberOrStairsClaim(parsed.note) ? parsed.note : undefined
             // 목록에 없는 의견 id는 버리고 중복을 없앤다.
             const appliedOpinionIds = [...new Set(parsed.appliedOpinionIds.filter(id => validIds.has(id)))]
-            const named = applyNamesAndCarry(filterDrafts(parsed.stops, candidates), version.stops, candidates)
+            const idFiltered = filterDrafts(parsed.stops, candidates)
+            // 꼭 갈 곳을 되돌려 넣기 전 걸러진 초안이 비면 AI 실패로 본다 (설계 6.4).
+            if (idFiltered.length === 0) {
+              throw new AiCallError('invalid_output', 'AI가 고른 장소가 없어요')
+            }
+            const nullFiltered = filterNullDrafts(idFiltered, version.stops)
+            if (nullFiltered.length === 0) {
+              throw new AiCallError('invalid_output', 'AI가 고른 장소가 없어요')
+            }
+            const named = applyNamesAndCarry(nullFiltered, version.stops, candidates)
+            if (named.length === 0) {
+              throw new AiCallError('invalid_output', 'AI가 고른 장소가 없어요')
+            }
             const { drafts, missing } = enforceMustStops(named, musts)
             return { drafts, missing, ...(note !== undefined ? { note } : {}), appliedOpinionIds }
           }

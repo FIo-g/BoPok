@@ -93,14 +93,24 @@ export async function handleParseSchedule(request: Request, deps: AiDeps): Promi
     const unmatched: string[] = []
 
     for (const item of parsed.items) {
-      const found = await deps.matchPlaceByName(item.name)
+      let found: PlaceSummary | null = null
+      try {
+        found = await deps.matchPlaceByName(item.name)
+      } catch (error) {
+        console.error('[ai]', '장소 조회 실패', error instanceof Error ? error.name : typeof error)
+        found = null
+      }
       let coord: Coord | undefined
       if (found) {
         places[found.id] = found
       } else {
-        const poi = await deps.searchPoi(item.name)
-        // DB에 없는 이름은 좌표가 있어도 unmatched에 남긴다 (정보 없음 장소).
-        if (poi) coord = poi.coord
+        try {
+          const poi = await deps.searchPoi(item.name)
+          // DB에 없는 이름은 좌표가 있어도 unmatched에 남긴다 (정보 없음 장소).
+          if (poi) coord = poi.coord
+        } catch (error) {
+          console.error('[ai]', '장소 조회 실패', error instanceof Error ? error.name : typeof error)
+        }
         unmatched.push(item.name)
       }
 
