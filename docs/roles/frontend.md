@@ -83,3 +83,32 @@
 
 - "계단 없음"은 `stairsStatus === 'confirmed_none'`일 때만 표시한다. `unknown`은 "계단 기록 없음 (지도 데이터 기준)".
 - 걷는 시간·판정 숫자를 화면에서 따로 계산하지 않는다. 항상 `engine` 결과를 그린다.
+
+## 진행 상황 (프론트)
+
+| 단계 | 상태 | 메모 |
+| --- | --- | --- |
+| 0 | 완료 | contracts 리뷰(아래), `src/mocks`(한밭수목원·국립중앙과학관·대전시립미술관 + 후보 3곳, 버전 3개, 의견 4개), `src/lib/api-client` |
+| 1 | 완료 | 공통 레이아웃, 가/가+ 버튼, 가입·로그인 |
+| 2 | 완료 | 내 그룹, 그룹, 초대 받기 |
+| 3 | 완료 | 지도 이식: `src/components/map`, 데이터·스크립트는 `scripts/map`(README 참고) |
+| 4 | 완료 | 일정 화면(즉시 재판정, 직접 고치기, 조건 바꿔 보기, 빠른 수정안, 의견, 버전 비교, 목록 ↔ 지도 연동) |
+| 5 | 완료 | 새 여행(붙여넣기·처음부터) + 인터뷰 대화창 |
+| 6 | 완료 | 의견·다시 짜기·버전 비교·확정·공유, 함께 가는 사람 고치기 |
+| 7 | 서버 대기 | 실제 API 호출은 `src/lib/api-client/real.ts`에 이미 있음. 서버 API가 머지되면 `NEXT_PUBLIC_USE_MOCKS`를 비워 확인한다 |
+
+### contracts 리뷰에서 더한 것 (그룹·여행 API)
+
+화면을 만들다 보니 contracts에 없는 모양이 있어 `group.ts`, `trip-api.ts`를 더했다. 이름·칸은 담당(김경선)이 서버에 맞게 고쳐도 된다.
+
+- `User`, `Group`, `GroupSummary`(내 역할·구성원 수), `GroupDetail`(구성원), `Invite`, `InvitePreview`, `AcceptInviteResponse`(`{ groupId }`)
+- `Trip`(제목·날짜·모드·이동수단·스타일·예산·**확정 버전·확정한 사람 이름**), `TripDetail`, `TripListItem`(최신·확정 버전 요약)
+- `VersionSummary`(stops 없는 버전 + **만든 사람 이름** `madeByName`) — 버전 선택 줄에 "누가 만들었는지"를 보여 주려고
+- 요청 본문: `CreateTripRequest`, `UpdateTripRequest`, `PutTravelersRequest`, `SaveVersionRequest`, `ConfirmRequest`, `ShareTextResponse`, `PlaceDetailsRequest`, `LegsRequest`
+
+화면이 서버에 기대는 점 (서버 구현 때 확인 부탁):
+
+- 로그인 응답은 Better Auth 기본 모양(`{ user: { id, name, email } }`)이고, 세션이 없으면 `/api/auth/get-session`이 `null`을 준다
+- `POST /api/legs` 응답은 요청과 **같은 순서**의 `Leg[]` (화면이 순서로 짝을 맞춘다)
+- 여행자가 아직 없는 여행(붙여넣기 직후)에도 버전 저장이 되어야 하고, 이때 판정 요약은 `null`이다
+- 인터뷰가 `done`이 되면 서버(김태형)는 여행자만 저장한다. 날짜·이동수단·스타일·예산은 화면이 `filled`로 `PATCH /api/trips/:id`를 불러 저장한다
