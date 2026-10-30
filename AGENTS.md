@@ -9,12 +9,14 @@ Claude Code, Codex 등 AI 도구로 작업할 때 모두 이 규칙을 따른다
    > 누구신가요? (오하연 / 김경선 / 김태형 / 이동주)
 2. 답에 맞는 **역할 문서**를 처음부터 끝까지 읽는다.
 
-   | 사람 | 역할 | 역할 문서 | 브랜치 접두어 |
-   | --- | --- | --- | --- |
-   | 오하연 | 프론트엔드 전부 | `docs/roles/frontend.md` | `fe/` |
-   | 김경선 | 계정·그룹 + 여행·버전·의견 (P1, P2) | `docs/roles/account-trip.md` | `acct/` |
-   | 김태형 | AI + 보행 계산 엔진 (P3, P4 엔진) | `docs/roles/ai-engine.md` | `ai/` |
-   | 이동주 | 장소 데이터 + 장소 사이 경로 (P5, P4 경로) | `docs/roles/data-geo.md` | `geo/` |
+   | 사람 | 역할 | 역할 문서 | 브랜치 접두어 | GitHub |
+   | --- | --- | --- | --- | --- |
+   | 오하연 | 프론트엔드 전부 | `docs/roles/frontend.md` | `fe/` | `aress7578-lgtm` |
+   | 김경선 | 계정·그룹 + 여행·버전·의견 (P1, P2) | `docs/roles/account-trip.md` | `acct/` | (추가 예정) |
+   | 김태형 | AI + 보행 계산 엔진 (P3, P4 엔진), 레포 관리자 | `docs/roles/ai-engine.md` | `ai/` | `FIo-g` |
+   | 이동주 | 장소 데이터 + 장소 사이 경로 (P5, P4 경로) | `docs/roles/data-geo.md` | `geo/` | (추가 예정) |
+
+   PR 리뷰어를 지정할 때 이 GitHub 아이디를 쓴다.
 
 3. 공통 문서 `docs/roles/common.md`(0단계 준비, 공용 타입 초안)와 설계 문서 `docs/superpowers/specs/2026-10-29-bopok-mvp-design.md`에서 역할 문서가 가리키는 장을 읽는다.
 4. `git status`와 현재 브랜치를 확인한다. `main`이면 최신으로 받은 뒤(`git pull`) **그 사람의 접두어로 작업 브랜치를 만든다** (8장).
