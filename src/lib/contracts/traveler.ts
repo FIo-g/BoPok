@@ -17,6 +17,10 @@ export const ConditionSchema = z.object({
 })
 export type Condition = z.infer<typeof ConditionSchema>
 
+// 조건 칸 이름. 판정 결과의 조건 출처·부모님 확인이 이 이름을 쓴다.
+export const ConditionFieldSchema = ConditionSchema.keyof()
+export type ConditionField = z.infer<typeof ConditionFieldSchema>
+
 export const TravelerSchema = z.object({
   id: z.string(),
   label: z.string().min(1), // 엄마, 아빠, 나 …
@@ -26,6 +30,7 @@ export const TravelerSchema = z.object({
   sex: SexSchema.optional(),
   pace: PaceSchema,
   mobilityAid: z.boolean(), // 지팡이·보행 보조기구
+  isParent: z.boolean(), // 부모님(모시고 가는 분). 걷기 조건에 80% 비중 (설계 7.1.1)
   condition: ConditionSchema.partial(), // 비어 있으면 엔진이 기본값을 쓴다
   filledBySelf: z.boolean(), // 본인이 직접 채웠는지
 })

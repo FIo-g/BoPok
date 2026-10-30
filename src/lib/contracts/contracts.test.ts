@@ -5,6 +5,7 @@ import {
   legKey,
   OpinionInputSchema,
   OpinionSchema,
+  PendingConsentSchema,
   PlaceSegmentSchema,
   StopSchema,
   TravelerSchema,
@@ -64,6 +65,7 @@ const traveler: Traveler = {
   sex: 'female',
   pace: 'slow',
   mobilityAid: false,
+  isParent: true,
   condition: { continuousMin: 20, avoidStairs: true },
   filledBySelf: true,
 }
@@ -86,6 +88,9 @@ const judgeResult: JudgeResult = {
   reason: '한밭수목원 안에 계단 구간이 있어요',
   condition: { continuousMin: 20, dayMin: 60, restMin: 10, avoidStairs: true },
   speedMps: 0.85,
+  conditionFrom: { continuousMin: 'parent', dayMin: 'default', restMin: 'default', avoidStairs: 'parent' },
+  speedTravelerId: 't1',
+  pendingConsents: [],
   day: { base: 50, high: 60 },
   longest: { base: 27, high: 32.4, fromStopKey: 's1', toStopKey: 's1' },
   restTotalMin: 0,
@@ -100,6 +105,7 @@ const judgeResult: JudgeResult = {
           segmentId: 'hanbat-s3',
           label: '실내 쉼터 → 전망 데크',
           time: { base: 5.5, high: 6.6 },
+          reverse: false,
           stairsStatus: 'present',
           stairsCount: 24,
           status: 'warn',
@@ -114,6 +120,7 @@ const judgeResult: JudgeResult = {
   violations: [{ kind: 'stairs', stopKey: 's1', segmentId: 'hanbat-s3', count: 24 }],
   unknownStopKeys: [],
   unrecordedStairs: [],
+  missingLegs: [],
 }
 
 describe('Coord', () => {
@@ -202,6 +209,11 @@ describe('Traveler', () => {
   it('나이 130 거부', () => {
     expect(TravelerSchema.safeParse({ ...traveler, age: 130 }).success).toBe(false)
   })
+  it('isParent 없으면 거부', () => {
+    const rest: Partial<Traveler> = { ...traveler }
+    delete rest.isParent
+    expect(TravelerSchema.safeParse(rest).success).toBe(false)
+  })
 })
 
 describe('Stop', () => {
@@ -213,5 +225,23 @@ describe('Stop', () => {
 describe('JudgeResult', () => {
   it('예시 판정 결과 통과', () => {
     expect(JudgeResultSchema.parse(judgeResult)).toEqual(judgeResult)
+  })
+  it('걷는 구간이 없으면 longest의 장소 키는 null', () => {
+    const r = { ...judgeResult, longest: { base: 0, high: 0, fromStopKey: null, toStopKey: null } }
+    expect(JudgeResultSchema.safeParse(r).success).toBe(true)
+  })
+  it('부모님 확인 제안 값은 분 또는 계단 피하기', () => {
+    const minutes = { field: 'continuousMin', parentTravelerId: 't1', proposedValue: 90, fromTravelerId: 't3', askCreator: false }
+    const stairs = { ...minutes, field: 'avoidStairs', proposedValue: false, askCreator: true }
+    expect(JudgeResultSchema.safeParse({ ...judgeResult, pendingConsents: [minutes, stairs] }).success).toBe(true)
+    expect(PendingConsentSchema.safeParse({ ...minutes, field: 'speed' }).success).toBe(false)
+  })
+  it('조건 출처는 정해진 다섯 가지만', () => {
+    const bad = { ...judgeResult, conditionFrom: { ...judgeResult.conditionFrom, dayMin: 'ai' } }
+    expect(JudgeResultSchema.safeParse(bad).success).toBe(false)
+  })
+  it('좌표 없는 장소의 빠진 경로는 legKey null', () => {
+    const r = { ...judgeResult, missingLegs: [{ fromStopKey: 's1', toStopKey: 's2', legKey: null }] }
+    expect(JudgeResultSchema.safeParse(r).success).toBe(true)
   })
 })

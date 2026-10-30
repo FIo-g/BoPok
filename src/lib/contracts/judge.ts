@@ -4,7 +4,7 @@ import { nonNegative, SourceInfoSchema, StairsStatusSchema, TransportSchema } fr
 import { LegSchema } from './leg'
 import { PlaceDetailSchema } from './place'
 import { StopSchema } from './trip'
-import { ConditionSchema, TravelerSchema } from './traveler'
+import { ConditionFieldSchema, ConditionSchema, TravelerSchema } from './traveler'
 
 // 걷는 시간 범위 [base, high] (분). 조건과 비교할 때는 high를 쓴다.
 export const MinutesSchema = z.object({ base: nonNegative, high: nonNegative })
@@ -26,12 +26,43 @@ export const ViolationSchema = z.discriminatedUnion('kind', [
 ])
 export type Violation = z.infer<typeof ViolationSchema>
 
+// 조건 칸마다 값이 어디서 왔는지. 화면에 "부모님 기준" 같은 근거로 보여준다 (설계 7.1.1)
+export const ConditionSourceSchema = z.enum(['parent', 'blend', 'other', 'default', 'tuned'])
+export type ConditionSource = z.infer<typeof ConditionSourceSchema>
+
+export const ConditionFromSchema = z.object({
+  continuousMin: ConditionSourceSchema,
+  dayMin: ConditionSourceSchema,
+  restMin: ConditionSourceSchema,
+  avoidStairs: ConditionSourceSchema,
+})
+export type ConditionFrom = z.infer<typeof ConditionFromSchema>
+
+// 부모님 확인이 필요한 칸. 값은 분(숫자) 또는 계단 피하기(참/거짓) (설계 7.1.3)
+export const PendingConsentSchema = z.object({
+  field: ConditionFieldSchema,
+  parentTravelerId: z.string(),
+  proposedValue: z.union([nonNegative, z.boolean()]),
+  fromTravelerId: z.string(), // 이 값을 제안한 사람
+  askCreator: z.boolean(), // 계정이 없는 부모님이면 여행 만든 사람에게 대신 묻는다
+})
+export type PendingConsent = z.infer<typeof PendingConsentSchema>
+
+// 받지 못했거나 만들 수 없는 장소 사이 경로. legKey가 null이면 좌표가 없어 경로를 만들 수 없다
+export const MissingLegSchema = z.object({
+  fromStopKey: z.string(),
+  toStopKey: z.string(),
+  legKey: z.string().nullable(),
+})
+export type MissingLeg = z.infer<typeof MissingLegSchema>
+
 const SegmentStatusSchema = z.enum(['ok', 'warn'])
 
 export const SegmentResultSchema = SourceInfoSchema.extend({
   segmentId: z.string(),
   label: z.string(),
   time: MinutesSchema,
+  reverse: z.boolean(), // 주차장·정류장으로 돌아가는 길처럼 같은 구간을 거꾸로 걷는 줄
   stairsStatus: StairsStatusSchema,
   stairsCount: z.number().int().min(0).optional(),
   status: SegmentStatusSchema,
@@ -71,10 +102,14 @@ export type JudgeInput = z.infer<typeof JudgeInputSchema>
 export const JudgeResultSchema = z.object({
   verdict: VerdictSchema,
   reason: z.string(), // 판정 이유 한 문장 (계산 결과로 만든 고정 문장, AI 아님)
-  condition: ConditionSchema, // 실제로 쓴 조건 (가장 엄격한 사람 기준 + 조건 바꿔 보기)
+  condition: ConditionSchema, // 실제로 쓴 조건 (부모님 80% 비중의 일행 조건 + 조건 바꿔 보기, 설계 7.1.1)
+  conditionFrom: ConditionFromSchema, // 조건 칸마다 값의 출처
   speedMps: z.number().positive(), // 실제로 쓴 속도 (가장 느린 사람 기준)
+  speedTravelerId: z.string(), // 속도 기준이 된 여행자
+  pendingConsents: z.array(PendingConsentSchema), // 부모님 확인이 필요한 칸
   day: MinutesSchema,
-  longest: MinutesSchema.extend({ fromStopKey: z.string(), toStopKey: z.string() }),
+  // 걷는 구간이 없으면 장소 키는 null
+  longest: MinutesSchema.extend({ fromStopKey: z.string().nullable(), toStopKey: z.string().nullable() }),
   restTotalMin: nonNegative,
   stops: z.array(StopResultSchema),
   legs: z.array(LegResultSchema),
@@ -82,6 +117,7 @@ export const JudgeResultSchema = z.object({
   unknownStopKeys: z.array(z.string()), // 장소 안 정보가 없는 곳
   // '계단 기록 없음' 구간. 계단 피하기일 때 배지 아래 "기록 없는 구간 n곳"으로 보여준다
   unrecordedStairs: z.array(z.object({ segmentId: z.string().optional(), legKey: z.string().optional() })),
+  missingLegs: z.array(MissingLegSchema), // 받지 못했거나 만들 수 없는 장소 사이 경로
 })
 export type JudgeResult = z.infer<typeof JudgeResultSchema>
 
