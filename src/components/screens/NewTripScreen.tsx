@@ -290,7 +290,7 @@ function InterviewStep({ tripId, onDone }: { tripId: string; onDone: () => void 
   )
 }
 
-function MakingStep({ tripId }: { tripId: string }) {
+function MakingStep({ tripId, mode }: { tripId: string; mode: StartMode }) {
   const router = useRouter()
   const [error, setError] = useState<{ message: string; fallback: boolean } | null>(null)
   const [attempt, setAttempt] = useState(0)
@@ -308,12 +308,13 @@ function MakingStep({ tripId }: { tripId: string }) {
   }, [attempt, tripId, router])
 
   if (error) {
+    // 붙여넣기(A)는 정리한 일정이 이미 저장돼 있어 그 화면으로 간다 (설계 6.4)
     return (
       <div className="flex flex-col gap-3">
         <ErrorNotice message={`일정을 짜지 못했어요. ${error.message}`} />
         <div className="flex flex-wrap gap-2">
           <Button onClick={() => { setError(null); setAttempt(a => a + 1) }}>다시 시도</Button>
-          <Button variant="secondary" onClick={() => setPick(true)}>장소를 직접 고르기</Button>
+          <Button variant="secondary" onClick={mode === 'paste' ? () => router.replace(`/trips/${tripId}`) : () => setPick(true)}>{mode === 'paste' ? '정리한 일정 그대로 보기' : '장소를 직접 고르기'}</Button>
         </div>
         {pick && (
           <PlacePicker
@@ -356,7 +357,7 @@ export function NewTripScreen() {
       {step.name === 'paste' && <PasteStep tripId={step.tripId} onParsed={(stops, unmatched) => setStep({ name: 'review', tripId: step.tripId, stops, unmatched })} />}
       {step.name === 'review' && <ReviewStep tripId={step.tripId} stops={step.stops} unmatched={step.unmatched} onNext={() => setStep({ name: 'interview', tripId: step.tripId })} />}
       {step.name === 'interview' && <InterviewStep tripId={step.tripId} onDone={() => setStep({ name: 'making', tripId: step.tripId })} />}
-      {step.name === 'making' && <MakingStep tripId={step.tripId} />}
+      {step.name === 'making' && <MakingStep tripId={step.tripId} mode={mode} />}
     </PageShell>
   )
 }
