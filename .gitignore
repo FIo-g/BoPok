@@ -35,3 +35,11 @@ yarn-error.log*
 # 기타
 .DS_Store
 *.pem
+
+# 지도: scripts/map/copy-map-assets.mjs 가 만드는 파일과 지도 데이터 원본 (docs: scripts/map/README.md)
+/public/map/maplibre-gl-worker.mjs
+/data/raw/daejeon-buildings/
+/data/raw/derived/
+/data/raw/osm-daejeon-boundary.json
+/data/raw/osm-green-demo.json
+/data/raw/map-style-positron.json
