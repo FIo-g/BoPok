@@ -1,21 +1,47 @@
 import { describe, expect, it } from 'vitest'
 import {
+  AiErrorSchema,
+  ApiErrorCodeSchema,
+  BudgetSchema,
   CoordSchema,
+  ExplainRequestSchema,
+  ExplainResponseSchema,
+  GenerateRequestSchema,
+  INTERVIEW_SLOTS,
+  InterviewAnswerSchema,
+  InterviewFilledSchema,
+  InterviewRequestSchema,
+  InterviewResponseSchema,
+  InterviewSlotSchema,
+  InterviewStateSchema,
   JudgeResultSchema,
   legKey,
+  MustVisitSchema,
   OpinionInputSchema,
   OpinionSchema,
+  ParseScheduleRequestSchema,
+  ParseScheduleResponseSchema,
   PendingConsentSchema,
   PlaceSegmentSchema,
+  PlanResponseSchema,
+  ReviseRequestSchema,
+  ReviseResponseSchema,
+  StartModeSchema,
   StopSchema,
   TravelerSchema,
+  TravelStyleSchema,
   TripVersionSchema,
+  AiFallbackSchema,
+  type InterviewFilled,
+  type InterviewState,
   type JudgeResult,
+  type JudgeSummary,
   type LegRequest,
   type Opinion,
   type PlaceSegment,
   type Stop,
   type Traveler,
+  type TripVersion,
 } from './index'
 
 // 한밭수목원 기준 예시 데이터 (좌표는 예시값)
@@ -243,5 +269,138 @@ describe('JudgeResult', () => {
   it('좌표 없는 장소의 빠진 경로는 legKey null', () => {
     const r = { ...judgeResult, missingLegs: [{ fromStopKey: 's1', toStopKey: 's2', legKey: null }] }
     expect(JudgeResultSchema.safeParse(r).success).toBe(true)
+  })
+})
+
+// Task 4A — AI API 계약. 스키마마다 통과·거부 1개씩 둔다.
+describe('AI 계약', () => {
+  const filled: InterviewFilled = {
+    mode: 'scratch',
+    travelers: [traveler],
+    date: '2026-11-14',
+    startTime: '09:00',
+    endTime: '18:00',
+    transport: 'car',
+    styles: ['자연·산책'],
+    budget: '30k_50k',
+    mustVisit: [{ name: '한밭수목원', reservedAt: '10:30' }],
+    fixTargets: ['전체적으로 덜 걷게'],
+  }
+  const interviewState: InterviewState = {
+    filled,
+    cursor: { slot: 'travelers', travelerIndex: 0, questionIndex: 0 },
+    history: [{ role: 'assistant', text: '함께 가시는 분을 알려 주세요.' }],
+  }
+  const summary: JudgeSummary = {
+    verdict: 'ok',
+    reason: '모든 구간이 부모님 조건에 맞아요',
+    day: judgeResult.day,
+    longest: judgeResult.longest,
+  }
+  const version: TripVersion = {
+    id: 'v1',
+    tripId: 'trip1',
+    number: 1,
+    parentId: null,
+    madeBy: 'ai',
+    madeByUserId: null,
+    stops: [stop],
+    summary,
+    note: null,
+    createdAt: '2026-11-01T10:00:00.000Z',
+  }
+
+  it('AiFallback: pick_places 통과, 밖의 값 거부', () => {
+    expect(AiFallbackSchema.parse('pick_places')).toBe('pick_places')
+    expect(AiFallbackSchema.safeParse('pick').success).toBe(false)
+  })
+  it('AiError: fallback이 있어도 통과, 이름 밖 코드는 거부', () => {
+    expect(AiErrorSchema.parse({ error: { code: 'ai_failed', message: 'AI를 잠깐 못 썼어요', fallback: 'retry_or_pick' } }).error.fallback).toBe('retry_or_pick')
+    expect(AiErrorSchema.safeParse({ error: { code: 'timeout', message: 'x' } }).success).toBe(false)
+  })
+  it('Budget: 50k_100k 통과, 예산 밖 값 거부', () => {
+    expect(BudgetSchema.parse('50k_100k')).toBe('50k_100k')
+    expect(BudgetSchema.safeParse('cheap').success).toBe(false)
+  })
+  it('StartMode: paste 통과, 갈래 A/B 값은 거부', () => {
+    expect(StartModeSchema.parse('paste')).toBe('paste')
+    expect(StartModeSchema.safeParse('A').success).toBe(false)
+  })
+  it('TravelStyle: 30자까지 통과, 31자 거부', () => {
+    expect(TravelStyleSchema.parse('자연·산책')).toBe('자연·산책')
+    expect(TravelStyleSchema.safeParse('가'.repeat(31)).success).toBe(false)
+  })
+  it('InterviewSlot: 정해진 칸 통과, 없는 칸 거부', () => {
+    expect(INTERVIEW_SLOTS).toContain('traveler_condition_gate')
+    expect(InterviewSlotSchema.parse('travelers')).toBe('travelers')
+    expect(InterviewSlotSchema.safeParse('travelers2').success).toBe(false)
+  })
+  it('InterviewAnswer: 선택 하나만 있으면 통과, 선택과 글이 모두 없으면 거부', () => {
+    expect(InterviewAnswerSchema.safeParse({ choiceIndex: 2 })).toEqual({ success: true, data: { choiceIndex: 2 } })
+    expect(InterviewAnswerSchema.safeParse({}).success).toBe(false)
+  })
+  it('MustVisit: 예약 시간이 없어도 통과, HH:mm이 아닌 예약은 거부', () => {
+    expect(MustVisitSchema.parse({ name: '한밭수목원' })).toEqual({ name: '한밭수목원' })
+    expect(MustVisitSchema.safeParse({ name: '한밭수목원', reservedAt: '10시' }).success).toBe(false)
+  })
+  it('InterviewFilled: 채운 칸 통과, 이동수단 walk는 인터뷰 값이 아니라 거부', () => {
+    expect(InterviewFilledSchema.parse(filled).mode).toBe('scratch')
+    expect(InterviewFilledSchema.safeParse({ ...filled, transport: 'walk' }).success).toBe(false)
+  })
+  it('InterviewFilled: 없는 날짜는 정규식을 통과해도 거부', () => {
+    expect(InterviewFilledSchema.safeParse({ ...filled, date: '2026-99-99' }).success).toBe(false)
+    expect(InterviewFilledSchema.safeParse({ ...filled, date: '2026-11-14' }).success).toBe(true)
+  })
+  it('ApiErrorCode: internal_error 통과', () => {
+    expect(ApiErrorCodeSchema.parse('internal_error')).toBe('internal_error')
+  })
+  it('InterviewState: 커서·기록 통과, 없는 칸 커서는 거부', () => {
+    expect(InterviewStateSchema.parse(interviewState).cursor.slot).toBe('travelers')
+    expect(InterviewStateSchema.safeParse({ ...interviewState, cursor: { ...interviewState.cursor, slot: 'date2' } }).success).toBe(false)
+  })
+  it('InterviewRequest: 답 없이도 통과, 범위 밖 선택은 거부', () => {
+    expect(InterviewRequestSchema.parse({ tripId: 'trip1' })).toEqual({ tripId: 'trip1' })
+    expect(InterviewRequestSchema.safeParse({ tripId: 'trip1', answer: { choiceIndex: -1 } }).success).toBe(false)
+  })
+  it('InterviewResponse: 정해진 칸 슬롯 통과, 밖의 슬롯은 거부', () => {
+    expect(
+      InterviewResponseSchema.parse({ text: '질문', choices: ['엄마·아빠·나'], slot: 'travelers', done: false, filled }),
+    ).toEqual({ text: '질문', choices: ['엄마·아빠·나'], slot: 'travelers', done: false, filled })
+    expect(
+      InterviewResponseSchema.safeParse({ text: '질문', choices: [], slot: 'ask', done: false, filled }).success,
+    ).toBe(false)
+  })
+  it('ParseScheduleRequest: 붙여넣은 글 통과, 빈 글은 거부', () => {
+    expect(ParseScheduleRequestSchema.parse({ tripId: 'trip1', text: '10:00 한밭수목원' }).text).toBe('10:00 한밭수목원')
+    expect(ParseScheduleRequestSchema.safeParse({ tripId: 'trip1', text: '   ' }).success).toBe(false)
+  })
+  it('ParseScheduleResponse: 정류장·못 맞춘 이름 통과, arriveBy 밖 값은 거부', () => {
+    expect(ParseScheduleResponseSchema.parse({ stops: [stop], unmatched: ['둔산 카페'] }).stops).toEqual([stop])
+    expect(ParseScheduleResponseSchema.safeParse({ stops: [{ ...stop, arriveBy: 'subway' }], unmatched: [] }).success).toBe(false)
+  })
+  it('GenerateRequest: tripId만 통과, 비어 있으면 거부', () => {
+    expect(GenerateRequestSchema.parse({ tripId: 'trip1' })).toEqual({ tripId: 'trip1' })
+    expect(GenerateRequestSchema.safeParse({ tripId: '' }).success).toBe(false)
+  })
+  it('PlanResponse: 버전과 요약 통과, madeBy 밖 값은 거부', () => {
+    expect(PlanResponseSchema.parse({ version, summary }).version.madeBy).toBe('ai')
+    expect(PlanResponseSchema.safeParse({ version: { ...version, madeBy: 'robot' }, summary }).success).toBe(false)
+  })
+  it('ReviseRequest: tripId·versionId 통과, versionId가 없으면 거부', () => {
+    expect(ReviseRequestSchema.parse({ tripId: 'trip1', versionId: 'v1' })).toEqual({ tripId: 'trip1', versionId: 'v1' })
+    expect(ReviseRequestSchema.safeParse({ tripId: 'trip1' }).success).toBe(false)
+  })
+  it('ReviseResponse: 반영 의견 id 통과, 그 칸이 없으면 거부', () => {
+    expect(ReviseResponseSchema.parse({ version, summary, appliedOpinionIds: ['op1'] }).appliedOpinionIds).toEqual(['op1'])
+    expect(ReviseResponseSchema.safeParse({ version, summary }).success).toBe(false)
+  })
+  it('ExplainRequest: 앞·뒤 판정 통과, 뒤 판정이 없으면 거부', () => {
+    const next: JudgeResult = { ...judgeResult, verdict: 'ok' }
+    expect(ExplainRequestSchema.parse({ tripId: 'trip1', prev: judgeResult, next })).toEqual({ tripId: 'trip1', prev: judgeResult, next })
+    expect(ExplainRequestSchema.safeParse({ tripId: 'trip1', prev: judgeResult }).success).toBe(false)
+  })
+  it('ExplainResponse: ai·fixed 둘 통과, 밖의 출처는 거부', () => {
+    expect(ExplainResponseSchema.parse({ text: '계단을 우회했어요', source: 'fixed' })).toEqual({ text: '계단을 우회했어요', source: 'fixed' })
+    expect(ExplainResponseSchema.safeParse({ text: 'x', source: 'guess' }).success).toBe(false)
   })
 })

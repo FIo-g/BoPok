@@ -46,6 +46,23 @@ AI 실패 시: 붙여넣기는 "장소를 직접 골라 주세요"로, 처음부
 - 주는 것: `src/lib/engine` 전체(오하연·김경선), `/api/ai/*`(오하연)
 - 장소 DB가 아직 없으면 `src/mocks`의 장소 2~3곳으로 엔진·AI를 개발한다
 
+### AI가 부르는 다른 역할 함수의 모양 **[김태형 10/30]**
+
+`src/lib/ai/deps.ts`에 이 모양으로 연결 지점을 두었다. 진짜 함수가 생기기 전에는 `src/lib/ai/dev-deps.ts`의 메모리 가짜를 쓴다(개발·테스트에서만 켜짐). 이름이나 인자가 다르게 만들어지면 알려 주면 연결 쪽에서 맞춘다.
+
+- 김경선 (`src/lib/trips`, `src/lib/auth`)
+  - `createVersion(tripId, { parentId, stops, madeBy: 'ai', madeByUserId?, note?, appliedOpinionIds? })` → `TripVersion`
+  - `getTripContext(tripId)` → `{ trip: { id, groupId, startMode: 'paste'|'scratch' }, travelers: Traveler[], versions: TripVersion[] }` — 다시 짜기가 현재 일정을 읽으므로 `versions`에 `stops`가 들어 있어야 한다
+  - `getOpinions(versionId)` → `Opinion[]`
+  - `saveTravelers(tripId, travelers: Traveler[])` — 인터뷰가 끝나면 부른다
+  - 권한: AI API는 `requireUser()` 뒤 여행의 `groupId`로 `requireMember(groupId)`를 부르는 어댑터로 검사한다. 401/403은 그대로 응답 코드가 되게 한다
+  - `trip_interviews`: `src/lib/contracts/ai.ts`의 `InterviewState`(`filled`, `cursor`, `history`)를 그대로 저장할 칸(jsonb)이 필요하다
+- 이동주 (`src/lib/places`, `src/lib/geo`)
+  - `searchCandidates({ styles, budget?, transport, avoidStairs, limit })` → `PlaceSummary[]`
+  - `matchPlaceByName(name)` → `PlaceSummary | null`
+  - `getPlaceDetails(ids)` → `PlaceDetail[]`, `getLegs(requests: LegRequest[])` → `Leg[]`
+  - POI 검색 `searchPoi(name)` → `{ name, coord } | null` (TMAP)
+
 ## 작업 순서
 
 | 단계 | 할 일 | 완료 기준 |

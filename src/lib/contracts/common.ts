@@ -34,6 +34,7 @@ export const ApiErrorCodeSchema = z.enum([
   'expired',
   'ai_failed',
   'external_api_failed',
+  'internal_error',
 ])
 export type ApiErrorCode = z.infer<typeof ApiErrorCodeSchema>
 
