@@ -1,4 +1,6 @@
 // 그룹·구성원·초대와 로그인한 사람. 주인: 김경선. 화면(오하연)이 필요해서 추가한 초안 — 바꾸면 프론트와 함께 리뷰 (AGENTS.md 3장).
+// 2단계(그룹·초대 API)에서 더한 것: AcceptInviteRequestSchema, AcceptInviteResponse.alreadyMember(선택),
+// RemoveMemberResponseSchema. 화면이 이미 쓰는 칸은 이름도 모양도 그대로 두었다.
 import { z } from 'zod'
 
 // 로그인한 사람 (Better Auth 세션에서 화면이 쓰는 값만)
@@ -56,6 +58,23 @@ export type Invite = z.infer<typeof InviteSchema>
 export const InvitePreviewSchema = z.object({ groupName: z.string(), expiresAt: z.string() })
 export type InvitePreview = z.infer<typeof InvitePreviewSchema>
 
-// POST /api/invites/:token/accept 응답 — 참가한 그룹으로 이동하려고 id를 돌려준다
-export const AcceptInviteResponseSchema = z.object({ groupId: z.string() })
+// POST /api/invites/:token/accept 요청 본문 (2단계에서 더함).
+// relation은 선택 — 몸체를 아예 안 보내도, null로 보내도 참가는 된다.
+// 설계 10.3의 group_members.relation을 채우는 곳이 여기뿐이다.
+export const AcceptInviteRequestSchema = z.object({
+  relation: z.string().trim().min(1).max(20).nullish(),
+})
+export type AcceptInviteRequest = z.infer<typeof AcceptInviteRequestSchema>
+
+// POST /api/invites/:token/accept 응답 — 참가한 그룹으로 이동하려고 id를 돌려준다.
+// alreadyMember는 2단계에서 더한 선택 칸 — 이미 구성원이 같은 링크를 다시 눌렀을 때 true다
+// (그때 role·relation은 덮어쓰지 않는다). 화면이 '이미 참가한 그룹이에요'를 띄울 수 있다.
+export const AcceptInviteResponseSchema = z.object({
+  groupId: z.string(),
+  alreadyMember: z.boolean().optional(),
+})
 export type AcceptInviteResponse = z.infer<typeof AcceptInviteResponseSchema>
+
+// DELETE /api/groups/:id/members/:userId 응답 (2단계에서 더함). 화면은 본문을 쓰지 않는다
+export const RemoveMemberResponseSchema = z.object({ removed: z.literal(true) })
+export type RemoveMemberResponse = z.infer<typeof RemoveMemberResponseSchema>

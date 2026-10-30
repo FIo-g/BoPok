@@ -1,10 +1,10 @@
 // 테스트에서만 쓰는 보조 함수. 가입해서 로그인 쿠키를 얻고, 그룹·구성원을 넣는다.
 // `.test.ts`가 아니라 여기 둔 이유: 여러 테스트 파일이 같이 쓴다.
 import 'server-only'
+import type { GroupRole } from '@/lib/contracts'
 import type { Db } from '@/lib/db/client'
 import { groupMembers, groups, user } from '@/lib/db/schema'
 import { getAuth } from './auth'
-import type { GroupRole } from './members'
 
 const BASE_URL = 'http://localhost:3000'
 export const TEST_PASSWORD = 'bopok-test-1234' // 테스트용. Better Auth 기본 최소 길이(8자)보다 길다

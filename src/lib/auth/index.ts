@@ -4,4 +4,5 @@ export { getAuth } from './auth'
 export { HttpError, errorResponse, handle } from './http'
 export { getSessionUser, requireUser, requireMember, requireOwner } from './session'
 export type { SessionUser, MemberUser } from './session'
-export type { GroupRole, Membership } from './members'
+// GroupRole은 src/lib/contracts에서 가져간다 (여기서 다시 내보내지 않는다)
+export type { Membership } from './members'

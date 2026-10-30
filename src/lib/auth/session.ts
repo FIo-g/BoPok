@@ -1,9 +1,9 @@
 // 권한 검사. 모든 API는 일을 하기 전에 이 함수들을 먼저 부른다.
 // Neon에는 행 단위 보안이 기본으로 없으므로 서버 코드가 유일한 방어선이다 (설계 10.4).
 import 'server-only'
+import type { GroupRole } from '@/lib/contracts'
 import { getAuth } from './auth'
 import { HttpError } from './http'
-import type { GroupRole } from './members'
 import { findMembership } from './members'
 
 export type SessionUser = {
