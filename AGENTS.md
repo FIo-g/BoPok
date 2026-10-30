@@ -12,9 +12,9 @@ Claude Code, Codex 등 AI 도구로 작업할 때 모두 이 규칙을 따른다
    | 사람 | 역할 | 역할 문서 | 브랜치 접두어 | GitHub |
    | --- | --- | --- | --- | --- |
    | 오하연 | 프론트엔드 전부 | `docs/roles/frontend.md` | `fe/` | `aress7578-lgtm` |
-   | 김경선 | 계정·그룹 + 여행·버전·의견 (P1, P2) | `docs/roles/account-trip.md` | `acct/` | (추가 예정) |
+   | 김경선 | 계정·그룹 + 여행·버전·의견 (P1, P2) | `docs/roles/account-trip.md` | `acct/` | `gyeongseon-k` |
    | 김태형 | AI + 보행 계산 엔진 (P3, P4 엔진), 레포 관리자 | `docs/roles/ai-engine.md` | `ai/` | `FIo-g` |
-   | 이동주 | 장소 데이터 + 장소 사이 경로 (P5, P4 경로) | `docs/roles/data-geo.md` | `geo/` | (추가 예정) |
+   | 이동주 | 장소 데이터 + 장소 사이 경로 (P5, P4 경로) | `docs/roles/data-geo.md` | `geo/` | `DongJuLee54` |
 
    PR 리뷰어를 지정할 때 이 GitHub 아이디를 쓴다.
 
