@@ -364,11 +364,19 @@ describe('AI 계약', () => {
   })
   it('InterviewResponse: 정해진 칸 슬롯 통과, 밖의 슬롯은 거부', () => {
     expect(
-      InterviewResponseSchema.parse({ text: '질문', choices: ['엄마·아빠·나'], slot: 'travelers', done: false, filled }),
-    ).toEqual({ text: '질문', choices: ['엄마·아빠·나'], slot: 'travelers', done: false, filled })
+      InterviewResponseSchema.parse({ text: '질문', choices: ['엄마·아빠·나'], slot: 'travelers', done: false, filled, questionId: 'travelers:0:0' }),
+    ).toEqual({ text: '질문', choices: ['엄마·아빠·나'], slot: 'travelers', done: false, filled, questionId: 'travelers:0:0' })
     expect(
       InterviewResponseSchema.safeParse({ text: '질문', choices: [], slot: 'ask', done: false, filled }).success,
     ).toBe(false)
+  })
+  it('InterviewResponse: questionId가 없으면 거부', () => {
+    expect(
+      InterviewResponseSchema.safeParse({ text: '질문', choices: [], slot: 'done', done: true, filled }).success,
+    ).toBe(false)
+    expect(
+      InterviewResponseSchema.parse({ text: '다 됐어요. 이제 일정을 짜 볼게요.', choices: [], slot: 'done', done: true, filled, questionId: 'done:0:0' }).questionId,
+    ).toBe('done:0:0')
   })
   it('ParseScheduleRequest: 붙여넣은 글 통과, 빈 글은 거부', () => {
     expect(ParseScheduleRequestSchema.parse({ tripId: 'trip1', text: '10:00 한밭수목원' }).text).toBe('10:00 한밭수목원')

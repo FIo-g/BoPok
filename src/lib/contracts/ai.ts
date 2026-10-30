@@ -2,7 +2,7 @@
 // 주인: 김태형. 바꾸면 프론트·김경선·이동주와 함께 리뷰 (AGENTS.md 3장).
 import { z } from 'zod'
 import { ApiErrorCodeSchema } from './common'
-import { JudgeResultSchema, JudgeSummarySchema } from './judge'
+import { JudgeResultSchema, JudgeSummarySchema, QuickFixChangeSchema } from './judge'
 import { StopSchema, TimeSchema } from './trip'
 import { TravelerSchema } from './traveler'
 import { TripVersionSchema } from './version'
@@ -135,6 +135,8 @@ export const InterviewResponseSchema = z.object({
   slot: InterviewSlotSchema,
   done: z.boolean(),
   filled: InterviewFilledSchema,
+  // 화면이 보낸 답이 어느 질문에 대한 것인지 맞추는 표시 — `${slot}:${travelerIndex}:${questionIndex}`
+  questionId: z.string().min(1),
 })
 export type InterviewResponse = z.infer<typeof InterviewResponseSchema>
 
@@ -180,6 +182,7 @@ export const ExplainRequestSchema = z.object({
   tripId: z.string().min(1),
   prev: JudgeResultSchema,
   next: JudgeResultSchema,
+  changes: z.array(QuickFixChangeSchema).optional(),
 })
 export type ExplainRequest = z.infer<typeof ExplainRequestSchema>
 
