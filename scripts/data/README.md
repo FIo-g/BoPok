@@ -6,7 +6,7 @@
 
 - 스키마: `src/lib/db/schema/places.ts`
 - 테이블: `places`, `place_nodes`, `place_segments`, `leg_cache`
-- 마이그레이션: `drizzle/0000_place-schema.sql`, `drizzle/meta/`
+- 마이그레이션: `drizzle/0001_place-schema.sql`, `drizzle/meta/`
 - 검증: `src/lib/db/schema/places.test.ts` (가상 데이터와 메모리 PGlite만 사용)
 
 프로젝트 루트에서 실행한다. Windows PowerShell에서 `pnpm.ps1` 실행이 막히면 `pnpm.cmd`를 쓴다.
@@ -32,7 +32,7 @@ pnpm exec vitest run src/lib/db/schema/places.test.ts
 
 적용 전에는 생성된 SQL 전체를 검토한다. 삭제·자료 손실 가능성이 있으면 적용하지 않는다.
 등록만 바꿔 테이블 정의가 같다면 새 마이그레이션은 생기지 않는 것이 정상이다.
-이미 적용된 `0000` SQL과 메타데이터는 다시 작성하지 않는다.
+이미 적용된 `0000`·`0001` SQL과 메타데이터는 다시 작성하지 않는다.
 
 ## 저장 규칙
 
