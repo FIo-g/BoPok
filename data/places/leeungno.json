@@ -1,0 +1,22 @@
+{
+  "id": "leeungno",
+  "name": "이응노미술관",
+  "category": "미술관",
+  "styles": [
+    "문화·역사"
+  ],
+  "coord": [
+    127.387,
+    36.36679
+  ],
+  "seated": false,
+  "indoor": true,
+  "address": "대전광역시 서구 둔산대로 157",
+  "phone": "042-611-9800",
+  "homepage": "https://www.leeungnomuseum.or.kr/",
+  "source": "https://www.leeungnomuseum.or.kr/Menu.do?menuId=0402",
+  "checkedAt": "2026-10-31",
+  "confidence": "B",
+  "nodes": [],
+  "segments": []
+}

@@ -1,6 +1,40 @@
 # 장소 데이터 작업
 
-담당: 이동주. TourAPI·OSM·TMAP 수집과 DB 적재는 후속 단계에서 추가한다.
+담당: 이동주. 이번 브랜치는 장소 API와 시범 장소 적재를 다룬다.
+OSM 수집 구현은 별도 `geo/fetch-osm` 브랜치에 보존한다. TourAPI·TMAP은 후속 단계다.
+
+## 장소 API용 시범 데이터 적재
+
+개발 서버와 DB 도구를 종료한 뒤 프로젝트 루트에서 실행한다.
+
+```powershell
+# 한 장소로 DB→API를 먼저 확인할 때
+node --conditions=react-server scripts/data/load-places.mjs --ids hanbat
+# 시범 3곳 전체 적재 / 재실행해도 동일한 데이터는 보존
+node --conditions=react-server scripts/data/load-places.mjs
+```
+
+`load-places.mjs`는 기존 Drizzle 마이그레이션을 적용하고 `data/places/*.json`을
+Zod로 검사해 넣는다. `.env.local`을 읽지 않고 `DATABASE_URL`을 비우며 저장 경로는
+**`.pglite/places-api`로 고정**한다. 기존 `.pglite` 실험 DB를 옮기거나 초기화하지 않는다.
+기존 장소 ID의 내용이 다르면 실패하며, 기존 행을 갱신·삭제하지 않는다.
+지점·구간·계단·방문 시간은 만들지 않는다. 기록 없는 계단을 `confirmed_none`으로 바꾸지 않는다.
+
+별도 의존성 추가 없이 설치된 `drizzle-kit`의 TypeScript 로더를 사용한다.
+`--conditions=react-server`는 서버 전용 모듈을 이 로컬 CLI에서 읽기 위해 필요하다.
+스크립트는 개발 서버 잠금 파일이 있으면 중단한다. 같은 PGlite를 여러 프로그램에서 열지 않는다.
+
+```powershell
+$env:DATABASE_URL = ''
+$env:PGLITE_DIR = '.pglite/places-api'
+$env:NEXT_PUBLIC_USE_MOCKS = '0'
+pnpm dev
+pnpm exec vitest run src/lib/places/places.test.ts
+```
+
+장소 ID·근거: `data/places/README.md`. API 계약·요청 예시·미조사 정보:
+`src/lib/places/README.md`. 아래 0단계 명령은 기본 `.pglite`용이므로
+장소 API 시범 실행에는 위 적재 명령을 사용한다.
 
 ## 장소 DB 구조 (0단계)
 
