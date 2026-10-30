@@ -2,3 +2,7 @@
 export * from './constants'
 export * from './speed'
 export * from './condition'
+export * from './walk-time'
+export * from './route'
+export * from './required-legs'
+export * from './judge'
