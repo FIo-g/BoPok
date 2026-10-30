@@ -3,3 +3,6 @@ allowBuilds:
   unrs-resolver: false
   # drizzle-kit이 쓰는 esbuild 실행 파일 설치 스크립트
   esbuild: true
+  # mapshaper(dev)가 끌고 오는 네이티브 모듈. 지도 데이터 스크립트는 쓰지 않아 설치 스크립트를 막는다
+  better-sqlite3: false
+  msgpackr-extract: false
