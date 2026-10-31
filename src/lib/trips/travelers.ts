@@ -160,6 +160,13 @@ export async function replaceTravelers(
   const [trip] = await db.select({ groupId: trips.groupId }).from(trips).where(eq(trips.id, args.tripId)).limit(1)
   if (!trip) throw new HttpError(404, 'not_found', '여행을 찾을 수 없어요')
 
+  // id가 겹치면 아래 '다 지우고 다시 넣기'에서 지우기는 되고 넣기만 실패해 여행자가 전부 사라진다.
+  // 지우기 전에 막는다 (기본키가 (trip_id, id)라서 겹친 id는 반드시 실패한다).
+  const ids = args.travelers.map(one => one.id)
+  if (new Set(ids).size !== ids.length) {
+    throw new HttpError(400, 'invalid_request', '같은 id의 여행자가 둘 이상이에요')
+  }
+
   // 지금 저장된 모습 — 연결과 filledBySelf를 지키는 기준이 된다 (몸체 값은 믿지 않는다).
   const before = await db.select().from(tripTravelers).where(eq(tripTravelers.tripId, args.tripId))
   const beforeById = new Map(before.map(row => [row.id, row]))
@@ -191,9 +198,12 @@ export async function replaceTravelers(
     }
   })
 
-  const userIds = rows.map(row => row.userId)
-  assertOneTravelerPerAccount(userIds)
-  await assertLinkedUsersAreMembers({ groupId: trip.groupId, userIds }, db)
+  assertOneTravelerPerAccount(rows.map(row => row.userId))
+  // 구성원인지는 '새로 거는 연결'만 본다. 이미 걸려 있던 연결까지 다시 보면, 그룹에서 내보내진 사람이
+  // 연결된 여행자가 있을 때 남은 구성원 누구도(남의 연결은 못 푼다) 목록을 저장할 수 없고
+  // AI 인터뷰의 saveTravelers도 계속 400으로 실패한다.
+  const newlyLinked = rows.filter(row => row.userId !== (beforeById.get(row.id)?.userId ?? null)).map(row => row.userId)
+  await assertLinkedUsersAreMembers({ groupId: trip.groupId, userIds: newlyLinked }, db)
 
   await db.delete(tripTravelers).where(eq(tripTravelers.tripId, args.tripId))
   await db.insert(tripTravelers).values(rows)

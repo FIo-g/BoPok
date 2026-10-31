@@ -2,7 +2,7 @@
 // trip_interviews는 김태형과 컬럼을 합의한 뒤에 더한다.
 import { boolean, date, doublePrecision, index, integer, jsonb, pgTable, primaryKey, text, timestamp, unique } from 'drizzle-orm/pg-core'
 import type { AnyPgColumn } from 'drizzle-orm/pg-core'
-import type { Condition, JudgeSummary, Reaction, Stop } from '@/lib/contracts'
+import type { Condition, InterviewState, JudgeSummary, Reaction, Stop } from '@/lib/contracts'
 import { user } from './auth'
 import { groups } from './groups'
 
@@ -111,3 +111,14 @@ export const versionOpinions = pgTable(
   },
   table => [index('version_opinions_versionId_idx').on(table.versionId)],
 )
+
+// AI 인터뷰의 진행 상태(InterviewState)를 여행마다 한 줄로 통째로 저장한다.
+// 김태형의 src/lib/ai는 이 표를 직접 쓰지 않고 src/lib/trips의 interviews.get/save로만 읽고 쓴다.
+// 칸을 나누지 않고 jsonb 한 칸에 두는 이유: 상태의 모양이 인터뷰 질문과 함께 자주 바뀐다.
+export const tripInterviews = pgTable('trip_interviews', {
+  tripId: text('trip_id')
+    .primaryKey()
+    .references(() => trips.id, { onDelete: 'cascade' }),
+  state: jsonb('state').$type<InterviewState>().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+})

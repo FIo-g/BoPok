@@ -59,6 +59,8 @@ describe('GET /api/groups/:id/trips', () => {
     const owner = await signUp({ name: '김경선', email: 'gs@example.com' })
     const groupId = await insertGroup(testDb.db, { name: '우리 가족', ownerId: owner.userId })
     await insertTrip(testDb.db, { groupId, createdBy: owner.userId, title: '예전 여행' })
+    // PGlite의 now()가 같은 밀리초로 찍히면 created_at이 같아져 순서가 뒤집힐 수 있다 → 시각이 달라지게 잠깐 쉰다
+    await new Promise(resolve => setTimeout(resolve, 20))
     await insertTrip(testDb.db, { groupId, createdBy: owner.userId, title: '새 여행' })
 
     const list = TripListSchema.parse(

@@ -17,6 +17,7 @@ import {
   signUp,
   traveler,
 } from '@/lib/auth/test-fixtures'
+import { removeMember } from '@/lib/groups'
 import { GET as getTrip } from './[id]/route'
 import { PUT as putTravelers } from './[id]/travelers/route'
 import { PATCH as patchTraveler } from './[id]/travelers/[tid]/route'
@@ -371,6 +372,37 @@ describe('PUT /api/trips/:id/travelers (통째로 저장)', () => {
       ),
     )
     expect(renamed[0].filledBySelf).toBe(false)
+  })
+
+  it('id가 겹치면 400이고 기존 여행자는 그대로 남는다 (지우고 넣는 도중에 실패해 다 사라지면 안 된다)', async () => {
+    const { owner, tripId } = await tripWithOwner()
+    await putTravelers(putRequest(owner.cookie, [traveler({ id: 't1', label: '엄마' })]), routeParams({ id: tripId }))
+
+    const duplicated = [traveler({ id: 't1', label: '엄마' }), traveler({ id: 't1', label: '아빠' })]
+    const response = await putTravelers(putRequest(owner.cookie, duplicated), routeParams({ id: tripId }))
+    expect(response.status).toBe(400)
+
+    const detail = await readBody(await getTrip(requestWith(owner.cookie), routeParams({ id: tripId })))
+    const parsed = z.object({ travelers: TravelerListSchema }).parse(detail)
+    expect(parsed.travelers.map(one => one.label)).toEqual(['엄마'])
+  })
+
+  it('그룹에서 내보내진 사람의 연결이 남아 있어도 다른 구성원이 목록을 계속 저장할 수 있다', async () => {
+    const { owner, groupId, tripId } = await tripWithOwner()
+    const mom = await signUp({ name: '엄마', email: 'mom@example.com' })
+    await addMember(testDb.db, { groupId, userId: mom.userId, role: 'member' })
+    const list = [traveler({ id: 't1', label: '엄마', userId: mom.userId }), traveler({ id: 't2', label: '나' })]
+    await putTravelers(putRequest(mom.cookie, list), routeParams({ id: tripId }))
+    await removeMember({ groupId, targetUserId: mom.userId, actorUserId: owner.userId })
+
+    // 화면은 받은 목록을 그대로 다시 보낸다 (엄마의 연결 포함)
+    const response = await putTravelers(
+      putRequest(owner.cookie, [{ ...list[0], label: '어머니' }, list[1]]),
+      routeParams({ id: tripId }),
+    )
+    expect(response.status).toBe(200)
+    const saved = TravelerListSchema.parse(await readBody(response))
+    expect(saved[0]).toMatchObject({ label: '어머니', userId: mom.userId }) // 남의 연결은 그대로
   })
 
   it('빈 목록은 400 (적어도 한 명은 있어야 한다)', async () => {
