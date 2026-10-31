@@ -1,9 +1,9 @@
 // 테스트에서만 쓰는 보조 함수. 가입해서 로그인 쿠키를 얻고, 그룹·구성원을 넣는다.
 // `.test.ts`가 아니라 여기 둔 이유: 여러 테스트 파일이 같이 쓴다.
 import 'server-only'
-import type { GroupRole } from '@/lib/contracts'
+import type { GroupRole, Traveler } from '@/lib/contracts'
 import type { Db } from '@/lib/db/client'
-import { groupInvites, groupMembers, groups, user } from '@/lib/db/schema'
+import { groupInvites, groupMembers, groups, trips, user } from '@/lib/db/schema'
 import { getAuth } from './auth'
 
 const BASE_URL = 'http://localhost:3000'
@@ -114,4 +114,34 @@ export async function insertExpiredInvite(
     expiresAt: new Date(Date.now() - 60 * 1000), // 1분 전에 만료됨
   })
   return token
+}
+
+// 여행과 여행자 — 3단계 테스트용. API를 거치지 않고 DB에 바로 넣는다.
+export async function insertTrip(
+  db: Db,
+  args: { groupId: string; createdBy: string; title?: string; date?: string; mode?: 'paste' | 'scratch' },
+): Promise<string> {
+  const [row] = await db
+    .insert(trips)
+    .values({
+      groupId: args.groupId,
+      title: args.title ?? '대전 여행',
+      date: args.date ?? null,
+      startMode: args.mode ?? 'scratch',
+      createdBy: args.createdBy,
+    })
+    .returning({ id: trips.id })
+  return row.id
+}
+
+// 테스트에서 쓰는 여행자 한 명. 넘긴 칸만 바꾼다.
+export function traveler(args: Partial<Traveler> & { id: string; label: string }): Traveler {
+  return {
+    pace: 'unknown',
+    mobilityAid: false,
+    isParent: false,
+    condition: {},
+    filledBySelf: false,
+    ...args,
+  }
 }
