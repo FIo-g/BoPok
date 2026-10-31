@@ -1,5 +1,5 @@
 // 화면에 보이는 문장을 만드는 작은 함수들. 판정·걷는 시간 숫자는 만들지 않고 엔진 결과를 글로만 바꾼다.
-import type { Confidence, Minutes, Reaction, SegmentResult, StairsStatus, Transport, Verdict, VersionSummary } from '@/lib/contracts'
+import type { Confidence, JudgeResult, LegResult, Minutes, Reaction, SegmentResult, StairsStatus, Transport, Verdict, VersionSummary } from '@/lib/contracts'
 import { formatRange } from '@/lib/engine'
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토']
@@ -87,10 +87,26 @@ export function madeByText(v: Pick<VersionSummary, 'madeBy' | 'madeByName'>): st
   return `${v.madeByName ?? '가족'}이 만들었어요`
 }
 
-// 걷는 시간 문장. 장소 안 길을 아직 조사하지 못해 아무것도 계산되지 않았을 때(정보 부족, 합계 0)는
+// 장소 안 길을 아직 조사하지 못해 아무것도 계산되지 않은 경우(정보 부족, 합계 0). 추정한 값이 아니라 값이 없는 것이다
+export function isWalkInfoMissing(minutes: Minutes, verdict: Verdict): boolean {
+  return verdict === 'info' && minutes.high === 0
+}
+
+// 걷는 시간 문장. 아무것도 계산되지 않았을 때는
 // "약 0분"이라고 하면 걷지 않는다는 뜻으로 읽히므로 "정보 없음"으로 보여 준다 (장소 API 안내: 빈 경로를 걷기 0분으로 해석하면 안 됨)
 export function formatWalk(minutes: Minutes, verdict: Verdict): string {
-  return verdict === 'info' && minutes.high === 0 ? '정보 없음' : formatRange(minutes)
+  return isWalkInfoMissing(minutes, verdict) ? '정보 없음' : formatRange(minutes)
+}
+
+// 차·택시·버스 구간 중 이동 시간을 모르는 것의 수. 엔진은 탈것 구간을 missingLegs 에 넣지 않으므로(걷는 시간이 0으로 확실)
+// 결과의 legs 에서 rideMin 이 null 인 것으로 센다. 시간을 지어내지 않는다
+export function countRideLegsWithoutTime(legs: Pick<LegResult, 'mode' | 'rideMin'>[]): number {
+  return legs.filter(leg => leg.mode !== 'walk' && leg.rideMin === null).length
+}
+
+// 받지 못한 걷는 경로나 길 정보 없는 장소가 있으면 걷는 시간 합계는 일부만 계산한 값이다 → "조건 안"이라고 말하면 안 된다
+export function hasWalkInfoGap(result: Pick<JudgeResult, 'missingLegs' | 'unknownStopKeys'>): boolean {
+  return result.missingLegs.length > 0 || result.unknownStopKeys.length > 0
 }
 
 // 클립보드에 복사. 막혀 있으면 false (화면이 직접 복사하라고 안내한다)
@@ -137,4 +153,10 @@ export const CONDITION_SOURCE_TEXT = {
 export function conditionValueText(field: keyof typeof CONDITION_LABEL, value: number | boolean): string {
   if (field === 'avoidStairs') return value ? '피해요' : '괜찮아요'
   return `${value}분`
+}
+
+// 로그인이 필요한 화면에서 로그인 화면으로 보낼 주소. 돌아올 경로와 쿼리(?group= 등)를 함께 next 에 담는다
+export function loginRedirectPath(pathname: string, search: string): string {
+  const query = search.length > 1 && search.startsWith('?') ? search : ''
+  return `/login?next=${encodeURIComponent(`${pathname}${query}`)}`
 }

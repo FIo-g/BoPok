@@ -1,10 +1,10 @@
 'use client'
 
 // 버전 선택(번호, 누가/AI가 만들었는지, 확정 표시)과 버전 비교 창
-import type { Traveler, VersionSummary } from '@/lib/contracts'
+import type { Minutes, Traveler, Verdict, VersionSummary } from '@/lib/contracts'
 import { diffSummary, formatDiffItem } from '@/lib/engine'
 import { api } from '@/lib/api-client'
-import { formatWalk, madeByText, versionLabel } from '@/lib/format'
+import { formatWalk, isWalkInfoMissing, madeByText, versionLabel } from '@/lib/format'
 import { errorMessage, useAsync } from '@/lib/use-async'
 import { useState } from 'react'
 import { Badge, Button, Card, Dialog, ErrorNotice, Spinner, VerdictBadge, cx } from '@/components/ui'
@@ -59,6 +59,16 @@ export function VersionBar({
   )
 }
 
+// 걷는 시간 값. 숫자일 때만 "추정치"를 붙인다 ("정보 없음"은 추정한 값이 아니다)
+function WalkValue({ minutes, verdict }: { minutes: Minutes; verdict: Verdict }) {
+  return (
+    <>
+      {formatWalk(minutes, verdict)}
+      {!isWalkInfoMissing(minutes, verdict) && <span className="ml-1 text-sm font-semibold text-muted">추정치</span>}
+    </>
+  )
+}
+
 function CompareColumn({ title, version, judged }: { title: string; version: VersionSummary; judged: ReturnType<typeof useJudged> }) {
   return (
     <Card className="flex-1">
@@ -68,8 +78,8 @@ function CompareColumn({ title, version, judged }: { title: string; version: Ver
       {judged ? (
         <dl className="space-y-1">
           <div><VerdictBadge verdict={judged.result.verdict} /></div>
-          <div className="flex justify-between gap-2"><dt className="text-muted">하루 걷기</dt><dd className="font-bold">{formatWalk(judged.result.day, judged.result.verdict)}<span className="ml-1 text-sm font-semibold text-muted">추정치</span></dd></div>
-          <div className="flex justify-between gap-2"><dt className="text-muted">가장 긴 연속</dt><dd className="font-bold">{formatWalk(judged.result.longest, judged.result.verdict)}<span className="ml-1 text-sm font-semibold text-muted">추정치</span></dd></div>
+          <div className="flex justify-between gap-2"><dt className="text-muted">하루 걷기</dt><dd className="font-bold"><WalkValue minutes={judged.result.day} verdict={judged.result.verdict} /></dd></div>
+          <div className="flex justify-between gap-2"><dt className="text-muted">가장 긴 연속</dt><dd className="font-bold"><WalkValue minutes={judged.result.longest} verdict={judged.result.verdict} /></dd></div>
           <div className="flex justify-between gap-2"><dt className="text-muted">쉬는 시간</dt><dd className="font-bold">{judged.result.restTotalMin}분</dd></div>
           <div className="flex justify-between gap-2"><dt className="text-muted">조건 넘는 곳</dt><dd className="font-bold">{judged.result.violations.length}곳</dd></div>
           <p className="pt-1 text-sm text-muted">{judged.result.reason}</p>
