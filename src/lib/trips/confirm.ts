@@ -1,12 +1,16 @@
 // 버전 확정·확정 풀기. 담당: 김경선 (설계 10.4: 구성원 누구나 확정할 수 있다).
 import 'server-only'
 import { and, eq } from 'drizzle-orm'
-import type { Trip } from '@/lib/contracts'
+import type { ShareTextResponse, Trip } from '@/lib/contracts'
 import { HttpError } from '@/lib/auth/http'
 import type { Db } from '@/lib/db/client'
 import { getDb } from '@/lib/db/client'
 import { tripVersions, trips } from '@/lib/db/schema'
+import { judgeStops } from './judge-run'
+import { buildShareText } from './share-text'
+import { listTravelers } from './travelers'
 import { getTrip } from './trips'
+import { getVersion } from './versions'
 
 // 확정은 여행당 한 버전이다. 칸이 하나라서 다른 버전을 확정하면 이전 확정은 자동으로 풀린다.
 export async function confirmVersion(
@@ -37,4 +41,18 @@ export async function unconfirmVersion(tripId: string, db: Db = getDb()): Promis
     .set({ confirmedVersionId: null, confirmedByUserId: null })
     .where(eq(trips.id, tripId))
   return getTrip(tripId, db)
+}
+
+// GET /api/trips/:id/share-text — 확정된 버전으로 공유 글을 만든다.
+// 확정 전이면 404 (목업과 같은 코드·문구).
+export async function getShareText(tripId: string, db: Db = getDb()): Promise<ShareTextResponse> {
+  const trip = await getTrip(tripId, db)
+  if (!trip.confirmedVersionId) throw new HttpError(404, 'not_found', '확정된 일정이 아직 없어요')
+
+  const version = await getVersion({ tripId, versionId: trip.confirmedVersionId }, db)
+  const travelers = await listTravelers(tripId, db)
+  // 숫자는 전부 엔진 판정 결과에서 나온다 (AGENTS.md 6장).
+  const run = await judgeStops({ stops: version.stops, travelers })
+
+  return { text: buildShareText({ trip, version, run }) }
 }
