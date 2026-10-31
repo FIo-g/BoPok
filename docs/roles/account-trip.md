@@ -63,7 +63,7 @@
 - `filledBySelf`는 화면의 `markSelfFilled`와 같다: **연결된 본인이 저장하면서 걷기 조건 칸(`age`, `heightCm`, `sex`, `pace`, `mobilityAid`, `condition`)을 실제로 바꿨거나 새로 만든 여행자일 때만** `true`. 연결만 하고 조건이 그대로면 기존 값 유지, 한 번 `true`면 계속 `true`. 몸체의 값은 계속 무시한다.
   - 이름표(`label`)·부모님 여부(`isParent`)·계정 연결은 '조건을 말한 것'이 아니라 비교에서 뺀다.
   - **조건 비교는 키 순서를 맞춰서 한다.** `condition`은 jsonb라 DB에서 키 순서가 바뀌어 돌아온다. 순서만 다른 것을 '바뀌었다'로 보면 연결만 해도 `filledBySelf`가 올라간다(테스트로 고정).
-- AI 인터뷰(`saveTravelers`)는 이름표가 `'나'`이고 계정이 없는 여행자에 **여행을 만든 사람**(`trips.created_by`)을 연결하고 `filledBySelf`를 `true`로 둔다(그 사람이 직접 인터뷰에 답했다). 만든 사람이 이미 다른 여행자에 연결돼 있으면 건드리지 않는다. **만든 사람이 이미 그룹을 떠났으면 연결하지 않는다**(`userId`를 비우고 `filledBySelf`는 `false`로 저장한다). 구성원이 아닌 계정을 새로 연결하면 400이 되어 인터뷰 결과가 통째로 날아가기 때문이다(테스트로 고정).
+- AI 인터뷰(`saveTravelers`)는 이름표가 `'나'`이고 계정이 없는 여행자에 **여행을 만든 사람**(`trips.created_by`)을 연결하고 `filledBySelf`를 `true`로 둔다(그 사람이 직접 인터뷰에 답했다). 만든 사람이 이미 다른 여행자에 연결돼 있으면 건드리지 않는다.
 - `PATCH /api/trips/:id/travelers/:tid`도 **`PUT`과 같은 규칙**을 쓴다(같은 함수). 연결된 본인이 걷기 조건 칸을 실제로 바꿨을 때만 `true`, 아니면 기존 값 유지, 한 번 `true`면 계속 `true`. `userId`는 이 API로 바꿀 수 없으므로 기존 연결로 판단한다. (3단계의 '본인이 아니면 false'는 '한 번 true면 계속 true'와 어긋나서 10/31에 고쳤다.)
 
 7단계에서 정한 것 **[결정: 김경선 10/31]**:
@@ -71,19 +71,7 @@
 - 글 형식은 화면 목업(`src/mocks/share-text.ts`)을 그대로 따른다: 머리말, 장소 순서·시간·예약, 장소별 걷는 시간(추정치), 쉼터 이름·종류(실내/야외), 탈것 구간, 하루 요약, 연락처, "출발 전 운영 여부를 꼭 확인하세요".
 - **숫자는 `engine.judge` 결과에서만** 쓴다. 모르면 지어내지 않는다: 장소 안 길 정보가 없으면 `길 정보 없음`, 걷기를 하나도 모르면 `하루 걷기 정보 부족 (장소 정보가 모이면 알려드려요)`, 여행자가 없으면 `하루 걷기 정보 부족 (함께 가는 사람을 입력하면 알려드려요)`. 목업은 이때 "0분"을 찍는데 그건 지어낸 숫자라 바꿨다.
 - 계단 문구는 **넣지 않았다**. 역할 문서·목업 형식에 없고, 장소 데이터가 없는 동안은 전부 '기록 없음'으로만 나온다. 장소 데이터가 들어오면 `confirmed_none`일 때만 '계단 없음', `unknown`은 '계단 기록 없음 (지도 데이터 기준)'으로 한 줄 더하는 것을 제안한다.
-- **장소·경로 연결은 6단계와 같이 쓴다**: `src/lib/trips/place-geo.ts`가 `getPlaceDetails`·`getLegs` 주입 지점이고(이동주 담당이라 그 폴더에 파일을 만들지 않았다), `src/lib/trips/judge-run.ts`의 `judgeStops`가 `requiredLegs → getLegs → judge` 순서를 한 군데 모아 둔다. 이동주 PR이 머지돼 6단계에서 `place-geo.ts`가 실제 `getPlaceDetails`·`getLegs`를 쓰도록 바꿨다.
-
-6단계에서 정한 것 **[결정: 김경선 10/31]**:
-- 버전을 저장할 때(`saveVersion`·`createVersion`이 같이 쓰는 `save`) **여행자가 1명 이상이면 `engine.judge`로 판정해 `judge_summary`에 저장**한다. 여행자가 없으면 `null`(판정할 조건이 없다)이고, 이때는 장소·경로를 묻지도 않는다. 판정은 부모 버전 검사 뒤·번호 세기 전에 한다(번호가 겹쳐 다시 시도해도 장소·경로를 또 묻지 않는다).
-- `place-geo.ts`가 이동주의 `getPlaceDetails`(`src/lib/places`)와 `getLegs`(`src/lib/geo`)를 부른다. 그쪽 코드는 부르기만 하고 고치지 않았다.
-  - `getLegs`는 20개씩 나눠 묻는다. 한 묶음에서 하나도 못 받아 `GeoError`를 던지면 **그 묶음은 '경로 없음'으로 두고 잇는다** — 엔진이 `missingLegs`로 처리해 요약은 '정보 부족'이 되고 걷는 시간은 지어내지 않는다. `GeoError`가 아닌 오류(DB 등)는 숨기지 않고 올린다.
-  - 장소 id는 중복과 형식이 틀린 것을 빼고 100개씩 묻는다(AI 쪽 `createPlaceDetailsAdapter`와 같은 규칙). 하나 때문에 조회 전체가 실패하지 않게.
-  - 자동차·택시(car·taxi) 경로는 `getLegs`가 TMAP 자동차 경로로 받아 탈것 시간(`durationMin`)이 들어간다. 버스(bus)는 아직 지원하지 않아(`unsupported_mode`) 빠지고 공유 글에는 시간 없이 이동만 나온다(시간은 지어내지 않는다). 엔진은 탈것을 걷는 시간 0으로 보므로 판정에는 영향이 없다.
-- 요약을 만들다 오류가 나도(장소 DB 오류 등) **버전은 저장하고 `judge_summary`만 `null`**, 서버 로그에만 남긴다. 5단계 `appliedOpinionIds`와 같은 생각 — 곁가지 정보 때문에 일정을 날리지 않는다.
-- 여행 목록·버전 목록의 판정 배지는 저장된 `summary`를 그대로 읽는다(`toVersion`이 `judge_summary`를 `summary`로 내보낸다). AI의 `getTripContext`의 `versions`도 같다. 테스트로 고정했다.
-- 공유 글은 저장된 요약이 아니라 **지금 여행자로 다시 판정**한 결과를 쓴다(`getShareText → judgeStops`) — 요약이 낡아도 글의 숫자는 낡지 않는다. 경로를 받지 못한 이동이 있으면 하루 요약 밑에 "(경로 정보를 받지 못한 이동 n곳은 걷는 시간에 넣지 않았어요)"를 붙인다. 빠진 경로는 시간에 안 들어가므로 숫자가 실제보다 작게 읽히지 않게 하려는 것이다.
-- **남은 일 (이번에 하지 않음)**: 여행자 정보를 고칠 때 그 여행의 버전 요약을 다시 계산하는 것. `travelers.ts`·여행자 API를 고쳐야 해서 따로 한다. 그때까지 목록 배지는 마지막으로 저장한 시점의 여행자 기준이고, 일정 화면은 브라우저에서 다시 판정한다.
-- **알아둘 점**: 저장할 때마다 새 경로를 TMAP에 묻는다(24시간 캐시가 있다). 경로마다 순차 호출이고 한 번 제한 시간이 8초라, 장소가 많고 TMAP이 느리면 저장 응답이 그만큼 늦다. 문제가 되면 저장 뒤에 요약을 채우는 방식을 검토한다.
+- **장소·경로 연결은 6단계와 같이 쓴다**: `src/lib/trips/place-geo.ts`가 `getPlaceDetails`·`getLegs` 주입 지점이고(이동주 담당이라 그 폴더에 파일을 만들지 않았다), `src/lib/trips/judge-run.ts`의 `judgeStops`가 `requiredLegs → getLegs → judge` 순서를 한 군데 모아 둔다. 이동주 PR이 머지되면 `place-geo.ts`의 두 줄만 바꿔 끼운다.
 
 5단계에서 정한 것 **[결정: 김경선 10/31]**:
 - 의견 API는 버전 id만 받으므로 **버전 → 여행 → 그룹**을 따라가 구성원인지 본다(`requireVersionMember`). 버전이 없으면 404, 남의 그룹 버전이면 403.
@@ -101,7 +89,7 @@
 - 버전 목록은 **번호 오름차순**이고 `latestVersion`은 마지막이다(목업 `versionsOf`와 같은 규칙). 목록용 요약에는 `stops`가 없고 `madeByName`(= `madeByUserId`의 이름)을 서버가 채운다.
 - `trips.confirmed_version_id`에 외래키를 걸었다. `trips`와 `trip_versions`가 서로를 가리키므로 스키마에서 `AnyPgColumn`으로 타입 순환을 끊는다.
 - `version_opinions` 표는 4단계에 같이 만들었다(마이그레이션을 두 번 만들지 않으려고). **의견 API와 `createVersion`의 `appliedOpinionIds` 연결은 5단계**다. `getOpinions(versionId)`는 AI가 기다리는 함수라 4단계에 먼저 만들었다 — 의견이 없으면 빈 배열이 정상이다.
-- 판정 요약(`judge_summary`)은 4단계에서는 `null`로 저장했고, 6단계에서 채운다 (위 6단계 절).
+- 판정 요약(`judge_summary`)은 6단계에서 채운다. 그때까지 `null`로 저장한다.
 
 3단계에서 정한 것 **[결정: 김경선 10/31]**:
 - `trips`에 `status` 칸을 두지 않는다. 계약(`trip-api.ts`)에 없고 `confirmedVersionId === null`이면 '작성 중'이다. 칸이 둘이면 서로 어긋난다(설계 10.3의 `status` 제안을 쓰지 않음).
@@ -113,11 +101,10 @@
   - `userId`(계정 연결)는 `PATCH`로 바꿀 수 없다. `PUT`으로 목록을 통째로 저장할 때만 바꾸며, 그때 **그 그룹 구성원이 아닌 계정이면 400**.
 - `PATCH`로는 나이·키·성별을 비울 수 없다(계약이 `optional`이라 `null`을 받지 않는다). 비우려면 `PUT`으로 목록을 다시 저장한다.
 - 여행 API는 모두 여행의 `groupId`로 `requireMember`를 거친다. **없는 여행도 403**으로 답한다(404로 나누면 그 여행이 있다는 사실이 새어 나간다).
-- **본문을 읽는 API는 로그인 검사를 본문 검사보다 먼저 한다.** 로그인 안 한 사람이 잘못된 본문을 보내도 400이 아니라 401이다. `POST /api/trips`는 몸체의 `groupId`로 구성원인지 봐야 해서 ① 로그인(`requireUser`) → ② 본문 검사 → ③ 구성원(`requireMember`) 순서다. 로그인은 했지만 구성원이 아닌 사람의 잘못된 본문은 그대로 400이다(테스트: `src/app/api/login-first.test.ts`).
 
 2단계에서 정한 것 **[결정: 김경선 10/30]**:
 - 참가할 때 `relation`을 선택 값으로 받는다. 설계 10.3의 `group_members.relation`을 채우는 곳이 다른 데 없어서, 안 받으면 그 칸이 영원히 빈다. 안 보내도(또는 `null`로 보내도) 참가는 된다.
-- `GroupDetail`에는 `myRole`을 **넣지 않는다** (처음에 넣기로 했던 것을 뒤집었다). 실제 계약 `src/lib/contracts/group.ts`의 `GroupDetail`은 `Group`(`ownerId` 포함) + `members`뿐이다. 상세 화면(`GroupScreen`)은 응답의 `ownerId`와 내 id를 비교해 '초대 링크 만들기'·'내보내기' 버튼을 보여줄지 정한다. 그룹장 넘기기가 MVP 밖이라 `ownerId`(= `groups.created_by`)와 `owner` 역할은 항상 같다. 역할(`role`)은 내 그룹 목록(`GroupSummary`)에만 있다.
+- `GroupDetail`에 `myRole`을 넣는다. 상세 화면이 '초대 링크 만들기'·'내보내기' 버튼을 보여줄지 이것만 보고 정하게.
 - 내보내기는 두 겹으로 막는다: 그룹장이 자기 자신을 내보내면 400, 내보낸 뒤 그룹장이 0명이 되면 400. 그룹장 넘기기·그룹 삭제·스스로 나가기는 MVP 밖.
 - 초대 링크의 전체 주소는 프론트가 만든다(`location.origin + '/invite/' + token`). API는 `{ token, expiresAt }`만 준다.
 
@@ -132,7 +119,7 @@ getOpinions(versionId): Promise<Opinion[]>
 
 ### 버전 저장 시 판정 요약
 
-`createVersion`(AI)과 `saveVersion`(화면)은 저장 전에 판정 요약을 계산해 함께 저장한다:
+`createVersion`은 저장 전에 판정 요약을 계산해 함께 저장한다:
 1. `src/lib/places`의 `getPlaceDetails(placeIds)` (이동주)
 2. `engine.requiredLegs` → `src/lib/geo`의 `getLegs(requests)` (이동주)
 3. `engine.judge(input)` (김태형) → `summary`(판정·이유·하루 총·가장 긴 연속)

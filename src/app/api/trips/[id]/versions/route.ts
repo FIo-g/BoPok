@@ -1,5 +1,4 @@
 // 직접 고친 일정·빠른 수정안을 새 버전으로 저장한다. 그룹 구성원만.
-// 저장하면서 판정 요약도 함께 저장한다 (여행자가 없으면 null — saveVersion 참고).
 // AI가 짠 버전은 이 API가 아니라 src/lib/trips의 createVersion으로 저장한다 (같은 저장 함수를 쓴다).
 import { handle, readJson } from '@/lib/auth'
 import { SaveVersionRequestSchema } from '@/lib/contracts'

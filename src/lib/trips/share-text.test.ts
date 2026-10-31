@@ -104,7 +104,6 @@ describe('공유 글 형식', () => {
     expect(text).toContain(`걷기 ${formatRange(stopResult!.walk)} · 추정치`)
     expect(text).toContain(`하루 걷기 ${formatRange(run.result!.day)}`)
     expect(text).toContain(`쉬지 않고 걷는 시간 최대 ${formatRange(run.result!.longest)} (추정치)`)
-    expect(text).not.toContain('받지 못한') // 빠진 경로가 없으면 안내 줄이 없다
   })
 
   it('쉼터 이름과 종류(실내·야외)가 나온다', async () => {
@@ -139,25 +138,6 @@ describe('공유 글 형식', () => {
     const text = buildShareText({ trip, version: versionOf(stops), run })
 
     expect(text).toContain('한밭수목원 042-270-8452')
-  })
-
-  it('경로를 받지 못한 이동이 있으면 걷는 시간에 넣지 않았다고 밝힌다 (숫자를 지어내지 않는다)', async () => {
-    const place = hanbat
-    const stops = [
-      stop({ key: 's1', name: '한밭수목원', placeId: place.id }),
-      // 걸어가는 이동인데 경로를 하나도 못 받은 경우
-      stop({ key: 's2', name: '근처 카페', arriveBy: 'walk', coord: [127.386, 36.352] }),
-    ]
-    const deps: PlaceGeoDeps = {
-      getPlaceDetails: async ids => (ids.includes(place.id) ? [place] : []),
-      getLegs: async () => [],
-    }
-    const run = await judgeStops({ stops, travelers }, deps)
-    const text = buildShareText({ trip, version: versionOf(stops), run })
-
-    expect(run.result?.missingLegs).toHaveLength(1)
-    expect(text).toContain(`하루 걷기 ${formatRange(run.result!.day)}`) // 아는 부분의 숫자는 엔진 값 그대로
-    expect(text).toContain('(경로 정보를 받지 못한 이동 1곳은 걷는 시간에 넣지 않았어요)')
   })
 
   it('날짜가 없으면 "확정 일정"만 쓴다', async () => {

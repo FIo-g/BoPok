@@ -2,16 +2,12 @@
 // POST /api/trips/:id/versions(화면)과 createVersion(AI)이 같은 저장 함수를 쓴다.
 import 'server-only'
 import { and, asc, eq, inArray, sql } from 'drizzle-orm'
-import type { JudgeSummary, SaveVersionRequest, Stop, TripVersion, VersionSummary } from '@/lib/contracts'
+import type { SaveVersionRequest, Stop, TripVersion, VersionSummary } from '@/lib/contracts'
 import { HttpError } from '@/lib/auth/http'
 import type { Db } from '@/lib/db/client'
 import { getDb } from '@/lib/db/client'
 import { tripVersions, user } from '@/lib/db/schema'
-import { summarizeStops } from './judge-run'
 import { markOpinionsApplied } from './opinions'
-import type { PlaceGeoDeps } from './place-geo'
-import { getPlaceGeoDeps } from './place-geo'
-import { listTravelers } from './travelers'
 
 type VersionRow = typeof tripVersions.$inferSelect
 
@@ -24,7 +20,7 @@ function toVersion(row: VersionRow): TripVersion {
     madeBy: row.madeBy,
     madeByUserId: row.madeByUserId,
     stops: row.stops,
-    summary: row.judgeSummary, // 저장할 때 판정해 둔 요약. 그때 여행자가 없었으면 null
+    summary: row.judgeSummary, // 엔진 연결은 6단계라 지금은 null
     note: row.note,
     createdAt: row.createdAt.toISOString(),
   }
@@ -65,10 +61,7 @@ type SaveInput = {
 
 // 번호는 여행마다 1, 2, 3…. db.transaction()을 못 쓰므로(Neon HTTP) '세어서 넣고,
 // 겹치면 다시 시도'한다. 겹침은 (trip_id, number) 유니크 제약이 DB에서 막아 준다.
-async function insertWithNextNumber(
-  input: SaveInput & { summary: JudgeSummary | null },
-  db: Db,
-): Promise<VersionRow> {
+async function insertWithNextNumber(input: SaveInput, db: Db): Promise<VersionRow> {
   for (let tries = 0; tries < MAX_TRIES; tries++) {
     const [counted] = await db
       .select({ last: sql<number>`coalesce(max(${tripVersions.number}), 0)` })
@@ -85,7 +78,7 @@ async function insertWithNextNumber(
           madeBy: input.madeBy,
           madeByUserId: input.madeByUserId ?? null,
           stops: input.stops,
-          judgeSummary: input.summary,
+          judgeSummary: null, // 6단계에서 채운다
           note: input.note ?? null,
         })
         .returning()
@@ -110,23 +103,15 @@ async function assertParentInTrip(args: { tripId: string; parentId: string | nul
   if (!parent) throw new HttpError(400, 'invalid_request', '이전 버전을 찾을 수 없어요')
 }
 
-async function save(input: SaveInput, db: Db, geo: PlaceGeoDeps): Promise<TripVersion> {
+async function save(input: SaveInput, db: Db): Promise<TripVersion> {
   await assertParentInTrip({ tripId: input.tripId, parentId: input.parentId }, db)
-  // 판정은 번호를 세기 전에, 부모 버전 검사 뒤에 한다 — 번호가 겹쳐 다시 시도해도 장소·경로를
-  // 또 묻지 않고, 잘못된 parentId(400)에는 외부 호출을 하지 않는다. 여행자가 없으면 null (6단계).
-  const summary = await summarizeStops(
-    { stops: input.stops, travelers: await listTravelers(input.tripId, db) },
-    geo,
-  )
-  return toVersion(await insertWithNextNumber({ ...input, summary }, db))
+  return toVersion(await insertWithNextNumber(input, db))
 }
 
 // POST /api/trips/:id/versions — 직접 고친 일정·빠른 수정안 (madeBy는 user 또는 quick_fix)
-// 저장하면서 판정 요약도 함께 저장한다. geo는 테스트에서 가짜 장소·경로를 끼우는 자리다.
 export async function saveVersion(
   args: { tripId: string; input: SaveVersionRequest; userId: string },
   db: Db = getDb(),
-  geo: PlaceGeoDeps = getPlaceGeoDeps(),
 ): Promise<TripVersion> {
   return save(
     {
@@ -138,7 +123,6 @@ export async function saveVersion(
       note: args.input.note,
     },
     db,
-    geo,
   )
 }
 
@@ -154,7 +138,6 @@ export async function createVersion(
     note?: string
     appliedOpinionIds?: string[]
   },
-  geo: PlaceGeoDeps = getPlaceGeoDeps(), // 테스트에서 가짜 장소·경로를 끼우는 자리. AI는 안 넘긴다.
 ): Promise<TripVersion> {
   const db = getDb()
   const version = await save(
@@ -167,7 +150,6 @@ export async function createVersion(
       note: input.note,
     },
     db,
-    geo,
   )
 
   // 표시에 실패해도 버전은 이미 저장됐다 — 그 여행 의견이 아닌 id는 건너뛰고 로그만 남긴다.

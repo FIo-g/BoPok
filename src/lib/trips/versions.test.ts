@@ -6,25 +6,10 @@ import { OpinionSchema } from '@/lib/contracts'
 import { tripVersions } from '@/lib/db/schema'
 import type { TestDb } from '@/lib/db/test-db'
 import { setupTestDb } from '@/lib/db/test-db'
-import {
-  addMember,
-  createGroup as insertGroup,
-  insertOpinion,
-  insertTrip,
-  signUp,
-  stop,
-  traveler,
-} from '@/lib/auth/test-fixtures'
-import { hanbat } from '@/lib/engine/test-fixtures'
-import { GeoError } from '@/lib/geo/errors'
-import { createVersion, getVersion, listVersions, listVersionSummaries, saveVersion } from './versions'
+import { addMember, createGroup as insertGroup, insertOpinion, insertTrip, signUp, stop } from '@/lib/auth/test-fixtures'
+import { createVersion, getVersion, listVersions, saveVersion } from './versions'
 import { getOpinions } from './opinions'
 import { getTripContext } from './context'
-import { judgeStops, summaryOf } from './judge-run'
-import type { PlaceGeoDeps } from './place-geo'
-import { createPlaceGeoDeps } from './place-geo'
-import { listTravelers, replaceTravelers } from './travelers'
-import { listGroupTrips } from './trips'
 
 // 타입만으로 하는 검사 — 태형님 deps 모양과 어긋나면 pnpm build에서 걸린다.
 const _createVersion: AiDeps['createVersion'] = createVersion
@@ -135,7 +120,7 @@ describe('createVersion (AI가 부르는 창구)', () => {
     })
 
     expect(aiVersion).toMatchObject({ number: 2, madeBy: 'ai', parentId: first.id, note: '의견을 반영해 다듬었어요' })
-    expect(aiVersion.summary ?? null).toBeNull() // 여행자가 없어서 판정하지 않는다
+    expect(aiVersion.summary ?? null).toBeNull() // 판정 요약은 6단계
   })
 
   it('다른 여행의 버전을 parentId로 주면 400', async () => {
@@ -316,150 +301,5 @@ describe('createVersion의 appliedOpinionIds (의견 반영 표시)', () => {
 
     await createVersion(tripId, { parentId: first.id, stops: oneStop, madeBy: 'ai' })
     expect((await getOpinions(first.id))[0].appliedInVersionId ?? null).toBeNull()
-  })
-})
-
-describe('판정 요약 저장 (6단계)', () => {
-  const mom = [traveler({ id: 't1', label: '엄마', isParent: true, age: 68, heightCm: 158, sex: 'female' })]
-  const hanbatStops = [stop({ key: 's1', name: '한밭수목원', placeId: hanbat.id })]
-
-  // 한밭수목원만 아는 가짜 장소·경로 (외부 TMAP을 부르지 않는다). 호출을 세어 볼 수 있다.
-  function fakeGeo(getLegs: PlaceGeoDeps['getLegs'] = async () => []) {
-    return {
-      getPlaceDetails: vi.fn<PlaceGeoDeps['getPlaceDetails']>(async ids => (ids.includes(hanbat.id) ? [hanbat] : [])),
-      getLegs: vi.fn<PlaceGeoDeps['getLegs']>(getLegs),
-    }
-  }
-
-  it('여행자가 있으면 엔진 판정 요약을 함께 저장하고, 다시 읽어도 같다', async () => {
-    const { owner, tripId } = await tripFor()
-    await replaceTravelers({ tripId, travelers: mom })
-    const geo = fakeGeo()
-
-    const saved = await saveVersion(
-      { tripId, userId: owner.userId, input: { parentId: null, stops: hanbatStops, madeBy: 'user' } },
-      testDb.db,
-      geo,
-    )
-
-    // 서버가 따로 계산하지 않는다 — 같은 입력으로 엔진을 돌린 결과와 똑같다
-    const expected = summaryOf(await judgeStops({ stops: hanbatStops, travelers: await listTravelers(tripId) }, geo))
-    expect(expected).not.toBeNull()
-    expect(saved.summary).toEqual(expected)
-    expect(saved.summary?.verdict).not.toBe('info') // 한밭수목원 안의 길을 안다
-    expect(saved.summary?.day.high).toBeGreaterThan(0)
-
-    const reread = await getVersion({ tripId, versionId: saved.id })
-    expect(reread.summary).toEqual(expected)
-  })
-
-  it('createVersion(AI가 부르는 창구)도 같은 요약을 저장한다', async () => {
-    const { owner, tripId } = await tripFor()
-    await replaceTravelers({ tripId, travelers: mom })
-    const geo = fakeGeo()
-
-    const aiVersion = await createVersion(
-      tripId,
-      { parentId: null, stops: hanbatStops, madeBy: 'ai', madeByUserId: owner.userId },
-      geo,
-    )
-
-    const expected = summaryOf(await judgeStops({ stops: hanbatStops, travelers: await listTravelers(tripId) }, geo))
-    expect(aiVersion.summary).toEqual(expected)
-  })
-
-  it('여행자가 없으면 null이고 장소·경로를 묻지도 않는다', async () => {
-    const { owner, tripId } = await tripFor()
-    const geo = fakeGeo()
-
-    const saved = await saveVersion(
-      { tripId, userId: owner.userId, input: { parentId: null, stops: hanbatStops, madeBy: 'user' } },
-      testDb.db,
-      geo,
-    )
-
-    expect(saved.summary ?? null).toBeNull()
-    expect(geo.getPlaceDetails).not.toHaveBeenCalled()
-    expect(geo.getLegs).not.toHaveBeenCalled()
-  })
-
-  it('경로를 하나도 못 받아도 버전은 저장되고 요약은 정보 부족이다 (걷는 시간을 지어내지 않는다)', async () => {
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
-    const { owner, tripId } = await tripFor()
-    await replaceTravelers({ tripId, travelers: mom })
-    // TMAP 키가 없어 경로를 하나도 못 받는 상황. 실제 껍데기(createPlaceGeoDeps)가 GeoError를 '경로 없음'으로 바꾼다.
-    const failing = fakeGeo(async () => {
-      throw new GeoError('missing_key', 'TMAP 키가 없어요')
-    })
-    // 장소 정보가 없는 두 곳 + 걸어가는 이동 → 경로 요청이 생긴다
-    const stops = [
-      stop({ key: 's1', name: '옛 시장', coord: [127.38, 36.35] }),
-      stop({ key: 's2', name: '작은 카페', coord: [127.381, 36.351], arriveBy: 'walk' }),
-    ]
-
-    const saved = await saveVersion(
-      { tripId, userId: owner.userId, input: { parentId: null, stops, madeBy: 'user' } },
-      testDb.db,
-      createPlaceGeoDeps(failing),
-    )
-
-    expect(saved.number).toBe(1) // 저장은 됐다
-    expect(failing.getLegs).toHaveBeenCalledTimes(1)
-    expect(saved.summary).toMatchObject({ verdict: 'info', day: { base: 0, high: 0 } })
-    expect((await getVersion({ tripId, versionId: saved.id })).summary?.verdict).toBe('info')
-    logged.mockRestore()
-  })
-
-  it('판정 중 오류가 나도 버전은 저장되고 요약만 null이다 (로그만 남긴다)', async () => {
-    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
-    const { owner, tripId } = await tripFor()
-    await replaceTravelers({ tripId, travelers: mom })
-    const broken: PlaceGeoDeps = {
-      getPlaceDetails: async () => {
-        throw new Error('장소 DB 오류')
-      },
-      getLegs: async () => [],
-    }
-
-    const saved = await saveVersion(
-      { tripId, userId: owner.userId, input: { parentId: null, stops: hanbatStops, madeBy: 'user' } },
-      testDb.db,
-      broken,
-    )
-
-    expect(saved.number).toBe(1)
-    expect(saved.summary ?? null).toBeNull()
-    expect(logged).toHaveBeenCalled()
-    logged.mockRestore()
-  })
-
-  it('이전 버전이 잘못되면 판정하기 전에 400이다 (불필요한 장소·경로 호출을 하지 않는다)', async () => {
-    const { owner, tripId } = await tripFor()
-    await replaceTravelers({ tripId, travelers: mom })
-    const geo = fakeGeo()
-
-    await expect(
-      saveVersion(
-        { tripId, userId: owner.userId, input: { parentId: 'no-such-version', stops: hanbatStops, madeBy: 'user' } },
-        testDb.db,
-        geo,
-      ),
-    ).rejects.toThrow('이전 버전을 찾을 수 없어요')
-    expect(geo.getPlaceDetails).not.toHaveBeenCalled()
-  })
-
-  it('버전 목록·여행 목록·AI 문맥이 저장된 요약을 그대로 보여 준다 (배지가 읽는 곳)', async () => {
-    const { owner, groupId, tripId } = await tripFor()
-    await replaceTravelers({ tripId, travelers: mom })
-    const saved = await saveVersion(
-      { tripId, userId: owner.userId, input: { parentId: null, stops: hanbatStops, madeBy: 'user' } },
-      testDb.db,
-      fakeGeo(),
-    )
-    expect(saved.summary).not.toBeNull()
-
-    expect((await listVersionSummaries(tripId))[0].summary).toEqual(saved.summary)
-    expect((await listGroupTrips(groupId))[0].latestVersion?.summary).toEqual(saved.summary)
-    expect((await getTripContext(tripId)).versions[0].summary).toEqual(saved.summary)
   })
 })

@@ -43,22 +43,3 @@ export function summaryOf(run: JudgeRun): JudgeSummary | null {
   const { verdict, reason, day, longest } = run.result
   return { verdict, reason, day, longest }
 }
-
-// 6단계: 버전에 저장할 판정 요약을 만든다. 숫자는 judgeStops(= engine.judge)에서만 나온다.
-// - 여행자가 없으면 판정할 조건이 없어 null이고, 장소·경로를 묻지도 않는다.
-// - 판정 중 오류가 나도 null이다. 요약은 목록 표시용 곁가지라 일정 저장을 막지 않는다.
-//   (경로를 못 받은 것은 place-geo가 이미 '경로 없음'으로 바꿔 오류가 아니다.)
-export async function summarizeStops(
-  args: { stops: Stop[]; travelers: Traveler[] },
-  deps: PlaceGeoDeps = getPlaceGeoDeps(),
-): Promise<JudgeSummary | null> {
-  if (args.travelers.length === 0) return null
-  try {
-    return summaryOf(await judgeStops(args, deps))
-  } catch (error) {
-    // 키·요청 원문은 남기지 않고 오류 이름과 앞부분만 남긴다.
-    const reason = error instanceof Error ? `${error.name}: ${error.message.slice(0, 200)}` : 'unknown'
-    console.error('[acct] 판정 요약을 만들지 못해 비워 둠', reason)
-    return null
-  }
-}
