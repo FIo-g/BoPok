@@ -8,6 +8,7 @@ import { findMembership } from '@/lib/auth/members'
 import type { Db } from '@/lib/db/client'
 import { getDb } from '@/lib/db/client'
 import { groupMembers, tripTravelers, trips } from '@/lib/db/schema'
+import { refreshSummaries } from './summary'
 
 type TravelerRow = typeof tripTravelers.$inferSelect
 
@@ -209,7 +210,10 @@ export async function replaceTravelers(
   await db.delete(tripTravelers).where(eq(tripTravelers.tripId, args.tripId))
   await db.insert(tripTravelers).values(rows)
 
-  return listTravelers(args.tripId, db)
+  const saved = await listTravelers(args.tripId, db)
+  // 걷기 조건이 바뀌면 버전 요약이 낡는다 — 다시 계산해 덮어쓴다 (던지지 않는다).
+  await refreshSummaries({ tripId: args.tripId, travelers: saved }, db)
+  return saved
 }
 
 // 김태형의 src/lib/ai/deps.ts가 기다리는 모양 그대로 — 인터뷰가 채운 여행자를 저장한다.
@@ -285,6 +289,10 @@ export async function patchTraveler(
     })
     .where(where)
     .returning()
+
+  // 한 사람만 고쳐도 판정 조건이 달라진다 — 그 여행의 버전 요약을 다시 계산한다.
+  const saved = await listTravelers(args.tripId, db)
+  await refreshSummaries({ tripId: args.tripId, travelers: saved }, db)
 
   return toTraveler(updated)
 }
