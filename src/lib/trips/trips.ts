@@ -7,13 +7,13 @@ import type { CreateTripRequest, Trip, TripDetail, TripListItem, UpdateTripReque
 import { HttpError } from '@/lib/auth/http'
 import type { Db } from '@/lib/db/client'
 import { getDb } from '@/lib/db/client'
-import { trips } from '@/lib/db/schema'
+import { trips, user } from '@/lib/db/schema'
 import { listTravelers } from './travelers'
 import { listVersionSummaries, summariesByTrip } from './versions'
 
 type TripRow = typeof trips.$inferSelect
 
-function toTrip(row: TripRow): Trip {
+function toTrip(row: TripRow, confirmedByName: string | null): Trip {
   return {
     id: row.id,
     groupId: row.groupId,
@@ -23,10 +23,17 @@ function toTrip(row: TripRow): Trip {
     transport: row.transport,
     styles: row.styles,
     budget: row.budget,
-    confirmedVersionId: row.confirmedVersionId, // 4단계까지는 항상 null
-    confirmedByName: null, // 4단계에서 user.name을 이어 붙인다
+    confirmedVersionId: row.confirmedVersionId, // null이면 작성 중
+    confirmedByName, // 누가 확정했는지 — confirmed_by_user_id의 이름
     createdAt: row.createdAt.toISOString(),
   }
+}
+
+// 확정한 사람의 이름을 함께 읽는다. 확정 전에는 null이다.
+const withConfirmedBy = { trip: trips, confirmedByName: user.name }
+
+function tripsQuery(db: Db) {
+  return db.select(withConfirmedBy).from(trips).leftJoin(user, eq(user.id, trips.confirmedByUserId))
 }
 
 export async function createTrip(
@@ -43,25 +50,26 @@ export async function createTrip(
       createdBy: args.userId,
     })
     .returning()
-  return toTrip(row)
+  return toTrip(row, null)
 }
 
-async function findTrip(tripId: string, db: Db): Promise<TripRow> {
-  const [row] = await db.select().from(trips).where(eq(trips.id, tripId)).limit(1)
+async function findTrip(tripId: string, db: Db): Promise<{ trip: TripRow; confirmedByName: string | null }> {
+  const [row] = await tripsQuery(db).where(eq(trips.id, tripId)).limit(1)
   // 구성원인지 이미 확인했는데 없다면 그 사이에 지워진 경우뿐이다.
   if (!row) throw new HttpError(404, 'not_found', '여행을 찾을 수 없어요')
   return row
 }
 
 export async function getTrip(tripId: string, db: Db = getDb()): Promise<Trip> {
-  return toTrip(await findTrip(tripId, db))
+  const row = await findTrip(tripId, db)
+  return toTrip(row.trip, row.confirmedByName)
 }
 
 // versions는 번호 오름차순이고 stops가 없는 요약이다 (화면은 마지막 것을 '최신'으로 본다).
 export async function getTripDetail(tripId: string, db: Db = getDb()): Promise<TripDetail> {
   const row = await findTrip(tripId, db)
   return {
-    trip: toTrip(row),
+    trip: toTrip(row.trip, row.confirmedByName),
     travelers: await listTravelers(tripId, db),
     versions: await listVersionSummaries(tripId, db),
   }
@@ -72,9 +80,9 @@ export async function updateTrip(
   args: { tripId: string; patch: UpdateTripRequest },
   db: Db = getDb(),
 ): Promise<Trip> {
-  const existing = await findTrip(args.tripId, db)
+  const { trip: existing, confirmedByName } = await findTrip(args.tripId, db)
   const { patch } = args
-  if (Object.keys(patch).length === 0) return toTrip(existing)
+  if (Object.keys(patch).length === 0) return toTrip(existing, confirmedByName)
 
   const [row] = await db
     .update(trips)
@@ -87,24 +95,23 @@ export async function updateTrip(
     })
     .where(eq(trips.id, args.tripId))
     .returning()
-  return toTrip(row)
+  return toTrip(row, confirmedByName)
 }
 
 // GET /api/groups/:id/trips — 여행마다 최신 버전과 확정 버전 요약을 붙인다.
 // 요약은 한 번에 가져와 묶는다 (여행마다 묻지 않으려고).
 export async function listGroupTrips(groupId: string, db: Db = getDb()): Promise<TripListItem[]> {
-  const rows = await db.select().from(trips).where(eq(trips.groupId, groupId)).orderBy(desc(trips.createdAt))
+  const rows = await tripsQuery(db).where(eq(trips.groupId, groupId)).orderBy(desc(trips.createdAt))
   const byTrip = await summariesByTrip(
-    rows.map(row => row.id),
+    rows.map(row => row.trip.id),
     db,
   )
 
   return rows.map(row => {
-    const versions = byTrip.get(row.id) ?? []
+    const versions = byTrip.get(row.trip.id) ?? []
     // 번호 오름차순이므로 마지막이 최신이다 (목업 mock-api.ts와 같은 규칙).
     const latestVersion = versions.at(-1) ?? null
-    // 확정은 5단계에서 채운다 — confirmed_version_id가 null인 동안은 이 값도 null이다.
-    const confirmedVersion = versions.find(one => one.id === row.confirmedVersionId) ?? null
-    return { trip: toTrip(row), latestVersion, confirmedVersion }
+    const confirmedVersion = versions.find(one => one.id === row.trip.confirmedVersionId) ?? null
+    return { trip: toTrip(row.trip, row.confirmedByName), latestVersion, confirmedVersion }
   })
 }

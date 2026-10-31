@@ -7,6 +7,7 @@ import { HttpError } from '@/lib/auth/http'
 import type { Db } from '@/lib/db/client'
 import { getDb } from '@/lib/db/client'
 import { tripVersions, user } from '@/lib/db/schema'
+import { markOpinionsApplied } from './opinions'
 
 type VersionRow = typeof tripVersions.$inferSelect
 
@@ -126,7 +127,7 @@ export async function saveVersion(
 }
 
 // 김태형의 src/lib/ai/deps.ts가 기다리는 모양 그대로 — AI가 짠 일정을 저장한다.
-// appliedOpinionIds는 5단계(의견 API)에서 연결한다. 지금은 의견을 만드는 길이 없어 항상 빈 배열이다.
+// appliedOpinionIds를 주면 '이 의견들을 반영해 만든 버전'이라고 표시한다 (설계 5장).
 export async function createVersion(
   tripId: string,
   input: {
@@ -138,7 +139,8 @@ export async function createVersion(
     appliedOpinionIds?: string[]
   },
 ): Promise<TripVersion> {
-  return save(
+  const db = getDb()
+  const version = await save(
     {
       tripId,
       parentId: input.parentId,
@@ -147,8 +149,15 @@ export async function createVersion(
       madeByUserId: input.madeByUserId,
       note: input.note,
     },
-    getDb(),
+    db,
   )
+
+  // 표시에 실패해도 버전은 이미 저장됐다 — 그 여행 의견이 아닌 id는 건너뛰고 로그만 남긴다.
+  await markOpinionsApplied(
+    { tripId, versionId: version.id, opinionIds: input.appliedOpinionIds ?? [] },
+    db,
+  )
+  return version
 }
 
 // GET /api/trips/:id/versions/:vid — 그 여행의 버전이 아니면 404 (목업과 같은 문구)

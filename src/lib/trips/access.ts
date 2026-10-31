@@ -8,7 +8,7 @@ import type { MemberUser } from '@/lib/auth/session'
 import { requireUser } from '@/lib/auth/session'
 import type { Db } from '@/lib/db/client'
 import { getDb } from '@/lib/db/client'
-import { trips } from '@/lib/db/schema'
+import { tripVersions, trips, versionOpinions } from '@/lib/db/schema'
 
 export type TripMember = MemberUser & { groupId: string }
 
@@ -26,4 +26,69 @@ export async function requireTripMember(request: Request, tripId: string, db: Db
   if (!membership) throw new HttpError(403, 'forbidden', '이 여행에 접근할 수 없어요')
 
   return { ...me, role: membership.role, relation: membership.relation, groupId: trip.groupId }
+}
+
+export type VersionMember = TripMember & { versionId: string }
+
+// 의견 API는 주소에 버전 id만 있다 → 버전 → 여행 → 그룹을 따라가 구성원인지 본다.
+// 버전이 없으면 404(목업과 같은 문구). 남의 그룹 버전이면 403이다.
+export async function requireVersionMember(
+  request: Request,
+  versionId: string,
+  db: Db = getDb(),
+): Promise<VersionMember> {
+  const me = await requireUser(request)
+
+  const [row] = await db
+    .select({ tripId: tripVersions.tripId, groupId: trips.groupId })
+    .from(tripVersions)
+    .innerJoin(trips, eq(trips.id, tripVersions.tripId))
+    .where(eq(tripVersions.id, versionId))
+    .limit(1)
+  if (!row) throw new HttpError(404, 'not_found', '버전을 찾을 수 없어요')
+
+  const membership = await findMembership(row.groupId, me.userId, db)
+  if (!membership) throw new HttpError(403, 'forbidden', '이 여행에 접근할 수 없어요')
+
+  return { ...me, role: membership.role, relation: membership.relation, groupId: row.groupId, versionId }
+}
+
+export type OpinionOwner = {
+  me: TripMember
+  opinion: { id: string; versionId: string; userId: string }
+}
+
+// 의견 지우기용. 순서가 중요하다:
+//  ① 지금도 그 그룹 구성원인지  ② 그다음 내 의견인지
+// 그룹에서 내보내진 사람은 예전에 남긴 자기 의견도 지울 수 없다 (그 그룹 데이터에서 손을 뗀 것).
+export async function requireOwnOpinion(
+  request: Request,
+  opinionId: string,
+  db: Db = getDb(),
+): Promise<OpinionOwner> {
+  const me = await requireUser(request)
+
+  const [row] = await db
+    .select({
+      id: versionOpinions.id,
+      versionId: versionOpinions.versionId,
+      userId: versionOpinions.userId,
+      groupId: trips.groupId,
+    })
+    .from(versionOpinions)
+    .innerJoin(tripVersions, eq(tripVersions.id, versionOpinions.versionId))
+    .innerJoin(trips, eq(trips.id, tripVersions.tripId))
+    .where(eq(versionOpinions.id, opinionId))
+    .limit(1)
+  if (!row) throw new HttpError(404, 'not_found', '의견을 찾을 수 없어요')
+
+  const membership = await findMembership(row.groupId, me.userId, db)
+  if (!membership) throw new HttpError(403, 'forbidden', '이 여행에 접근할 수 없어요')
+
+  if (row.userId !== me.userId) throw new HttpError(403, 'forbidden', '내 의견만 지울 수 있어요')
+
+  return {
+    me: { ...me, role: membership.role, relation: membership.relation, groupId: row.groupId },
+    opinion: { id: row.id, versionId: row.versionId, userId: row.userId },
+  }
 }
