@@ -3,3 +3,4 @@
 //   places.ts — 이동주 (docs/roles/data-geo.md)
 export * from './auth'
 export * from './groups'
+export * from './places'

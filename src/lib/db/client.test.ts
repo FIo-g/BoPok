@@ -29,6 +29,7 @@ describe('getDb', () => {
     expect(Reflect.has(globalThis, '__bopokDb')).toBe(false)
   })
 
+  // 첫 WASM 초기화가 느린 환경에서도 실제 쿼리를 검증할 시간을 확보한다.
   it('DATABASE_URL 없이도 로컬 PGlite로 쿼리가 된다', async () => {
     vi.stubEnv('DATABASE_URL', '')
     vi.stubEnv('PGLITE_DIR', 'memory://')
@@ -36,7 +37,7 @@ describe('getDb', () => {
     // 날 SQL(execute)의 결과는 드라이버마다 타입이 달라 unknown이다. 앱 코드는 타입이 붙는 쿼리 빌더를 쓴다.
     const result = await getDb().execute(sql`select 1 as one`)
     expect(result).toMatchObject({ rows: [{ one: 1 }] })
-  })
+  }, 30000)
 
   it('다시 부르면 같은 연결', async () => {
     vi.stubEnv('DATABASE_URL', '')
