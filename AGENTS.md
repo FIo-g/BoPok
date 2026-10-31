@@ -105,7 +105,7 @@ PR을 올리기 전에 `pnpm lint && pnpm test && pnpm build`가 모두 통과�
 - 승인은 팀원 한 명이면 된다. 다만 `src/lib/contracts`나 다른 역할의 폴더를 건드렸으면 그 담당을 리뷰어로 넣어 알리고, 가능하면 그 사람의 승인을 받는다.
 - 승인 후 머지는 **PR을 올린 사람이** 한다(squash merge). 새 커밋을 올리면 이전 승인은 무효가 되니 다시 승인받는다.
 - **AI 도구의 권한**: 작업 브랜치 만들기는 바로 해도 된다. 커밋·push·PR 생성은 사용자가 시킬 때만 한다. 머지·승인·force push는 하지 않는다. `main` push는 사용자가 김태형이고 직접 시킬 때만 한다.
-- **DB는 각자 로컬 PGlite**(`.pglite` 폴더, `DATABASE_URL`을 비워 두면 자동)로 개발한다. Neon은 마지막 배포 때만 연결한다. 마이그레이션 파일(`drizzle/`)은 커밋하고, `pnpm db:migrate`·`db:studio` 전에는 개발 서버를 끈다(PGlite는 한 번에 한 프로그램만 연다). 데이터를 지우는 마이그레이션은 팀에 먼저 알린다.
+- **DB는 배포용 Neon 하나를 함께 쓴다** (김태형 10/31 — 배포 https://bopok.vercel.app, Neon 프로젝트 `bopok`). 연결 주소는 `.env.local`의 `DATABASE_URL`에 둔다(팀 안에서만 전달). PGlite는 테스트(vitest 메모리 DB)에서만 쓰고 개발에는 쓰지 않는다. 마이그레이션 파일(`drizzle/`)은 커밋하고, 공용 DB라 `pnpm db:migrate`는 **main에 머지된 마이그레이션만** 적용한다(작업 브랜치에서 돌리지 않는다). 데이터를 지우는 마이그레이션은 팀에 먼저 알린다.
 - `db.transaction()`은 쓰지 않는다. 배포에서 쓰는 Neon HTTP 드라이버가 지원하지 않는다. 꼭 필요하면 팀에 말한다(배포 때 드라이버를 바꿔야 함).
 
 ## 9. 막히면

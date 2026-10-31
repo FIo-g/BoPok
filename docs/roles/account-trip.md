@@ -68,7 +68,7 @@
 
 6단계에서 정한 것 **[결정: 김경선 10/31]**:
 - `src/lib/trips/place-geo.ts`가 이동주의 진짜 함수를 쓴다: `getPlaceDetails` ← `@/lib/places`, 경로는 **`getLegsPartial`** ← `@/lib/geo/legs`(`src/lib/geo/index.ts`는 없다). `getLegs`는 성공이 0건이면 던지므로 쓰지 않는다.
-- **걷는 구간만** 경로를 묻고 **20개씩 나눠** 부른다(`@/lib/geo`의 입력 상한). 탈것·실패 구간은 넘기지 않아 엔진이 `missingLegs`('경로 정보 없음')로 처리한다 — 숫자를 지어내지 않는다.
+- **버스를 뺀 걷기·자동차·택시 구간만** 경로를 묻고 **20개씩 나눠** 부른다(`@/lib/geo`의 입력 상한). 버스 구간은 넘기지 않는다. 걷기 경로를 못 받은 구간만 엔진이 `missingLegs`('경로 정보 없음')로 처리하고, 탈것은 이동 시간을 모르는 것(`rideMin` null)으로 본다 — 숫자를 지어내지 않는다.
 - **요약 계산이 실패해도 버전·여행자 저장은 반드시 성공한다.** `safeSummary`는 어떤 일이 있어도 던지지 않고 `null` + `console.error`를 남긴다. 요약은 먼저 계산해 **INSERT 한 번**에 넣는다(저장 뒤 UPDATE로 채우면 그 UPDATE가 실패해 '저장은 됐는데 오류'가 된다).
 - **요약 계산에 시간 제한 8초**(`SUMMARY_TIMEOUT_MS`). 버전을 저장할 때 TMAP을 실제로 부르므로 느린 날에 '일정 저장'이 한참 걸리면 안 된다. 넘기면 기다리지 않고 요약 없이 저장한다. 이미 시작한 TMAP 요청은 취소할 수 없지만 그 결과는 `leg_cache`에 남아 다음 계산에서 쓰인다. 테스트는 `setSummaryTimeoutForTests`로 짧게 바꿔 쓴다.
 - 여행자가 바뀌면(`PUT`·`PATCH` travelers, AI `saveTravelers`) `refreshSummaries`로 **그 여행의 모든 버전 요약을 다시 계산해 덮어쓴다**. 이 함수도 던지지 않는다. 여행자 목록을 인자로 받는 이유는 `travelers.ts`와 서로 import하는 고리를 막기 위해서다.

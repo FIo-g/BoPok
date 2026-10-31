@@ -2,7 +2,7 @@
 
 담당: 이동주. `geo/legs-api`는 장소 API 커밋 `a79393e`를 기반으로 한다.
 기존 장소 API·DB 스키마·공용 계약·엔진·인증 코드는 변경하지 않는다.
-현재 구현은 **walk 전용**이다. 택시 요금, 자동차·버스 추정, AI 검색은 포함하지 않는다.
+현재 구현은 **걷기(walk)·자동차(car)·택시(taxi)** 경로를 받는다. 버스(bus), 택시 요금, AI 검색은 포함하지 않는다.
 
 ## 로컬 실행과 키
 
@@ -56,7 +56,7 @@ import { legKey } from '@/lib/contracts'
 import { requiredLegs } from '@/lib/engine/required-legs'
 
 const requests = requiredLegs(stops, places)
-// 현재는 walk만 지원한다. 탈것 요청은 별도로 미지원 표시하고 성공 경로로 채우지 않는다.
+// 서버는 walk·car·taxi를 받고 bus는 미지원이다. 프론트가 어떤 수단을 물을지는 SUPPORTED_LEG_MODES로 정한다. 받지 못한 경로를 성공 경로로 채우지 않는다.
 const walkRequests = requests.filter(request => request.mode === 'walk')
 const legs = await api.legs.get(walkRequests)
 const byKey = Object.fromEntries(legs.map(leg => [leg.key, leg]))
@@ -147,7 +147,7 @@ Remove-Variable session
 | 400 | `invalid_request` | 잘못된 입력·JSON·요청 수·본문 크기 |
 | 401 | `unauthorized` | 미로그인 |
 | 415 | `invalid_request` | JSON이 아닌 POST |
-| 422 | `invalid_request` | 요청한 경로를 하나도 받지 못했고 첫 실패가 car/taxi/bus 미지원 |
+| 422 | `invalid_request` | 요청한 경로를 하나도 받지 못했고 첫 실패가 bus 미지원 |
 | 503 | `internal_error` | 요청한 경로를 하나도 받지 못했고 첫 실패가 캐시 미스+서버 TMAP_APP_KEY 누락 |
 | 502 | `external_api_failed` | 외부 HTTP·통신·JSON·경로 응답 검증 실패 |
 | 504 | `external_api_failed` | TMAP 요청 또는 본문 수신이 8초 초과 |
@@ -157,6 +157,18 @@ Remove-Variable session
 실패한 요청은 직선거리·가짜 선·임시 소요 시간으로 채우지 않고 응답에서 뺀다. 한 건이라도 받으면 200, 하나도 못 받으면 첫 실패의 상태 코드다. 성공한 경로의 캐시는 유지한다. 프론트는 key가 없는 보행 경로를 엔진의 missingLegs/정보 부족 처리로 보여 준다.
 미지원 탈것을 walk로 바꿔 다시 요청하거나 걷는 거리·시간을 만들어 채우면 안 된다.
 
+## 자동차·택시 경로와 시간 초과 보호
+
+- `car`와 `taxi`는 [TMAP 자동차 경로안내](https://tmap-skopenapi.readme.io/reference/자동차-경로안내)(`POST https://apis.openapi.sk.com/tmap/routes?version=1`)로 받는다. 보행과 같은 서버 `TMAP_APP_KEY`를 쓰며 새 환경 변수·의존성은 없다. 이 키로 자동차 경로 API를 쓸 수 있는지(상품 활성화·한도)는 아직 확인하지 않았다 — 배포 뒤 첫 호출에서 확인한다. 권한이 없으면 TMAP이 401·403을 주고 서버는 502로 바꿔 돌려준다.
+- 요청은 출발·도착 경위도, `WGS84GEO`, 검색 옵션 `0`(교통최적+추천), `trafficInfo: N`이다. 응답은 첫 점의 `totalDistance`(m)·`totalTime`(초)와 이어진 `LineString`만 쓴다. 선이 끊기거나 첫·끝 점과 맞지 않으면 직선으로 잇지 않고 실패(502)로 둔다. 자동차 응답의 `pointType` 이름은 보행(`SP`·`EP`)과 달라서 쓰지 않는다(공식 샘플은 `S`). 응답 모양은 공식 문서와 직접 만든 목업(`fixtures/tmap-car.json`)으로만 확인했고, **실제 응답으로는 아직 확인하지 않았다.** 첫 실호출에서 파서가 거부하면 이 부분(첫·끝 점 좌표 일치)부터 본다.
+- `Leg`은 기존 계약 칸만 쓴다: `distanceM`, `durationMin`(= `totalTime` ÷ 60, 반올림 없음), `path`, `source`(자동차 경로 주소), `checkedAt`(수집일의 한국 날짜), `confidence: B`, `stairsStatus: unknown`. 계약 파일과 DB 스키마는 바꾸지 않았다. 엔진은 탈것 구간 시간을 `leg.durationMin`에서 읽는다.
+- `durationMin`은 TMAP의 **추정** 소요 시간이다. 호출 시점의 교통 상황이 반영될 수 있고 24시간 캐시를 쓴다. 화면에서는 범위와 '추정치'로 보여 준다.
+- 택시는 자동차와 같은 경로·거리·시간을 쓰고 `mode`만 `taxi`다. 캐시 행은 키(`...:taxi`)가 달라 따로 저장한다. 같은 요청 묶음에 같은 구간의 car와 taxi가 함께 있으면 TMAP은 한 번만 부른다.
+- **`fareKrw`(택시 요금)는 만들지 않는다.** TMAP 응답의 `taxiFare`·`totalFare`는 읽지 않는다. 대전 택시 요금 추정 방식이 설계에서 정해지지 않았다.
+- `bus`는 계속 `unsupported_mode`다. 묶음에서는 그 항목만 실패로 빼고, 요청이 bus뿐이면 422다.
+- **시간 초과 보호**: 캐시에 없는 경로를 TMAP에 차례로 물을 때 `timeout`이 한 번 나면, 같은 요청 묶음의 나머지 캐시 없는 걷기·자동차·택시 요청은 TMAP을 부르지 않고 `timeout` 실패로 뺀다. 이미 받은 경로와 캐시에 있는 경로는 그대로 돌려주고 `bus`는 그대로 `unsupported_mode`다. 시간 초과가 아닌 실패(키 없음·502)는 다음 요청을 막지 않는다. 시간 초과 때문에 더 기다리는 시간은 요청 제한 시간(8초) 한 번뿐이다. 하나도 못 받으면 첫 실패의 상태 코드(504 포함)를 쓴다. 이 보호는 한 번의 요청 묶음 안에서만 적용된다.
+- 프론트 `SUPPORTED_LEG_MODES`는 walk·car·taxi를 묻는다(통합 정리에서 더함). AI의 걷기 전용 어댑터(`createLegsAdapter`)는 아직 walk만 묻는다. car·taxi를 묻게 바꾸는 것은 AI 담당의 후속 작업이다.
+
 ## 캐시와 중복
 
 - 키는 기존 `legKey(request)`를 그대로 사용한다. 방향·이동수단·지점 ID를 구분하며,
@@ -164,7 +176,7 @@ Remove-Variable session
 - 배치 안에서 같은 키는 첫 요청만 처리하고, 결과도 첫 등장 순서대로 하나씩 반환한다.
 - 같은 서버 모듈에서 동시에 처리 중인 동일 키는 외부 호출과 저장을 공유한다.
   서로 다른 서버 프로세스 사이의 중복 호출 잠금은 구현하지 않았다.
-- `leg_cache`는 DB에서 재사용한다. 경로선·거리·출처·날짜·보행 전용 필드를 검사하며,
+- `leg_cache`는 DB에서 재사용한다. 경로선·거리·출처·날짜·수단별 필드(보행은 시간 없음, 자동차·택시는 소요 시간 있음)를 검사하며,
   이번 구현과 맞지 않는 이전 캐시는 삭제하지 않고 미스로 처리한다. 새 경로 성공 시 해당 키를 갱신한다.
 - 기존 `fetched_at` 기준 **24시간 미만**인 캐시만 사용한다. 24시간 이상 또는 미래 시각인 행은
   삭제하지 않고 미스로 처리하며, 새 요청이 성공한 뒤 해당 키를 갱신한다. 실패하면 기존 행도 유지한다.
@@ -178,8 +190,8 @@ Remove-Variable session
 요청·응답은 `WGS84GEO`, 일반 탐색 옵션 `0`, 경로 순서 `index`를 지정한다.
 출발점의 `totalDistance`와 연속된 `LineString`만 사용한다. 필수 출발·도착점,
 도형·좌표·거리·선 연결을 검사하며 끊긴 선 사이에 새 직선을 추가하지 않는다.
-TMAP의 `totalTime`은 무시한다. 보행 시간은 엔진이 개인별 속도와 거리로 계산하므로
-`durationMin`·별도 보행 시간·택시 요금을 반환하지 않는다.
+보행 경로에서는 TMAP의 `totalTime`을 무시한다. 보행 시간은 엔진이 개인별 속도와 거리로 계산하므로
+보행 경로에는 `durationMin`·별도 보행 시간을 넣지 않는다.
 
 2026-10-31 이 작업공간에는 실제 OSM 수집 결과 파일이 없었다.
 **계단 검증은 미완료이며 항상 `stairsStatus: "unknown"`이다.**
@@ -191,7 +203,7 @@ TMAP의 `totalTime`은 무시한다. 보행 시간은 엔진이 개인별 속도
 ## 검증 명령
 
 ```powershell
-pnpm exec vitest run src/lib/geo/tmap.test.ts src/lib/geo/legs.test.ts
+pnpm exec vitest run src/lib/geo
 pnpm lint
 pnpm test
 pnpm test --maxWorkers=2
@@ -199,7 +211,7 @@ pnpm build
 pnpm typecheck
 ```
 
-테스트 응답은 `fixtures/tmap-walk.json`에 직접 만든 목업이다. 실제 TMAP 응답으로 주장하지 않는다.
+테스트 응답은 `fixtures/tmap-walk.json`·`fixtures/tmap-car.json`에 직접 만든 목업이다(자동차는 공식 샘플의 필드 모양을 따랐다). 실제 TMAP 응답으로 주장하지 않는다.
 테스트의 fetch는 모두 목업이며, 캐시는 새 `memory://` PGlite에 기존 마이그레이션을 적용해 검증한다.
 인증 경계·중복·영속 캐시 재사용·재호출·잘못된 경로·오류·키 비노출·엔진 요청 호환을 검사한다.
 기존 테스트와 공용 설정·시간 제한은 변경하지 않는다.
@@ -272,7 +284,7 @@ TMAP이 반환한 경로 종점은 요청 대표 좌표와 조금 다르다. 대
 | 로그인 후 기존 캐시 경로 요청 | 200, 318 m·좌표 8개·계단 `unknown` |
 | 같은 세션에서 동일 경로 두 번째 요청 | 200, 첫 응답과 동일 |
 | 범위를 벗어난 좌표 / 깨진 JSON | 각각 400 `invalid_request` |
-| `car` 요청 | 422 `invalid_request` |
+| `car` 요청 (당시 walk 전용) | 422 `invalid_request` |
 | `text/plain` 요청 | 415 `invalid_request` |
 | 로그아웃 후 같은 세션으로 요청 | 401 `unauthorized` |
 | TMAP 추가 호출 / 차단된 호출 시도 | 각각 0회 |
@@ -296,3 +308,31 @@ base와 누적 변경을 검토한다. 이번 공유 준비에서는 병합·reb
 총 10개 파일이다. 공용 계약·기존 테스트·인증·DB 스키마·설정 변경은 없다.
 OSM 작업·대용량 결과·실제 TMAP 원본·`.env.local`·`.pglite/`·`.next/`·`node_modules/`는 제외한다.
 프론트는 기존 장소 API의 실행·적재 명령을 사용하고 로그인 후 `api.legs.get(requests)`를 호출한다.
+
+## 장소(POI) 검색 — `searchPoi`
+
+`src/lib/geo/poi.ts`의 `searchPoi(name)`은 TMAP 장소(POI) 통합검색(`https://apis.openapi.sk.com/tmap/pois`)으로
+이름에 맞는 **대전 안** 장소의 좌표 하나를 찾는다. AI(김태형)가 붙여넣은 일정의 이름이 장소 DB에 없을 때
+좌표만 얻으려고 부른다. 위 경로 API(walk 전용 `getLegs`)와 별개이며 DB·캐시를 쓰지 않는다.
+HTTP 라우트(`GET /api/places/search`)는 아직 만들지 않았고, AI는 서버 함수로 직접 부른다.
+
+- 반환: `{ name, coord: [경도, 위도] }` 또는 `null`. 좌표는 TMAP이 준 중심 좌표(없으면 입구 좌표)이며
+  입구로 검증된 값이 아니다. 시간·거리는 만들지 않는다.
+- 키: 서버 환경 변수 `TMAP_APP_KEY`(기존 변수, 새로 추가한 것 없음). 요청 헤더로만 보내고 주소·로그·응답에 넣지 않는다.
+  키가 없거나 이름이 비었거나 한 글자뿐(기호 제외)이면 외부 요청 없이 `null`이다.
+- 결과 고르기: TMAP 결과를 순서대로 보며 아래를 모두 통과한 **첫 결과**를 쓴다. 통과한 결과가 없으면 `null`이다.
+  - 결과 이름에 검색어가 들어 있다(공백·기호·대소문자 무시). 이름이 다른 가까운 곳의 좌표를 내놓지 않기 위해서다.
+  - 주소(`upperAddrName`)가 있으면 `대전`으로 시작한다.
+  - 좌표가 대전을 감싸는 사각형(경도 127.2~127.6, 위도 36.15~36.52) 안이다. 정확한 행정경계가 아닌 근사이며,
+    사각형에 걸치는 세종·옥천 등은 주소 검사가 거른다.
+- 실패: HTTP 오류·시간 초과(기본 8초, 재시도 없음)·잘못된 응답·네트워크 오류는 모두 `null`이고 예외를 던지지 않는다.
+  로그에는 `[geo] POI 검색 실패 <종류>`(`missing_key`, `invalid_request`, `upstream`, `timeout`, `unknown`)만 남기고
+  키·요청 헤더·외부 오류 본문은 남기지 않는다. 결과가 정상적으로 없을 때는 로그도 없다.
+  호출하는 쪽은 `null`이면 그 이름을 '정보 없음' 장소로 두면 된다. 직선거리·가짜 좌표로 채우지 않는다.
+- 검증: 테스트(`poi.test.ts`)는 가짜 fetch와 직접 만든 응답(`fixtures/tmap-poi.json`)만 쓰며 실제 TMAP은 부르지 않는다.
+  요청 파라미터(`searchKeyword`, `searchType=all`, `searchtypCd=A`, `reqCoordType/resCoordType=WGS84GEO`, `count=10`)는
+  SK open API 문서 기준이고 이번 작업에서 실제로 호출해 확인하지 않았다. 키를 넣은 배포 환경에서 실제 응답 모양을 한 번 확인한다.
+
+```powershell
+pnpm exec vitest run src/lib/geo/poi.test.ts
+```

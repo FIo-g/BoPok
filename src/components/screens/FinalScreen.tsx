@@ -9,7 +9,7 @@ import { useJudged } from '@/components/trip/useJudged'
 import { Badge, Button, ButtonLink, Card, ErrorNotice, Notice, PageTitle, Spinner, VerdictBadge } from '@/components/ui'
 import { api } from '@/lib/api-client'
 import { formatRange } from '@/lib/engine'
-import { TRANSPORT_TEXT, copyText, formatDate, formatWalk, madeByText, shareOrCopy, versionLabel } from '@/lib/format'
+import { TRANSPORT_TEXT, copyText, formatDate, formatWalk, isWalkInfoMissing, madeByText, shareOrCopy, versionLabel } from '@/lib/format'
 import { errorMessage, useAsync } from '@/lib/use-async'
 
 export function FinalScreen({ tripId }: { tripId: string }) {
@@ -68,7 +68,10 @@ export function FinalScreen({ tripId }: { tripId: string }) {
                 <Badge tone="ok">✓ 확정</Badge>
                 <VerdictBadge verdict={judged.result.verdict} />
                 <p className="text-lg font-bold">
-                  하루 걷기 {formatWalk(judged.result.day, judged.result.verdict)} · 쉬지 않고 걷는 시간 최대 {formatWalk(judged.result.longest, judged.result.verdict)} <span className="text-sm font-semibold text-muted">추정치</span>
+                  하루 걷기 {formatWalk(judged.result.day, judged.result.verdict)} · 쉬지 않고 걷는 시간 최대 {formatWalk(judged.result.longest, judged.result.verdict)}
+                  {!(isWalkInfoMissing(judged.result.day, judged.result.verdict) && isWalkInfoMissing(judged.result.longest, judged.result.verdict)) && (
+                    <span className="ml-1 text-sm font-semibold text-muted">추정치</span>
+                  )}
                 </p>
               </Card>
               <Card>

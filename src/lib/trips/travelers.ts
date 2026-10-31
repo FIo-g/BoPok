@@ -4,6 +4,7 @@ import 'server-only'
 import { and, asc, eq, inArray } from 'drizzle-orm'
 import type { PatchTravelerRequest, Traveler } from '@/lib/contracts'
 import { HttpError } from '@/lib/auth/http'
+import { findMembership } from '@/lib/auth/members'
 import type { Db } from '@/lib/db/client'
 import { getDb } from '@/lib/db/client'
 import { groupMembers, tripTravelers, trips } from '@/lib/db/schema'
@@ -219,13 +220,21 @@ export async function replaceTravelers(
 // AI 쪽에는 '고치는 사람'이 없으므로 filledBySelf는 받은 값을 그대로 쓴다.
 export async function saveTravelers(tripId: string, travelers: Traveler[]): Promise<void> {
   const db = getDb()
-  const [trip] = await db.select({ createdBy: trips.createdBy }).from(trips).where(eq(trips.id, tripId)).limit(1)
+  const [trip] = await db
+    .select({ groupId: trips.groupId, createdBy: trips.createdBy })
+    .from(trips)
+    .where(eq(trips.id, tripId))
+    .limit(1)
   if (!trip) throw new HttpError(404, 'not_found', '여행을 찾을 수 없어요')
 
   // 이름표가 '나'인데 계정이 안 붙은 사람은 여행을 만든 사람이다 — 인터뷰에 직접 답한 사람이므로
   // 연결하고 filledBySelf도 true로 본다. 만든 사람이 이미 다른 여행자에 연결돼 있으면 건드리지 않는다.
+  // 만든 사람이 그룹을 떠났으면 연결하지 않는다 — 구성원이 아닌 계정을 새로 연결하면 replaceTravelers가
+  // 400을 던져 인터뷰 결과가 통째로 날아간다. 그때 '나'는 연결 없이(filledBySelf도 false) 저장한다.
+  const creatorIsMember = (await findMembership(trip.groupId, trip.createdBy, db)) !== null
   const alreadyLinked = travelers.some(one => one.userId === trip.createdBy)
-  const me = alreadyLinked ? undefined : travelers.find(one => one.label === '나' && !one.userId)
+  const me =
+    creatorIsMember && !alreadyLinked ? travelers.find(one => one.label === '나' && !one.userId) : undefined
 
   const prepared = me ? travelers.map(one => (one.id === me.id ? { ...one, userId: trip.createdBy } : one)) : travelers
 

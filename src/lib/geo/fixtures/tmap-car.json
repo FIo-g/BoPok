@@ -1,0 +1,30 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [127.38, 36.36] },
+      "properties": { "totalDistance": 4200, "totalTime": 780, "totalFare": 0, "taxiFare": 7200, "index": 0, "pointIndex": 1, "name": "출발지", "pointType": "S" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "LineString", "coordinates": [[127.38, 36.36], [127.379, 36.361], [127.381, 36.3615]] },
+      "properties": { "index": 1, "lineIndex": 1, "name": "가상로", "distance": 2500, "time": 450, "roadType": 0, "facilityType": 0 }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [127.381, 36.3615] },
+      "properties": { "index": 2, "pointIndex": 2, "name": "", "turnType": 12, "pointType": "N" }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "LineString", "coordinates": [[127.381, 36.3615], [127.382, 36.362]] },
+      "properties": { "index": 3, "lineIndex": 2, "name": "가상로", "distance": 1700, "time": 330, "roadType": 0, "facilityType": 0 }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [127.382, 36.362] },
+      "properties": { "index": 4, "pointIndex": 3, "name": "도착지", "pointType": "E" }
+    }
+  ]
+}

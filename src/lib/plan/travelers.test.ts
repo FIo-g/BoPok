@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Traveler } from '@/lib/contracts'
-import { canClaim, claimTraveler, markSelfFilled, myTraveler, releaseTraveler } from './travelers'
+import { canClaim, claimTraveler, conditionChanged, markSelfFilled, myTraveler, releaseTraveler, sameValue } from './travelers'
 
 const t = (id: string, extra: Partial<Traveler> = {}): Traveler => ({
   id, label: id, pace: 'unknown', mobilityAid: false, isParent: false, condition: {}, filledBySelf: false, ...extra,
@@ -53,5 +53,38 @@ describe('본인이 직접 입력(filledBySelf)', () => {
   it('한 번 본인 입력이 된 것은 유지한다', () => {
     const done = [{ ...before[0], filledBySelf: true }, before[1]]
     expect(markSelfFilled(done, done, 'u-mom')[0].filledBySelf).toBe(true)
+  })
+
+  it('걷기 조건의 키 순서만 달라진 것은 바뀐 것으로 보지 않는다', () => {
+    const original = [t('mom', { userId: 'u-mom', condition: { continuousMin: 20, dayMin: 90 } })]
+    const reordered = [{ ...original[0], condition: { dayMin: 90, continuousMin: 20 } }]
+    expect(markSelfFilled(original, reordered, 'u-mom')[0].filledBySelf).toBe(false)
+  })
+})
+
+describe('값 비교(sameValue)', () => {
+  it('키 순서가 달라도 같은 값이다 (안쪽 객체도)', () => {
+    expect(sameValue({ a: 1, b: 2 }, { b: 2, a: 1 })).toBe(true)
+    expect(sameValue({ a: { x: 1, y: 2 } }, { a: { y: 2, x: 1 } })).toBe(true)
+  })
+
+  it('없는 칸은 undefined·null·생략이 모두 같다', () => {
+    expect(sameValue(undefined, null)).toBe(true)
+    expect(sameValue({ a: undefined }, {})).toBe(true)
+  })
+
+  it('값이 다르면 다르다 (0·false 는 "없음"이 아니다, 배열은 순서가 있다)', () => {
+    expect(sameValue({ continuousMin: 20 }, { continuousMin: 30 })).toBe(false)
+    expect(sameValue(0, undefined)).toBe(false)
+    expect(sameValue(false, undefined)).toBe(false)
+    expect(sameValue([1, 2], [2, 1])).toBe(false)
+  })
+
+  it('conditionChanged: 조건 칸만 본다 (이름표·계정 연결은 보지 않는다)', () => {
+    const before = t('mom', { userId: 'u-mom', age: 68, condition: { continuousMin: 20, dayMin: 90 } })
+    expect(conditionChanged(before, { ...before, label: '어머니', userId: undefined })).toBe(false)
+    expect(conditionChanged(before, { ...before, condition: { dayMin: 90, continuousMin: 20 } })).toBe(false)
+    expect(conditionChanged(before, { ...before, age: 69 })).toBe(true)
+    expect(conditionChanged(before, { ...before, condition: { continuousMin: 25, dayMin: 90 } })).toBe(true)
   })
 })

@@ -87,7 +87,7 @@ function LegRow({ result, leg, selectedId, onSelect, nextStop, editing }: { resu
         {leg?.fareKrw !== undefined && <span> · 택시 요금 약 {leg.fareKrw.toLocaleString()}원</span>}
         {result.mode === 'walk' && <span> · {stairsText(result.stairsStatus, leg?.stairsCount)}</span>}
         {result.mode === 'walk' && <span className="ml-2"><StatusBadge warn={result.status === 'warn'} info={result.stairsStatus === 'unknown'} /></span>}
-        {missing && (isLegModeSupported(result.legKey) ? <span className="block text-sm text-warn">이 구간의 경로를 아직 받지 못했어요</span> : <span className="block text-sm text-muted">{TRANSPORT_TEXT[result.mode]} 이동 시간은 아직 계산하지 못해요 (보행 경로만 지원해요)</span>)}
+        {missing && (isLegModeSupported(result.legKey) ? <span className="block text-sm text-warn">이 구간의 경로를 아직 받지 못했어요</span> : <span className="block text-sm text-muted">{TRANSPORT_TEXT[result.mode]} 이동 시간은 아직 계산하지 못해요 (이 이동수단의 경로는 아직 지원하지 않아요)</span>)}
         {leg && <span className="block text-sm text-muted">{sourceLine(leg.source, leg.checkedAt)}</span>}
       </button>
       {editing && (

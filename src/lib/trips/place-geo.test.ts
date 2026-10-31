@@ -1,14 +1,15 @@
-// 진짜 장소·경로 연결의 규칙만 본다: 걷는 구간만 묻고, 한 번에 20개까지 나눠 묻고,
+// 진짜 장소·경로 연결의 규칙만 본다: 버스를 뺀 구간만 묻고, 한 번에 20개까지 나눠 묻고,
 // 실패해도 던지지 않는다. 이동주의 src/lib/geo는 가짜로 바꿔 끼워 TMAP을 부르지 않는다.
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { Leg, LegRequest } from '@/lib/contracts'
+import type { Leg, LegRequest, PlaceDetail } from '@/lib/contracts'
 import { legKey } from '@/lib/contracts'
 import { GeoError } from '@/lib/geo/errors'
 
 const getLegsPartial = vi.fn()
+const getPlaceDetails = vi.fn<(ids: string[]) => Promise<PlaceDetail[]>>(async () => [])
 
 vi.mock('@/lib/geo/legs', () => ({ getLegsPartial: (requests: LegRequest[]) => getLegsPartial(requests) }))
-vi.mock('@/lib/places', () => ({ getPlaceDetails: vi.fn(async () => []) }))
+vi.mock('@/lib/places', () => ({ getPlaceDetails: (ids: string[]) => getPlaceDetails(ids) }))
 
 const { getPlaceGeoDeps } = await import('./place-geo')
 
@@ -24,6 +25,12 @@ const carRequest: LegRequest = {
   from: { coord: [127.38, 36.35] },
   to: { coord: [127.39, 36.33] },
   mode: 'car',
+}
+
+const busRequest: LegRequest = {
+  from: { coord: [127.38, 36.35] },
+  to: { coord: [127.39, 36.33] },
+  mode: 'bus',
 }
 
 function okLeg(request: LegRequest): Leg {
@@ -43,21 +50,41 @@ beforeEach(() => {
     legs: requests.map(okLeg),
     failed: [],
   }))
+  getPlaceDetails.mockReset()
+  getPlaceDetails.mockImplementation(async () => [])
+})
+
+describe('getPlaceDetails (진짜 연결)', () => {
+  it('형식이 틀린 id와 중복 id는 빼고 묻는다', async () => {
+    await getPlaceGeoDeps().getPlaceDetails(['daejeon-1', 'daejeon-1', 'bad id!', '', 'daejeon-2'])
+
+    expect(getPlaceDetails).toHaveBeenCalledTimes(1)
+    expect(getPlaceDetails.mock.calls[0][0]).toEqual(['daejeon-1', 'daejeon-2'])
+  })
+
+  it('101개면 100개와 1개로 나눠 두 번 묻는다 (places가 한 번에 100개까지다)', async () => {
+    const ids = Array.from({ length: 101 }, (_, index) => `place-${index}`)
+
+    await getPlaceGeoDeps().getPlaceDetails(ids)
+
+    expect(getPlaceDetails).toHaveBeenCalledTimes(2)
+    expect(getPlaceDetails.mock.calls[0][0]).toHaveLength(100)
+    expect(getPlaceDetails.mock.calls[1][0]).toHaveLength(1)
+  })
 })
 
 describe('getLegs (진짜 연결)', () => {
-  it('걷는 구간만 묻는다 — 자가용은 아예 보내지 않는다', async () => {
-    const legs = await getPlaceGeoDeps().getLegs([walkRequest(0), carRequest, walkRequest(1)])
+  it('걷기와 자동차를 함께 묻고 둘 다 결과에 넣는다 (버스만 뺀다)', async () => {
+    const legs = await getPlaceGeoDeps().getLegs([walkRequest(0), carRequest])
 
     expect(getLegsPartial).toHaveBeenCalledTimes(1)
     const sent = getLegsPartial.mock.calls[0][0] as LegRequest[]
-    expect(sent).toHaveLength(2)
-    expect(sent.every(request => request.mode === 'walk')).toBe(true)
-    expect(legs).toHaveLength(2)
+    expect(sent.map(request => request.mode).sort()).toEqual(['car', 'walk'])
+    expect(legs.map(leg => leg.key).sort()).toEqual([legKey(walkRequest(0)), legKey(carRequest)].sort())
   })
 
-  it('걷는 구간이 없으면 아예 부르지 않는다', async () => {
-    const legs = await getPlaceGeoDeps().getLegs([carRequest])
+  it('버스 구간만 있으면 아예 부르지 않는다 (geo가 아직 버스를 못 받는다)', async () => {
+    const legs = await getPlaceGeoDeps().getLegs([busRequest])
     expect(getLegsPartial).not.toHaveBeenCalled()
     expect(legs).toEqual([])
   })

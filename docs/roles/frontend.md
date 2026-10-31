@@ -30,6 +30,8 @@
 
 - 모든 API 호출은 `src/lib/api-client`에 모은다. 요청·응답 타입은 `src/lib/contracts`에서 가져온다.
 - `NEXT_PUBLIC_USE_MOCKS=1`이면 api-client가 `src/mocks`의 데이터를 돌려준다. 백엔드가 준비되기 전에도 모든 화면을 끝까지 만들 수 있게 한다.
+- 목업 본체(`mock-api` 등)는 켠 빌드에서만 `src/lib/api-client/lazy-mock.ts`가 동적으로 불러온다. 화면이 `@/mocks`에서 가져올 수 있는 것은 연습용 계정(`DEMO_EMAIL`, `DEMO_PASSWORD`)뿐이고, 끈 빌드에서는 빈 문자열이다. 그래서 끈 빌드의 클라이언트 번들(`.next/static`)에는 목업 데이터와 데모 비밀번호가 없다. 새 목업 파일을 화면에서 직접 가져오지 않는다.
+- 배포 때는 `NEXT_PUBLIC_USE_MOCKS`를 빈 값이나 `0`으로 **지정**한다. 값이 아예 없으면 Next가 빌드 때 값을 박지 않아 조건이 접히지 않고, 목업 코드가 번들에 남는다(동작은 맞다).
 
 ### 일정 화면 `/trips/[id]` (서비스의 중심, 오하연 시안 영상 기준)
 
@@ -105,10 +107,11 @@
 - `Trip`(제목·날짜·모드·이동수단·스타일·예산·**확정 버전·확정한 사람 이름**), `TripDetail`, `TripListItem`(최신·확정 버전 요약)
 - `VersionSummary`(stops 없는 버전 + **만든 사람 이름** `madeByName`) — 버전 선택 줄에 "누가 만들었는지"를 보여 주려고
 - 요청 본문: `CreateTripRequest`, `UpdateTripRequest`, `PutTravelersRequest`, `SaveVersionRequest`, `ConfirmRequest`, `ShareTextResponse`, `PlaceDetailsRequest`, `LegsRequest`
+- 크기 상한: 경로 요청 20개, 장소 상세 ID 100개(서버 검증과 같은 값), 여행자 20명(서버에 따로 상한이 없어 계약에서 정함). 여행 날짜(`YYYY-MM-DD`)는 달력에 있는 날짜만 받는다. 상한 값은 `trip-api.ts`의 `LEGS_REQUEST_MAX`, `PLACE_DETAILS_IDS_MAX`, `TRAVELERS_MAX`
 
 화면이 서버에 기대는 점 (서버 구현 때 확인 부탁):
 
 - 로그인 응답은 Better Auth 기본 모양(`{ user: { id, name, email } }`)이고, 세션이 없으면 `/api/auth/get-session`이 `null`을 준다
-- `POST /api/legs` 응답은 Leg[]이며 요청에 대한 응답은 leg.key로 짝을 맞춘다 (실패한 요청은 빠진다)
+- `POST /api/legs` 응답은 Leg[]이며 요청에 대한 응답은 leg.key로 짝을 맞춘다 (실패한 요청은 빠진다). 화면(`plan-cache.ensureLegs`)은 지원하는 이동수단만 한 번에, 서버 상한(20개)씩 나눠 보내고 응답에 없는 key는 실패로 본다. 하나도 못 받으면 서버가 오류 상태 코드를 주고, 그 묶음은 모두 실패로 본다
 - 여행자가 아직 없는 여행(붙여넣기 직후)에도 버전 저장이 되어야 하고, 이때 판정 요약은 `null`이다
 - 인터뷰가 `done`이 되면 서버(김태형)는 여행자만 저장한다. 날짜·이동수단·스타일·예산은 화면이 `filled`로 `PATCH /api/trips/:id`를 불러 저장한다
