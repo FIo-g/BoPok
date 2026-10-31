@@ -1,0 +1,22 @@
+{
+  "id": "art",
+  "name": "대전시립미술관",
+  "category": "미술관",
+  "styles": [
+    "문화·역사"
+  ],
+  "coord": [
+    127.385754,
+    36.36708
+  ],
+  "seated": false,
+  "indoor": true,
+  "address": "대전광역시 서구 둔산대로 155",
+  "phone": "042-270-7370",
+  "homepage": "https://www.daejeon.go.kr/dma/index.do",
+  "source": "https://www.daejeon.go.kr/dma/dmaContentsHtmlView.do?menuSeq=6079",
+  "checkedAt": "2026-10-31",
+  "confidence": "B",
+  "nodes": [],
+  "segments": []
+}

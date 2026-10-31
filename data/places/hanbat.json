@@ -1,0 +1,17 @@
+{
+  "id": "hanbat",
+  "name": "한밭수목원",
+  "category": "수목원",
+  "styles": ["자연·산책", "휴식·힐링"],
+  "coord": [127.387876, 36.365932],
+  "seated": false,
+  "indoor": false,
+  "address": "대전광역시 서구 둔산대로 169",
+  "phone": "042-270-8452",
+  "homepage": "https://www.daejeon.go.kr/gar/index.do",
+  "source": "https://www.daejeon.go.kr/gar/contentsHtmlView.do?menuSeq=8026",
+  "checkedAt": "2026-10-31",
+  "confidence": "B",
+  "nodes": [],
+  "segments": []
+}

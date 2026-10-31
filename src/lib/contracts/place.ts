@@ -51,3 +51,11 @@ export const PlaceDetailSchema = PlaceSummarySchema.extend({
   segments: z.array(PlaceSegmentSchema),
 })
 export type PlaceDetail = z.infer<typeof PlaceDetailSchema>
+// 프론트가 쓰는 기존 응답 모양을 유지하고, 서버 입력도 같은 계약에서 검사한다.
+export const PlaceIdInputSchema = z.string().trim().min(1).max(100).regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/)
+export const PlaceListQuerySchema = z.object({
+  q: z.string().trim().max(100).default(''),
+  styles: z.array(z.string().trim().min(1).max(30)).max(10).default([]),
+}).strict()
+export type PlaceListQuery = z.infer<typeof PlaceListQuerySchema>
+export const PlaceSummaryListSchema = z.array(PlaceSummarySchema)
