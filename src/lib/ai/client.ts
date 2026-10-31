@@ -70,7 +70,7 @@ export function providersFromEnv(env: Record<string, string | undefined> = proce
   if (opencodeKey && opencodeModel) {
     providers.push({
       name: 'opencode',
-      baseUrl: stripTrailingSlash(textOrDefault(env.OPENCODE_BASE_URL, 'https://opencode.ai/zen/v1')),
+      baseUrl: stripTrailingSlash(textOrDefault(env.OPENCODE_BASE_URL, 'https://opencode.ai/inference/go/openai/v1')),
       model: opencodeModel,
       apiKey: opencodeKey,
     })
@@ -128,12 +128,20 @@ async function askOnce(
   fetchLike: FetchLike,
   temperature: number,
   timeoutMs: number,
+  sessionId: string,
 ): Promise<string> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${provider.apiKey}`,
+    'User-Agent': 'bopok/1.0',
+  }
+  // opencode Go는 x-opencode-session이 없으면 400(MissingSessionID)으로 거절한다
+  if (provider.name === 'opencode') headers['x-opencode-session'] = sessionId
   let response: Response
   try {
     response = await fetchLike(`${provider.baseUrl}/chat/completions`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${provider.apiKey}` },
+      headers,
       body: JSON.stringify({
         model: provider.model,
         messages,
@@ -174,6 +182,8 @@ export async function callJson<T>(
   const now = deps?.now ?? Date.now
   const startedAt = now()
   const temperature = req.temperature ?? 0.2
+  // 한 번의 callJson(재시도 포함)은 같은 세션으로 묶는다
+  const sessionId = `bopok-${crypto.randomUUID()}`
 
   if (providers.length === 0) {
     throw new AiCallError('no_provider', '사용할 수 있는 AI 공급자가 환경 변수에 없어요')
@@ -193,7 +203,7 @@ export async function callJson<T>(
       let content: string
       try {
         // 각 요청 시간 초과는 timeoutMs와 남은 시간 중 작은 값으로 건다
-        content = await askOnce(provider, currentMessages, fetchLike, temperature, Math.min(timeoutMs, remainingMs))
+        content = await askOnce(provider, currentMessages, fetchLike, temperature, Math.min(timeoutMs, remainingMs), sessionId)
       } catch (error) {
         lastError = new AiCallError('provider_failed', error instanceof Error ? error.message : '공급자 호출 실패')
         console.error('[ai] 공급자 실패', provider.name, provider.model, lastError.message)

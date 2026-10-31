@@ -66,6 +66,20 @@ describe('callJson', () => {
     expect(calls.pop()?.url).toBe('http://opencode.test/v1/chat/completions')
   })
 
+  it('opencode에는 x-opencode-session을 보내고, 같은 호출의 재시도는 같은 세션을 쓴다', async () => {
+    const { fn, calls } = fakeFetch((_call, i) => (i === 0 ? okResponse('{"ok":"아니야"}') : okResponse('{"ok":true}')))
+    await callJson({ messages, schema }, { fetch: fn, providers: [opencode] })
+    const sessions = calls.map(call => (call.init.headers as Record<string, string>)['x-opencode-session'])
+    expect(sessions[0]).toMatch(/^bopok-/)
+    expect(sessions[1]).toBe(sessions[0])
+  })
+
+  it('upstage에는 x-opencode-session을 보내지 않는다', async () => {
+    const { fn, calls } = fakeFetch(() => okResponse('{"ok":true}'))
+    await callJson({ messages, schema }, { fetch: fn, providers: [upstage] })
+    expect(calls[0]!.init.headers).not.toHaveProperty('x-opencode-session')
+  })
+
   it('429면 바로 다음 공급자', async () => {
     const { fn, calls } = fakeFetch((_call, i) => (i === 0 ? statusResponse(429) : okResponse('{"ok":true}')))
     const result = await callJson({ messages, schema }, { fetch: fn, providers: [upstage, opencode] })
