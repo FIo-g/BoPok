@@ -1,7 +1,7 @@
 // 여행자 API 테스트. '본인이 직접 채웠는지(filledBySelf)'를 서버가 정하는 규칙(역할 문서)과
 // 통째로 저장할 때 순서가 지켜지는지를 고정한다.
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { TravelerSchema } from '@/lib/contracts'
+import { ApiErrorSchema, TravelerSchema } from '@/lib/contracts'
 import type { Traveler } from '@/lib/contracts'
 import { z } from 'zod'
 import type { TestDb } from '@/lib/db/test-db'
@@ -163,18 +163,19 @@ describe('PUT /api/trips/:id/travelers (통째로 저장)', () => {
     const mom = await signUp({ name: '엄마', email: 'mom@example.com' })
     await addMember(testDb.db, { groupId, userId: mom.userId, role: 'member', relation: '엄마' })
 
-    // 자녀가 먼저 엄마 칸을 만든다 → 아직 '엄마가 직접 답한' 것이 아니다
+    // 자녀가 먼저 엄마 칸을 만든다 (계정 연결 없이) → 아직 '엄마가 직접 답한' 것이 아니다
     const first = TravelerListSchema.parse(
       await readBody(
         await putTravelers(
-          putRequest(owner.cookie, [traveler({ id: 't1', label: '엄마', userId: mom.userId, isParent: true })]),
+          putRequest(owner.cookie, [traveler({ id: 't1', label: '엄마', isParent: true })]),
           routeParams({ id: tripId }),
         ),
       ),
     )
     expect(first[0].filledBySelf).toBe(false)
+    expect(first[0].userId).toBeUndefined()
 
-    // 엄마가 자기 계정으로 자기 칸을 저장한다 (화면의 여행자 편집은 PUT만 쓴다) → true
+    // 엄마가 '이 사람이 저예요'로 연결하고 자기 조건을 고쳐 저장한다 (화면은 PUT만 쓴다) → true
     const mine = TravelerListSchema.parse(
       await readBody(
         await putTravelers(
@@ -187,6 +188,7 @@ describe('PUT /api/trips/:id/travelers (통째로 저장)', () => {
     )
     expect(mine[0].filledBySelf).toBe(true)
     expect(mine[0].pace).toBe('slow')
+    expect(mine[0].userId).toBe(mom.userId)
   })
 
   it('자녀가 PUT으로 다시 저장해도 부모님의 기존 true는 그대로 유지된다', async () => {
@@ -231,6 +233,144 @@ describe('PUT /api/trips/:id/travelers (통째로 저장)', () => {
       travelers: Traveler[]
     }
     expect(detail.travelers).toEqual([])
+  })
+
+  it('한 계정을 두 사람에게 연결하면 400', async () => {
+    const { owner, tripId } = await tripWithOwner()
+
+    const response = await putTravelers(
+      putRequest(owner.cookie, [
+        traveler({ id: 't1', label: '나', userId: owner.userId }),
+        traveler({ id: 't2', label: '나(둘)', userId: owner.userId }),
+      ]),
+      routeParams({ id: tripId }),
+    )
+    expect(response.status).toBe(400)
+    expect(ApiErrorSchema.parse(await readBody(response)).error.message).toBe('한 계정은 한 사람과만 연결할 수 있어요')
+  })
+
+  it('남의 계정을 새로 연결하려 하면 400 (내 연결만 걸 수 있다)', async () => {
+    const { owner, groupId, tripId } = await tripWithOwner()
+    const mom = await signUp({ name: '엄마', email: 'mom@example.com' })
+    await addMember(testDb.db, { groupId, userId: mom.userId, role: 'member', relation: '엄마' })
+
+    // 엄마는 같은 그룹 구성원이지만, 연결은 엄마 본인만 걸 수 있다
+    const response = await putTravelers(
+      putRequest(owner.cookie, [traveler({ id: 't1', label: '엄마', userId: mom.userId })]),
+      routeParams({ id: tripId }),
+    )
+    expect(response.status).toBe(400)
+    expect(ApiErrorSchema.parse(await readBody(response)).error.message).toBe('내 계정만 연결할 수 있어요')
+  })
+
+  it('남의 연결은 몸체에서 빼거나 바꿔도 그대로 유지된다', async () => {
+    const { owner, groupId, tripId } = await tripWithOwner()
+    const mom = await signUp({ name: '엄마', email: 'mom@example.com' })
+    await addMember(testDb.db, { groupId, userId: mom.userId, role: 'member', relation: '엄마' })
+
+    // 엄마가 자기 칸에 연결한다
+    await putTravelers(
+      putRequest(mom.cookie, [traveler({ id: 't1', label: '엄마', userId: mom.userId })]),
+      routeParams({ id: tripId }),
+    )
+
+    // 자녀가 연결을 빼고 저장해도 엄마 연결은 남는다
+    const released = TravelerListSchema.parse(
+      await readBody(
+        await putTravelers(
+          putRequest(owner.cookie, [traveler({ id: 't1', label: '엄마' })]),
+          routeParams({ id: tripId }),
+        ),
+      ),
+    )
+    expect(released[0].userId).toBe(mom.userId)
+
+    // 자녀가 자기 계정으로 바꿔 보려 해도 엄마 연결이 그대로 남는다
+    // (400이 아니라 '기존 값 유지'다 — 화면이 남의 연결을 건드릴 수 없게 막혀 있어 오류로 볼 일이 아니다)
+    const stolen = TravelerListSchema.parse(
+      await readBody(
+        await putTravelers(
+          putRequest(owner.cookie, [traveler({ id: 't1', label: '엄마', userId: owner.userId })]),
+          routeParams({ id: tripId }),
+        ),
+      ),
+    )
+    expect(stolen[0].userId).toBe(mom.userId)
+  })
+
+  it('내 연결은 내가 풀 수 있다', async () => {
+    const { owner, tripId } = await tripWithOwner()
+    await putTravelers(
+      putRequest(owner.cookie, [traveler({ id: 't1', label: '나', userId: owner.userId })]),
+      routeParams({ id: tripId }),
+    )
+
+    const released = TravelerListSchema.parse(
+      await readBody(
+        await putTravelers(putRequest(owner.cookie, [traveler({ id: 't1', label: '나' })]), routeParams({ id: tripId })),
+      ),
+    )
+    expect(released[0].userId).toBeUndefined()
+  })
+
+  it('연결만 하고 조건이 그대로면 filledBySelf는 올라가지 않는다', async () => {
+    const { owner, groupId, tripId } = await tripWithOwner()
+    const mom = await signUp({ name: '엄마', email: 'mom@example.com' })
+    await addMember(testDb.db, { groupId, userId: mom.userId, role: 'member', relation: '엄마' })
+
+    // 자녀가 엄마 조건을 미리 적어 둔다 (조건 칸이 두 개 이상이어야 키 순서 문제까지 걸린다)
+    const mine = traveler({
+      id: 't1',
+      label: '엄마',
+      isParent: true,
+      age: 68,
+      heightCm: 158,
+      sex: 'female',
+      pace: 'slow',
+      condition: { continuousMin: 20, avoidStairs: true, restMin: 10 },
+    })
+    await putTravelers(putRequest(owner.cookie, [mine]), routeParams({ id: tripId }))
+
+    // 엄마가 연결만 하고 조건은 그대로 저장한다 → '직접 답했다'고 볼 수 없다
+    const claimed = TravelerListSchema.parse(
+      await readBody(
+        await putTravelers(
+          putRequest(mom.cookie, [{ ...mine, userId: mom.userId }]),
+          routeParams({ id: tripId }),
+        ),
+      ),
+    )
+    expect(claimed[0].userId).toBe(mom.userId)
+    expect(claimed[0].filledBySelf).toBe(false)
+
+    // 조건 한 칸을 실제로 바꾸면 true가 된다
+    const answered = TravelerListSchema.parse(
+      await readBody(
+        await putTravelers(
+          putRequest(mom.cookie, [{ ...mine, userId: mom.userId, condition: { ...mine.condition, continuousMin: 15 } }]),
+          routeParams({ id: tripId }),
+        ),
+      ),
+    )
+    expect(answered[0].filledBySelf).toBe(true)
+  })
+
+  it('이름표만 바꾸면 filledBySelf는 올라가지 않는다 (조건 칸이 아니다)', async () => {
+    const { owner, tripId } = await tripWithOwner()
+    await putTravelers(
+      putRequest(owner.cookie, [traveler({ id: 't1', label: '엄마', age: 68 })]),
+      routeParams({ id: tripId }),
+    )
+
+    const renamed = TravelerListSchema.parse(
+      await readBody(
+        await putTravelers(
+          putRequest(owner.cookie, [traveler({ id: 't1', label: '어머니', age: 68, userId: owner.userId })]),
+          routeParams({ id: tripId }),
+        ),
+      ),
+    )
+    expect(renamed[0].filledBySelf).toBe(false)
   })
 
   it('빈 목록은 400 (적어도 한 명은 있어야 한다)', async () => {

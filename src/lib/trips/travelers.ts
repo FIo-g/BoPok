@@ -37,19 +37,78 @@ export async function listTravelers(tripId: string, db: Db = getDb()): Promise<T
   return rows.map(toTraveler)
 }
 
-// '본인이 직접 채웠는지'는 서버가 정한다 (역할 문서 규칙). 몸체에 뭐가 와도 믿지 않는다 —
-// 그러지 않으면 누구나 '부모님이 직접 답했다'고 꾸밀 수 있고, 판정 근거가 거짓이 된다.
-function isSelf(travelerUserId: string | null | undefined, actorUserId: string | undefined): boolean {
-  return Boolean(actorUserId && travelerUserId && travelerUserId === actorUserId)
+// 계정 연결·'본인이 직접 채웠는지' 규칙. 화면(오하연 src/lib/plan/travelers.ts, PR #10)과 같은 규칙이고,
+// 몸체의 filledBySelf와 userId는 믿지 않는다 — 그러지 않으면 누구나 '부모님이 직접 답했다'고
+// 꾸밀 수 있고 판정 근거가 거짓이 된다.
+
+// 본인이 직접 채웠다고 볼 수 있는 칸. 이름표·부모님 여부·계정 연결은 '조건을 말한 것'이 아니라서 뺀다
+// (화면의 CONDITION_FIELDS와 같다).
+const CONDITION_FIELDS = ['age', 'heightCm', 'sex', 'pace', 'mobilityAid', 'condition'] as const
+
+// 키 순서를 맞춰 비교한다 — condition은 jsonb라 DB에서 키 순서가 바뀌어 돌아온다.
+// 순서만 다른 것을 '바뀌었다'로 보면 연결만 해도 filledBySelf가 올라가 버린다.
+function stable(value: unknown): string {
+  if (value === null || value === undefined) return 'null'
+  if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`
+  if (typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, item]) => item !== undefined)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${stable(item)}`).join(',')}}`
+  }
+  return JSON.stringify(value)
 }
 
-// 여행자에 계정을 연결할 때는 그 사람이 그 그룹 구성원이어야 한다 —
-// 아니면 그룹 밖 계정 id를 넣어 남의 이름을 여행에 끌어올 수 있다.
+const sameValue = (a: unknown, b: unknown) => stable(a) === stable(b)
+
+// 저장할 userId를 정한다. 화면 규칙("내 연결만 걸고 풀 수 있다")을 서버에서도 지킨다.
+function resolveUserId(args: {
+  incoming: Traveler
+  existing?: TravelerRow
+  actorUserId?: string
+}): string | null {
+  const existingUserId = args.existing?.userId ?? null
+  const incomingUserId = args.incoming.userId ?? null
+
+  // 저장하는 사람이 없는 길(AI 인터뷰)에서는 연결을 걸거나 풀지 않는다 — '내 연결만' 규칙에
+  // 해당하는 '나'가 없기 때문이다. 보내온 연결은 400으로 막지 않고 버리되 로그에 남긴다
+  // (일정·여행자 저장 자체를 실패시키면 인터뷰 결과가 통째로 날아간다).
+  if (!args.actorUserId) {
+    if (incomingUserId !== existingUserId) {
+      console.error('[acct] 저장하는 사람이 없어 여행자 계정 연결을 건너뜀', {
+        travelerId: args.incoming.id,
+        incomingUserId,
+      })
+    }
+    return existingUserId
+  }
+
+  if (incomingUserId === existingUserId) return existingUserId
+
+  // 남의 연결은 그 본인만 풀거나 바꿀 수 있다 — 남이 몸체에서 빼도 기존 값을 지킨다.
+  if (existingUserId !== null && existingUserId !== args.actorUserId) return existingUserId
+
+  // 새로 거는 연결은 내 계정만.
+  if (incomingUserId !== null && incomingUserId !== args.actorUserId) {
+    throw new HttpError(400, 'invalid_request', '내 계정만 연결할 수 있어요')
+  }
+  return incomingUserId
+}
+
+// 한 계정은 한 여행에서 한 사람과만 연결된다 (화면 목업과 같은 문구).
+function assertOneTravelerPerAccount(userIds: (string | null)[]): void {
+  const linked = userIds.filter((id): id is string => id !== null)
+  if (new Set(linked).size !== linked.length) {
+    throw new HttpError(400, 'invalid_request', '한 계정은 한 사람과만 연결할 수 있어요')
+  }
+}
+
+// 연결하는 계정은 그 그룹 구성원이어야 한다 — 아니면 그룹 밖 계정을 여행에 끌어올 수 있다.
 async function assertLinkedUsersAreMembers(
-  args: { groupId: string; travelers: Traveler[] },
+  args: { groupId: string; userIds: (string | null)[] },
   db: Db,
 ): Promise<void> {
-  const userIds = [...new Set(args.travelers.map(one => one.userId).filter((id): id is string => Boolean(id)))]
+  const userIds = [...new Set(args.userIds.filter((id): id is string => id !== null))]
   if (userIds.length === 0) return
 
   const rows = await db
@@ -59,51 +118,81 @@ async function assertLinkedUsersAreMembers(
   const members = new Set(rows.map(row => row.userId))
 
   if (userIds.some(id => !members.has(id))) {
-    throw new HttpError(400, 'invalid_request', '그룹 구성원이 아닌 계정은 여행자와 연결할 수 없어요')
+    throw new HttpError(400, 'invalid_request', '이 그룹의 구성원이 아닌 계정은 연결할 수 없어요')
   }
+}
+
+// 연결된 본인이 걷기 조건을 실제로 바꿨거나 새로 만든 여행자일 때만 true.
+// 연결만 하고 조건이 그대로면 기존 값을 유지하고, 한 번 true면 계속 true다
+// (화면의 markSelfFilled와 같은 규칙).
+function nextFilledBySelf(args: {
+  incoming: Traveler
+  existing?: TravelerRow
+  userId: string | null
+  actorUserId?: string
+  selfAnswered: boolean
+}): boolean {
+  const was = args.existing?.filledBySelf ?? false
+  if (was) return true
+  if (args.selfAnswered) return true
+  if (!args.actorUserId || args.userId !== args.actorUserId) return was
+  if (!args.existing) return true // 새로 만든 여행자
+  return CONDITION_FIELDS.some(field => !sameValue(args.existing?.[field], args.incoming[field])) ? true : was
 }
 
 // PUT /api/trips/:id/travelers — 목록을 통째로 바꾼다. 받은 순서를 sort_order에 적어 그대로 돌려준다.
 // db.transaction()은 쓸 수 없어서(Neon HTTP) '다 지우고 다시 넣기' 두 문장이다.
 // 사이에 서버가 죽으면 여행자가 비는 드문 위험이 있다 — MVP에서는 받아들인다.
 export async function replaceTravelers(
-  args: { tripId: string; travelers: Traveler[]; actorUserId?: string },
+  args: {
+    tripId: string
+    travelers: Traveler[]
+    actorUserId?: string
+    // AI 인터뷰에서 '만든 사람이 직접 답한' 여행자 id (saveTravelers가 넘긴다)
+    selfAnsweredIds?: string[]
+  },
   db: Db = getDb(),
 ): Promise<Traveler[]> {
   const [trip] = await db.select({ groupId: trips.groupId }).from(trips).where(eq(trips.id, args.tripId)).limit(1)
   if (!trip) throw new HttpError(404, 'not_found', '여행을 찾을 수 없어요')
 
-  await assertLinkedUsersAreMembers({ groupId: trip.groupId, travelers: args.travelers }, db)
+  // 지금 저장된 모습 — 연결과 filledBySelf를 지키는 기준이 된다 (몸체 값은 믿지 않는다).
+  const before = await db.select().from(tripTravelers).where(eq(tripTravelers.tripId, args.tripId))
+  const beforeById = new Map(before.map(row => [row.id, row]))
+  const selfAnswered = new Set(args.selfAnsweredIds ?? [])
 
-  // 이미 있던 여행자의 filledBySelf를 기억해 둔다 — 몸체 값은 믿지 않는다.
-  // 규칙: 저장하는 사람이 그 여행자와 연결된 본인이면 true, 아니면 기존 값을 그대로 둔다
-  // (새 여행자는 false). 화면의 여행자 편집은 PATCH가 아니라 PUT만 쓰기 때문에,
-  // 부모님이 자기 계정으로 자기 칸을 저장하는 길이 여기여야 한다.
-  const before = await db
-    .select({ id: tripTravelers.id, filledBySelf: tripTravelers.filledBySelf })
-    .from(tripTravelers)
-    .where(eq(tripTravelers.tripId, args.tripId))
-  const wasFilledBySelf = new Map(before.map(row => [row.id, row.filledBySelf]))
+  const rows = args.travelers.map((incoming, index) => {
+    const existing = beforeById.get(incoming.id)
+    const userId = resolveUserId({ incoming, existing, actorUserId: args.actorUserId })
+    return {
+      id: incoming.id,
+      tripId: args.tripId,
+      userId,
+      label: incoming.label,
+      age: incoming.age ?? null,
+      heightCm: incoming.heightCm ?? null,
+      sex: incoming.sex ?? null,
+      pace: incoming.pace,
+      mobilityAid: incoming.mobilityAid,
+      isParent: incoming.isParent,
+      condition: incoming.condition,
+      filledBySelf: nextFilledBySelf({
+        incoming,
+        existing,
+        userId,
+        actorUserId: args.actorUserId,
+        selfAnswered: selfAnswered.has(incoming.id),
+      }),
+      sortOrder: index,
+    }
+  })
+
+  const userIds = rows.map(row => row.userId)
+  assertOneTravelerPerAccount(userIds)
+  await assertLinkedUsersAreMembers({ groupId: trip.groupId, userIds }, db)
 
   await db.delete(tripTravelers).where(eq(tripTravelers.tripId, args.tripId))
-
-  await db.insert(tripTravelers).values(
-    args.travelers.map((traveler, index) => ({
-      id: traveler.id,
-      tripId: args.tripId,
-      userId: traveler.userId ?? null,
-      label: traveler.label,
-      age: traveler.age ?? null,
-      heightCm: traveler.heightCm ?? null,
-      sex: traveler.sex ?? null,
-      pace: traveler.pace,
-      mobilityAid: traveler.mobilityAid,
-      isParent: traveler.isParent,
-      condition: traveler.condition,
-      filledBySelf: isSelf(traveler.userId, args.actorUserId) || (wasFilledBySelf.get(traveler.id) ?? false),
-      sortOrder: index,
-    })),
-  )
+  await db.insert(tripTravelers).values(rows)
 
   return listTravelers(args.tripId, db)
 }
@@ -111,7 +200,33 @@ export async function replaceTravelers(
 // 김태형의 src/lib/ai/deps.ts가 기다리는 모양 그대로 — 인터뷰가 채운 여행자를 저장한다.
 // AI 쪽에는 '고치는 사람'이 없으므로 filledBySelf는 받은 값을 그대로 쓴다.
 export async function saveTravelers(tripId: string, travelers: Traveler[]): Promise<void> {
-  await replaceTravelers({ tripId, travelers })
+  const db = getDb()
+  const [trip] = await db.select({ createdBy: trips.createdBy }).from(trips).where(eq(trips.id, tripId)).limit(1)
+  if (!trip) throw new HttpError(404, 'not_found', '여행을 찾을 수 없어요')
+
+  // 이름표가 '나'인데 계정이 안 붙은 사람은 여행을 만든 사람이다 — 인터뷰에 직접 답한 사람이므로
+  // 연결하고 filledBySelf도 true로 본다. 만든 사람이 이미 다른 여행자에 연결돼 있으면 건드리지 않는다.
+  const alreadyLinked = travelers.some(one => one.userId === trip.createdBy)
+  const me = alreadyLinked ? undefined : travelers.find(one => one.label === '나' && !one.userId)
+
+  const prepared = me ? travelers.map(one => (one.id === me.id ? { ...one, userId: trip.createdBy } : one)) : travelers
+
+  await replaceTravelers(
+    {
+      tripId,
+      travelers: prepared,
+      actorUserId: me ? trip.createdBy : undefined,
+      selfAnsweredIds: me ? [me.id] : [],
+    },
+    db,
+  )
+}
+
+// PATCH는 3단계에서 정한 규칙을 그대로 쓴다: 고치는 사람이 그 여행자와 연결된 본인이면 true,
+// 아니면 false. 화면(TravelersScreen)은 저장할 때 PUT만 쓰므로 이 길로는 거의 들어오지 않는다.
+// PUT의 '한 번 true면 계속 true'와는 다르다 — 바꾸려면 팀에 말하고 역할 문서를 고친다.
+function isSelf(travelerUserId: string | null | undefined, actorUserId: string | undefined): boolean {
+  return Boolean(actorUserId && travelerUserId && travelerUserId === actorUserId)
 }
 
 // PATCH /api/trips/:id/travelers/:tid — 보낸 칸만 바꾼다.

@@ -102,12 +102,65 @@ describe('saveTravelers (AI 인터뷰가 채운 여행자 저장)', () => {
     expect(context.travelers[0].filledBySelf).toBe(false)
   })
 
-  it('그룹 밖 계정을 연결하려 하면 막는다', async () => {
+  it("이름표가 '나'이면 여행을 만든 사람을 연결하고 filledBySelf를 true로 한다", async () => {
+    const { owner, tripId } = await tripFor()
+
+    // 인터뷰에 답한 사람은 여행을 만든 사람이다
+    await saveTravelers(tripId, [
+      traveler({ id: 't1', label: '엄마', isParent: true, age: 68 }),
+      traveler({ id: 't2', label: '나', pace: 'normal' }),
+    ])
+
+    const context = await getTripContext(tripId)
+    const me = context.travelers.find(one => one.label === '나')
+    expect(me?.userId).toBe(owner.userId)
+    expect(me?.filledBySelf).toBe(true)
+    // 다른 사람은 연결되지 않고 filledBySelf도 false다
+    const mom = context.travelers.find(one => one.label === '엄마')
+    expect(mom?.userId).toBeUndefined()
+    expect(mom?.filledBySelf).toBe(false)
+  })
+
+  it("'나'가 없으면 아무도 연결하지 않는다", async () => {
+    const { tripId } = await tripFor()
+    await saveTravelers(tripId, [traveler({ id: 't1', label: '엄마', isParent: true })])
+
+    const context = await getTripContext(tripId)
+    expect(context.travelers[0].userId).toBeUndefined()
+    expect(context.travelers[0].filledBySelf).toBe(false)
+  })
+
+  it('만든 사람이 이미 다른 여행자에 연결돼 있으면 "나"에 또 넣지 않는다', async () => {
+    const { owner, tripId } = await tripFor()
+    // 먼저 '아빠' 칸에 만든 사람이 연결돼 있다
+    await replaceTravelers({
+      tripId,
+      travelers: [traveler({ id: 't0', label: '아빠', userId: owner.userId })],
+      actorUserId: owner.userId,
+    })
+
+    await saveTravelers(tripId, [
+      traveler({ id: 't0', label: '아빠', userId: owner.userId }),
+      traveler({ id: 't2', label: '나' }),
+    ])
+
+    const context = await getTripContext(tripId)
+    expect(context.travelers.find(one => one.label === '아빠')?.userId).toBe(owner.userId)
+    // '나'는 연결되지 않는다 — 한 계정은 한 사람과만 연결된다
+    expect(context.travelers.find(one => one.label === '나')?.userId).toBeUndefined()
+  })
+
+  it('AI가 보낸 계정 연결은 걸지 않고 버린다 (로그만 남긴다)', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
     const { tripId } = await tripFor()
     const outsider = await signUp({ name: '남', email: 'outsider@example.com' })
 
-    await expect(
-      saveTravelers(tripId, [traveler({ id: 't1', label: '남', userId: outsider.userId })]),
-    ).rejects.toThrow('그룹 구성원이 아닌 계정')
+    // 인터뷰 결과를 통째로 날리지 않고 연결만 버린다 — '내 연결만 걸 수 있다'에서 '나'가 없는 길이다
+    await saveTravelers(tripId, [traveler({ id: 't1', label: '남', userId: outsider.userId })])
+
+    const context = await getTripContext(tripId)
+    expect(context.travelers[0].userId).toBeUndefined()
+    expect(logged).toHaveBeenCalled()
+    logged.mockRestore()
   })
 })
