@@ -9,6 +9,7 @@ import { mockExplain, mockGenerate, mockInterview, mockParseSchedule, mockRevise
 import { mockPlaceDetails, mockPlaces, toSummary } from './places'
 import { buildShareText } from './share-text'
 import { getDb, nextId, saveDb, type MockDb } from './store'
+import { replaceMockTravelers } from './travelers'
 
 const LATENCY_MS = 120
 
@@ -188,15 +189,12 @@ export const mockApi: Api = {
       return trip
     }),
     putTravelers: (tripId, travelers) => call(db => {
-      const { trip } = requireTrip(db, tripId)
-      // 서버 규칙: userId 는 이 그룹의 구성원일 때만 저장한다. 한 계정은 한 여행에서 한 사람과만 연결된다
-      const memberIds = new Set(db.members.filter(m => m.groupId === trip.groupId).map(m => m.userId))
-      const linked = travelers.flatMap(t => (t.userId ? [t.userId] : []))
-      if (linked.some(id => !memberIds.has(id))) fail(400, 'invalid_request', '이 그룹의 구성원이 아닌 계정은 연결할 수 없어요')
-      if (new Set(linked).size !== linked.length) fail(400, 'invalid_request', '한 계정은 한 사람과만 연결할 수 있어요')
-      db.travelers[tripId] = travelers
+      const { user } = requireTrip(db, tripId)
+      // 서버(src/lib/trips/travelers.ts)와 같은 규칙: 내 계정만 연결·해제하고, filledBySelf 는 화면이 보낸 값이 아니라 직접 계산한다
+      const saved = replaceMockTravelers({ before: db.travelers[tripId] ?? [], incoming: travelers, actorUserId: user.id })
+      db.travelers[tripId] = saved
       refreshSummaries(db, tripId)
-      return travelers
+      return saved
     }),
     patchTraveler: (tripId, travelerId, patch) => call(db => {
       const { user } = requireTrip(db, tripId)

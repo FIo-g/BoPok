@@ -6,7 +6,25 @@ import type { Traveler } from '@/lib/contracts'
 // 본인이 직접 채웠다고 볼 수 있는 칸. 이름표·부모님 여부·계정 연결은 "조건을 말한 것"이 아니라서 뺀다
 const CONDITION_FIELDS = ['age', 'heightCm', 'sex', 'pace', 'mobilityAid', 'condition'] as const
 
-const sameValue = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null)
+// 키 순서에 상관없이 같은 값인지 본다. condition 은 서버(jsonb)를 거치면 키 순서가 바뀌어 돌아오는데,
+// 순서만 다른 것을 "바뀌었다"로 보면 연결만 해도 본인 입력(filledBySelf)이 올라간다. 서버(src/lib/trips/travelers.ts 의 stable)와 같은 규칙이다.
+function stable(value: unknown): string {
+  if (value === null || value === undefined) return 'null'
+  if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`
+  if (typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, item]) => item !== undefined)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${stable(item)}`).join(',')}}`
+  }
+  return JSON.stringify(value)
+}
+
+export const sameValue = (a: unknown, b: unknown): boolean => stable(a) === stable(b)
+
+// 걷기 조건 칸이 하나라도 달라졌는지. 목업 서버(src/mocks/travelers.ts)도 같은 비교를 쓴다
+export const conditionChanged = (before: Traveler, after: Traveler): boolean =>
+  CONDITION_FIELDS.some(field => !sameValue(before[field], after[field]))
 
 export const myTraveler = (travelers: Traveler[], myUserId: string): Traveler | undefined => travelers.find(t => t.userId === myUserId)
 
@@ -35,7 +53,7 @@ export function markSelfFilled(original: Traveler[], next: Traveler[], myUserId:
   return next.map(t => {
     if (t.userId !== myUserId || t.filledBySelf) return t
     const before = original.find(o => o.id === t.id)
-    const changed = !before || CONDITION_FIELDS.some(field => !sameValue(before[field], t[field]))
+    const changed = !before || conditionChanged(before, t)
     return changed ? { ...t, filledBySelf: true } : t
   })
 }

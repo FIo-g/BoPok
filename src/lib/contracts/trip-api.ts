@@ -8,7 +8,32 @@ import { TravelerSchema } from './traveler'
 import { StopSchema } from './trip'
 import { TripVersionSchema } from './version'
 
-const DateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD 형식이어야 합니다')
+// 서버가 받는 목록 크기 상한. 서버 검증과 같은 값이라 한쪽을 바꾸면 다른 쪽도 바꾼다 (경로·장소 상세는 trip-api.test.ts 가 같은지 확인한다).
+// - 경로: src/lib/geo/validation.ts 의 LegsInputSchema max(20)
+// - 장소 상세: src/lib/places/validation.ts 의 BoundedPlaceDetailsRequestSchema max(100)
+// - 여행자: 서버에 따로 상한이 없어 여기서 정한다. 인터뷰가 한 번에 만드는 최대 8명(src/lib/ai/interview.ts)보다 넉넉하게 둔다
+export const LEGS_REQUEST_MAX = 20
+export const PLACE_DETAILS_IDS_MAX = 100
+export const TRAVELERS_MAX = 20
+
+// 정규식만으로는 2026-02-31 같은 없는 날짜를 거르지 못한다 — 실제 달력을 확인한다 (ai.ts 의 InterviewFilledSchema.date 와 같은 방식).
+// ai.ts 의 도우미는 내보내지 않은 함수이고 다른 담당 파일이라 같은 계산을 여기에 둔다.
+function daysInMonth(year: number, month: number): number {
+  if (month === 2) return year % 400 === 0 || (year % 4 === 0 && year % 100 !== 0) ? 29 : 28
+  return month === 4 || month === 6 || month === 9 || month === 11 ? 30 : 31
+}
+
+function isRealDate(value: string): boolean {
+  const [year, month, day] = value.split('-').map(Number)
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return false
+  if (month < 1 || month > 12) return false
+  return day >= 1 && day <= daysInMonth(year, month)
+}
+
+const DateSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD 형식이어야 합니다')
+  .refine(isRealDate, { message: '없는 날짜예요' })
 
 // 인터뷰의 이동수단 답(InterviewFilled.transport)과 같은 3가지
 export const TripTransportSchema = z.enum(['car', 'transit', 'taxi'])
@@ -71,7 +96,7 @@ export const UpdateTripRequestSchema = z.object({
 export type UpdateTripRequest = z.infer<typeof UpdateTripRequestSchema>
 
 // PUT /api/trips/:id/travelers — 여행자 목록 통째로
-export const PutTravelersRequestSchema = z.object({ travelers: z.array(TravelerSchema).min(1) })
+export const PutTravelersRequestSchema = z.object({ travelers: z.array(TravelerSchema).min(1).max(TRAVELERS_MAX) })
 export type PutTravelersRequest = z.infer<typeof PutTravelersRequestSchema>
 
 // PATCH /api/trips/:id/travelers/:tid — 바꿀 칸만 보낸다 (id는 주소로 받으므로 몸체에서 뺀다).
@@ -100,9 +125,11 @@ export const ShareTextResponseSchema = z.object({ text: z.string() })
 export type ShareTextResponse = z.infer<typeof ShareTextResponseSchema>
 
 // 장소·경로 API (이동주). POST /api/places/details, POST /api/legs
-export const PlaceDetailsRequestSchema = z.object({ ids: z.array(z.string()) })
+export const PlaceDetailsRequestSchema = z.object({ ids: z.array(z.string()).max(PLACE_DETAILS_IDS_MAX) })
 export type PlaceDetailsRequest = z.infer<typeof PlaceDetailsRequestSchema>
 export const PlaceDetailsResponseSchema = z.array(PlaceDetailSchema)
-export const LegsRequestSchema = z.object({ requests: z.array(LegRequestSchema) })
+export type PlaceDetailsResponse = z.infer<typeof PlaceDetailsResponseSchema>
+export const LegsRequestSchema = z.object({ requests: z.array(LegRequestSchema).max(LEGS_REQUEST_MAX) })
 export type LegsRequest = z.infer<typeof LegsRequestSchema>
 export const LegsResponseSchema = z.array(LegSchema)
+export type LegsResponse = z.infer<typeof LegsResponseSchema>
