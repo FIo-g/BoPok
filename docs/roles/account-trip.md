@@ -66,6 +66,15 @@
 - AI 인터뷰(`saveTravelers`)는 이름표가 `'나'`이고 계정이 없는 여행자에 **여행을 만든 사람**(`trips.created_by`)을 연결하고 `filledBySelf`를 `true`로 둔다(그 사람이 직접 인터뷰에 답했다). 만든 사람이 이미 다른 여행자에 연결돼 있으면 건드리지 않는다.
 - `PATCH /api/trips/:id/travelers/:tid`도 **`PUT`과 같은 규칙**을 쓴다(같은 함수). 연결된 본인이 걷기 조건 칸을 실제로 바꿨을 때만 `true`, 아니면 기존 값 유지, 한 번 `true`면 계속 `true`. `userId`는 이 API로 바꿀 수 없으므로 기존 연결로 판단한다. (3단계의 '본인이 아니면 false'는 '한 번 true면 계속 true'와 어긋나서 10/31에 고쳤다.)
 
+6단계에서 정한 것 **[결정: 김경선 10/31]**:
+- `src/lib/trips/place-geo.ts`가 이동주의 진짜 함수를 쓴다: `getPlaceDetails` ← `@/lib/places`, 경로는 **`getLegsPartial`** ← `@/lib/geo/legs`(`src/lib/geo/index.ts`는 없다). `getLegs`는 성공이 0건이면 던지므로 쓰지 않는다.
+- **걷는 구간만** 경로를 묻고 **20개씩 나눠** 부른다(`@/lib/geo`의 입력 상한). 탈것·실패 구간은 넘기지 않아 엔진이 `missingLegs`('경로 정보 없음')로 처리한다 — 숫자를 지어내지 않는다.
+- **요약 계산이 실패해도 버전·여행자 저장은 반드시 성공한다.** `safeSummary`는 어떤 일이 있어도 던지지 않고 `null` + `console.error`를 남긴다. 요약은 먼저 계산해 **INSERT 한 번**에 넣는다(저장 뒤 UPDATE로 채우면 그 UPDATE가 실패해 '저장은 됐는데 오류'가 된다).
+- **요약 계산에 시간 제한 8초**(`SUMMARY_TIMEOUT_MS`). 버전을 저장할 때 TMAP을 실제로 부르므로 느린 날에 '일정 저장'이 한참 걸리면 안 된다. 넘기면 기다리지 않고 요약 없이 저장한다. 이미 시작한 TMAP 요청은 취소할 수 없지만 그 결과는 `leg_cache`에 남아 다음 계산에서 쓰인다. 테스트는 `setSummaryTimeoutForTests`로 짧게 바꿔 쓴다.
+- 여행자가 바뀌면(`PUT`·`PATCH` travelers, AI `saveTravelers`) `refreshSummaries`로 **그 여행의 모든 버전 요약을 다시 계산해 덮어쓴다**. 이 함수도 던지지 않는다. 여행자 목록을 인자로 받는 이유는 `travelers.ts`와 서로 import하는 고리를 막기 위해서다.
+- **여행자가 0명이면 judge를 부르지 않고 요약은 `null`** — 장소·경로도 묻지 않는다.
+- 테스트는 TMAP을 부르지 않는다: `setPlaceGeoDepsForTests`로 가짜 장소·경로를 끼우고, `TMAP_APP_KEY`를 빈 값으로 둬 이중으로 막는다.
+
 7단계에서 정한 것 **[결정: 김경선 10/31]**:
 - `GET /api/trips/:id/share-text`는 **확정된 버전**으로 글을 만든다. 확정 전이면 **404 "확정된 일정이 아직 없어요"**(목업과 같은 코드·문구).
 - 글 형식은 화면 목업(`src/mocks/share-text.ts`)을 그대로 따른다: 머리말, 장소 순서·시간·예약, 장소별 걷는 시간(추정치), 쉼터 이름·종류(실내/야외), 탈것 구간, 하루 요약, 연락처, "출발 전 운영 여부를 꼭 확인하세요".
