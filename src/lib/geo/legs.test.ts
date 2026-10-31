@@ -14,7 +14,7 @@ import { requiredLegs } from '@/lib/engine/required-legs'
 import { createLegCache, LEG_CACHE_TTL_MS } from './cache'
 import { GeoError } from './errors'
 import fixture from './fixtures/tmap-walk.json'
-import { createLegService, getLegs } from './legs'
+import { createLegService, getLegs, getLegsPartial } from './legs'
 import { parseWalkingRoute } from './tmap'
 import { TMAP_PEDESTRIAN_URL } from './validation'
 
@@ -147,10 +147,26 @@ describe('getLegs와 실제 메모리 leg_cache', () => {
     expect(routeMock).toHaveBeenCalledTimes(2)
   })
 
-  it('배치 일부가 실패하면 부분 성공 배열을 돌려주지 않고 이미 구한 캐시만 유지한다', async () => {
+  it('배치 일부가 실패하면 받은 경로만 돌려주고 실패한 항목은 failed에 적으며 성공한 것만 캐시에 저장한다', async () => {
     const other: LegRequest = { from: request.to, to: request.from, mode: 'walk' }
     const service = createLegService({ cache, route: vi.fn().mockResolvedValueOnce(route).mockRejectedValueOnce(new GeoError('upstream', '목업 실패')) })
-    await expect(service([request, other])).rejects.toMatchObject({ kind: 'upstream' })
+    const outcome = await service.partial([request, other])
+    expect(outcome.legs.map(leg => leg.key)).toEqual([legKey(request)])
+    expect(outcome.failed).toEqual([{ key: legKey(other), error: expect.objectContaining({ kind: 'upstream' }) }])
+    expect((await db.select().from(legCache)).map(row => row.key)).toEqual([legKey(request)])
+  })
+
+  it('보행 1 + 자동차 1 + 캐시 없음 1이 섞이면 보행 1개만 결과에 넣고 나머지는 실패로 표시한다', async () => {
+    const uncached: LegRequest = { from: request.to, to: request.from, mode: 'walk' }
+    const car: LegRequest = { ...request, mode: 'car' }
+    await getLegs([request]) // 보행 1: 캐시에 저장
+    vi.stubEnv('TMAP_APP_KEY', '') // 캐시 없는 보행은 TMAP을 부를 수 없다
+    fetchMock.mockClear()
+    const outcome = await getLegsPartial([request, car, uncached])
+    expect(outcome.legs.map(leg => leg.key)).toEqual([legKey(request)])
+    expect(outcome.failed.map(item => [item.key, item.error.kind])).toEqual([[legKey(car), 'unsupported_mode'], [legKey(uncached), 'missing_key']])
+    expect(await getLegs([request, car, uncached])).toHaveLength(1)
+    expect(fetchMock).not.toHaveBeenCalled()
     expect((await db.select().from(legCache)).map(row => row.key)).toEqual([legKey(request)])
   })
 
@@ -184,13 +200,24 @@ describe('getLegs와 실제 메모리 leg_cache', () => {
     expect(leg.key).not.toContain('entrance')
   })
 
-  it('빈 요청은 DB·키·외부 호출이 필요 없고, 미지원 수단은 배치 전체를 호출 전에 거부한다', async () => {
+  it('빈 요청과 미지원 수단만 있는 요청은 DB·키·외부 호출이 필요 없다', async () => {
     state.db = null
     expect(await getLegs([])).toEqual([])
     for (const mode of ['car', 'taxi', 'bus'] as const) {
-      await expect(getLegs([request, { ...request, mode }])).rejects.toMatchObject({ kind: 'unsupported_mode' })
+      const unsupported: LegRequest = { ...request, mode }
+      await expect(getLegs([unsupported])).rejects.toMatchObject({ kind: 'unsupported_mode' })
+      expect(await getLegsPartial([unsupported])).toEqual({ legs: [], failed: [{ key: legKey(unsupported), error: expect.objectContaining({ kind: 'unsupported_mode' }) }] })
     }
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('하나도 못 받으면 첫 실패를 던지고, DB 저장 실패 같은 내부 오류는 항목 실패로 숨기지 않는다', async () => {
+    const other: LegRequest = { from: request.to, to: request.from, mode: 'walk' }
+    const failing = createLegService({ cache, route: vi.fn().mockRejectedValue(new GeoError('upstream', '목업 실패')) })
+    await expect(failing([{ ...request, mode: 'car' }, request, other])).rejects.toMatchObject({ kind: 'unsupported_mode' })
+    await expect(failing([request, other])).rejects.toMatchObject({ kind: 'upstream' })
+    const broken = createLegService({ cache, route: vi.fn().mockRejectedValue(new Error('내부 오류')) })
+    await expect(broken.partial([request])).rejects.toThrow('내부 오류')
   })
 })
 
@@ -228,6 +255,20 @@ describe('POST /api/legs', () => {
       const response = await POST(new Request('http://localhost/api/legs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body }))
       expect(response.status).toBe(400)
     }
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('섞인 배치는 200과 받은 경로만 돌려주고, 하나도 못 받을 때만 첫 실패의 상태 코드를 쓴다', async () => {
+    const uncached: LegRequest = { from: request.to, to: request.from, mode: 'walk' }
+    await http({ requests: [request] })
+    vi.stubEnv('TMAP_APP_KEY', '')
+    fetchMock.mockClear()
+    const mixed = await http({ requests: [request, { ...request, mode: 'car' }, uncached] })
+    expect(mixed.status).toBe(200)
+    const legs = LegsResponseSchema.parse(await mixed.json())
+    expect(legs.map(leg => leg.key)).toEqual([legKey(request)])
+    expect((await http({ requests: [{ ...request, mode: 'car' }, uncached] })).status).toBe(422)
+    expect((await http({ requests: [uncached, { ...request, mode: 'car' }] })).status).toBe(503)
     expect(fetchMock).not.toHaveBeenCalled()
   })
 

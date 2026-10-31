@@ -66,6 +66,7 @@ const first = walkRequests[0] ? byKey[legKey(walkRequests[0])] : undefined
 
 `POST /api/legs` 본문은 기존 `LegsRequestSchema`의 `{ requests: LegRequest[] }`,
 성공 응답은 기존 `LegsResponseSchema`의 `Leg[]`다. 응답을 객체나 성공·실패 묶음으로 바꾸지 않는다.
+일부만 실패하면 받은 경로만 담고 실패한 요청은 뺀다. 응답에 key가 없는 요청이 실패한 것이며, 요청과 응답은 순서가 아니라 leg.key로 짝을 맞춘다.
 빈 요청은 200과 `[]`다. 최대 20개 요청·16 KiB JSON 본문을 허용한다.
 좌표는 `[경도, 위도]`, 선택 ID는 영문·숫자로 시작하는 영문·숫자·밑줄·하이픈(최대 100자)이다.
 알 수 없는 필드, 좌표 범위 위반, 잘못된 이동수단은 400이다.
@@ -146,17 +147,14 @@ Remove-Variable session
 | 400 | `invalid_request` | 잘못된 입력·JSON·요청 수·본문 크기 |
 | 401 | `unauthorized` | 미로그인 |
 | 415 | `invalid_request` | JSON이 아닌 POST |
-| 422 | `invalid_request` | `car`, `taxi`, `bus` 미지원. 캐시 유무와 관계없이 거절 |
-| 503 | `internal_error` | 캐시 미스이며 서버 `TMAP_APP_KEY` 누락 |
+| 422 | `invalid_request` | 요청한 경로를 하나도 받지 못했고 첫 실패가 car/taxi/bus 미지원 |
+| 503 | `internal_error` | 요청한 경로를 하나도 받지 못했고 첫 실패가 캐시 미스+서버 TMAP_APP_KEY 누락 |
 | 502 | `external_api_failed` | 외부 HTTP·통신·JSON·경로 응답 검증 실패 |
 | 504 | `external_api_failed` | TMAP 요청 또는 본문 수신이 8초 초과 |
 | 500 | `internal_error` | 인증 확인·DB 읽기/저장 등 내부 실패 |
 
 외부 오류 원문·헤더·키는 반환하거나 로그에 출력하지 않는다. 자동 재시도는 없다.
-실패할 때 직선거리·가짜 선·임시 소요 시간·부분 성공 배열을 반환하지 않는다.
-배치 도중 실패하면 전체 HTTP 요청이 실패하며, 앞서 성공한 경로의 캐시는 유지한다.
-프론트는 실패한 보행 경로를 비워 두고 엔진의 `missingLegs`/정보 부족 처리를 사용한다.
-미지원 탈것을 walk로 바꿔 다시 요청하거나 걷는 거리·시간을 만들어 채우면 안 된다.
+실패한 요청은 직선거리·가짜 선·임시 소요 시간으로 채우지 않고 응답에서 뺀다. 한 건이라도 받으면 200, 하나도 못 받으면 첫 실패의 상태 코드다. 성공한 경로의 캐시는 유지한다. 프론트는 key가 없는 보행 경로를 엔진의 missingLegs/정보 부족 처리로 보여 준다.
 
 ## 캐시와 중복
 
