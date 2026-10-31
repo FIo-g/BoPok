@@ -158,16 +158,48 @@ describe('PUT /api/trips/:id/travelers (통째로 저장)', () => {
     expect(saved[0].filledBySelf).toBe(false)
   })
 
-  it('이미 있던 여행자의 filledBySelf는 다시 저장해도 그대로 유지된다', async () => {
+  it('본인이 PUT으로 자기 정보를 다시 저장하면 filledBySelf가 true가 된다', async () => {
     const { owner, groupId, tripId } = await tripWithOwner()
     const mom = await signUp({ name: '엄마', email: 'mom@example.com' })
     await addMember(testDb.db, { groupId, userId: mom.userId, role: 'member', relation: '엄마' })
 
-    // 엄마가 자기 칸을 직접 채운다 → filledBySelf true
+    // 자녀가 먼저 엄마 칸을 만든다 → 아직 '엄마가 직접 답한' 것이 아니다
+    const first = TravelerListSchema.parse(
+      await readBody(
+        await putTravelers(
+          putRequest(owner.cookie, [traveler({ id: 't1', label: '엄마', userId: mom.userId, isParent: true })]),
+          routeParams({ id: tripId }),
+        ),
+      ),
+    )
+    expect(first[0].filledBySelf).toBe(false)
+
+    // 엄마가 자기 계정으로 자기 칸을 저장한다 (화면의 여행자 편집은 PUT만 쓴다) → true
+    const mine = TravelerListSchema.parse(
+      await readBody(
+        await putTravelers(
+          putRequest(mom.cookie, [
+            traveler({ id: 't1', label: '엄마', userId: mom.userId, isParent: true, pace: 'slow' }),
+          ]),
+          routeParams({ id: tripId }),
+        ),
+      ),
+    )
+    expect(mine[0].filledBySelf).toBe(true)
+    expect(mine[0].pace).toBe('slow')
+  })
+
+  it('자녀가 PUT으로 다시 저장해도 부모님의 기존 true는 그대로 유지된다', async () => {
+    const { owner, groupId, tripId } = await tripWithOwner()
+    const mom = await signUp({ name: '엄마', email: 'mom@example.com' })
+    await addMember(testDb.db, { groupId, userId: mom.userId, role: 'member', relation: '엄마' })
+
+    // 엄마가 자기 칸을 직접 채운다 → true
     await putTravelers(
       putRequest(mom.cookie, [traveler({ id: 't1', label: '엄마', userId: mom.userId })]),
       routeParams({ id: tripId }),
     )
+
     // 자녀가 목록을 다시 저장해도 '엄마가 직접 답했다'는 사실은 남는다
     const saved = TravelerListSchema.parse(
       await readBody(
@@ -180,7 +212,7 @@ describe('PUT /api/trips/:id/travelers (통째로 저장)', () => {
         ),
       ),
     )
-    expect(saved[0].filledBySelf).toBe(true) // 있던 사람은 그대로
+    expect(saved[0].filledBySelf).toBe(true) // 본인이 채운 사실은 남는다
     expect(saved[1].filledBySelf).toBe(true) // 새로 들어온 본인은 true
   })
 

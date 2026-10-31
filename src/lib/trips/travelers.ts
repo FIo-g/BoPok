@@ -75,8 +75,10 @@ export async function replaceTravelers(
 
   await assertLinkedUsersAreMembers({ groupId: trip.groupId, travelers: args.travelers }, db)
 
-  // 이미 있던 여행자의 filledBySelf를 기억해 둔다 — 몸체 값은 믿지 않고,
-  // 있던 사람은 그대로 두고 새로 들어온 사람만 '본인일 때' true로 한다.
+  // 이미 있던 여행자의 filledBySelf를 기억해 둔다 — 몸체 값은 믿지 않는다.
+  // 규칙: 저장하는 사람이 그 여행자와 연결된 본인이면 true, 아니면 기존 값을 그대로 둔다
+  // (새 여행자는 false). 화면의 여행자 편집은 PATCH가 아니라 PUT만 쓰기 때문에,
+  // 부모님이 자기 계정으로 자기 칸을 저장하는 길이 여기여야 한다.
   const before = await db
     .select({ id: tripTravelers.id, filledBySelf: tripTravelers.filledBySelf })
     .from(tripTravelers)
@@ -98,7 +100,7 @@ export async function replaceTravelers(
       mobilityAid: traveler.mobilityAid,
       isParent: traveler.isParent,
       condition: traveler.condition,
-      filledBySelf: wasFilledBySelf.get(traveler.id) ?? isSelf(traveler.userId, args.actorUserId),
+      filledBySelf: isSelf(traveler.userId, args.actorUserId) || (wasFilledBySelf.get(traveler.id) ?? false),
       sortOrder: index,
     })),
   )
