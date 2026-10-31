@@ -1,6 +1,6 @@
 // 초대 API 테스트. 토큰 규칙(7일 만료, 여러 명 사용, 만료 410, 이미 구성원이면 그대로 성공)을 고정한다.
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { AcceptInviteResponse, GroupDetail, InvitePreviewResponse } from '@/lib/contracts'
+import type { AcceptInviteResponse, GroupDetail, InvitePreview } from '@/lib/contracts'
 import type { TestDb } from '@/lib/db/test-db'
 import { setupTestDb } from '@/lib/db/test-db'
 import {
@@ -27,7 +27,10 @@ beforeAll(async () => {
   vi.stubEnv('BETTER_AUTH_SECRET', 'test-secret-only-for-vitest')
   vi.stubEnv('BETTER_AUTH_URL', 'http://localhost:3000')
   testDb = await setupTestDb()
-})
+  // 제한 시간 60초: 메모리 PGlite를 띄우는 데 1.6초쯤 걸리는데, 느린 컴퓨터나 CI에서는
+  // vitest 기본값 5초를 넘겨 '초기화 시간 초과'로 실패한다 (이동주 제보).
+  // vitest.config.ts는 공용 파일이라 건드리지 않고 이 파일에서만 늘린다.
+}, 60_000)
 
 beforeEach(async () => {
   await testDb.reset()
@@ -59,7 +62,7 @@ describe('GET /api/invites/:token (미리보기)', () => {
 
     const response = await previewInvite(requestWith(), routeParams({ token }))
     expect(response.status).toBe(200)
-    const body = await readBody<InvitePreviewResponse>(response)
+    const body = await readBody<InvitePreview>(response)
     expect(body.groupName).toBe('우리 가족')
   })
 
@@ -99,7 +102,7 @@ describe('POST /api/invites/:token/accept (참가)', () => {
 
     const group = await readBody<GroupDetail>(await getGroup(requestWith(owner.cookie), routeParams({ id: groupId })))
     expect(group.members).toHaveLength(2)
-    expect(group.members[1]).toMatchObject({ userName: '엄마', role: 'member', relation: '엄마' })
+    expect(group.members[1]).toMatchObject({ name: '엄마', role: 'member', relation: '엄마' })
   })
 
   it('관계를 안 보내도 참가된다 (relation은 선택)', async () => {

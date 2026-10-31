@@ -2,7 +2,7 @@
 import 'server-only'
 import { randomBytes } from 'node:crypto'
 import { eq } from 'drizzle-orm'
-import type { AcceptInviteResponse, CreateInviteResponse, InvitePreviewResponse } from '@/lib/contracts'
+import type { AcceptInviteResponse, Invite, InvitePreview } from '@/lib/contracts'
 import type { Db } from '@/lib/db/client'
 import { getDb } from '@/lib/db/client'
 import { groupInvites, groupMembers, groups } from '@/lib/db/schema'
@@ -25,7 +25,7 @@ function expiryFrom(now: Date): Date {
 export async function createInvite(
   args: { groupId: string; userId: string; now?: Date },
   db: Db = getDb(),
-): Promise<CreateInviteResponse> {
+): Promise<Invite> {
   const now = args.now ?? new Date()
   const expiresAt = expiryFrom(now)
   const [row] = await db
@@ -34,7 +34,7 @@ export async function createInvite(
     .returning({ token: groupInvites.token, expiresAt: groupInvites.expiresAt })
 
   // 전체 주소는 프론트가 만든다: location.origin + '/invite/' + token
-  return { token: row.token, expiresAt: row.expiresAt.toISOString() }
+  return { token: row.token, groupId: args.groupId, expiresAt: row.expiresAt.toISOString() }
 }
 
 // 토큰으로 초대를 찾고 만료를 본다. 없으면 404, 지났으면 410 — 화면이 다른 안내를 띄울 수 있게 나눈다.
@@ -61,7 +61,7 @@ async function findLiveInvite(token: string, now: Date, db: Db) {
 export async function previewInvite(
   args: { token: string; now?: Date },
   db: Db = getDb(),
-): Promise<InvitePreviewResponse> {
+): Promise<InvitePreview> {
   const invite = await findLiveInvite(args.token, args.now ?? new Date(), db)
   return { groupName: invite.groupName, expiresAt: invite.expiresAt.toISOString() }
 }

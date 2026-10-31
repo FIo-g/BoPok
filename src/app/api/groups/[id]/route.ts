@@ -6,8 +6,8 @@ import { getGroupDetail } from '@/lib/groups'
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   return handle(async () => {
     const { id } = await params
-    const me = await requireMember(request, id)
-    // requireMember가 이미 알아낸 내 역할을 그대로 넘긴다 (다시 조회하지 않게).
-    return getGroupDetail({ groupId: id, myRole: me.role })
+    // 구성원인지 먼저 막는다. 화면은 응답의 ownerId와 내 id를 비교해 그룹장인지 판단한다.
+    await requireMember(request, id)
+    return getGroupDetail({ groupId: id })
   })
 }
