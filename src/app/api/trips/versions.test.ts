@@ -16,7 +16,9 @@ import {
   routeParams,
   signUp,
   stop,
+  traveler,
 } from '@/lib/auth/test-fixtures'
+import { replaceTravelers } from '@/lib/trips/travelers'
 import { GET as getTrip } from './[id]/route'
 import { POST as postVersion } from './[id]/versions/route'
 import { GET as getVersionRoute } from './[id]/versions/[vid]/route'
@@ -72,7 +74,7 @@ describe('POST /api/trips/:id/versions (버전 저장)', () => {
     expect(version).toMatchObject({ tripId, number: 1, parentId: null, madeBy: 'user', madeByUserId: owner.userId })
     expect(version.stops).toHaveLength(2)
     expect(version.stops[0]).toMatchObject({ key: 's1', name: '한밭수목원', mustVisit: true, startTime: '10:00' })
-    expect(version.summary ?? null).toBeNull() // 판정 요약은 6단계
+    expect(version.summary ?? null).toBeNull() // 이 여행엔 여행자가 없어서 판정하지 않는다
   })
 
   it('빠른 수정안(quick_fix)도 저장된다', async () => {
@@ -229,5 +231,29 @@ describe('3단계에서 비워 둔 곳이 채워진다', () => {
       await readBody(await getTrip(requestWith(owner.cookie), routeParams({ id: tripId }))),
     )
     expect(detail.versions[0].madeByName).toBe('엄마')
+  })
+})
+
+describe('6단계 — 판정 요약이 저장되고 목록에 나온다', () => {
+  it('여행자가 있으면 POST 응답·여행 상세·여행 목록에 같은 요약이 들어간다', async () => {
+    const { owner, groupId, tripId } = await tripFor()
+    await replaceTravelers({
+      tripId,
+      travelers: [traveler({ id: 't1', label: '엄마', isParent: true, age: 68, heightCm: 158, sex: 'female' })],
+    })
+
+    // 이 테스트 DB에는 장소가 없어서 장소·경로를 모른다 → 외부 호출 없이 '정보 부족'이고 걷는 시간은 0이다
+    const version = await save(owner.cookie, tripId, { parentId: null, stops: twoStops, madeBy: 'user' })
+    expect(version.summary).toMatchObject({ verdict: 'info', day: { base: 0, high: 0 } })
+
+    const detail = TripDetailSchema.parse(
+      await readBody(await getTrip(requestWith(owner.cookie), routeParams({ id: tripId }))),
+    )
+    expect(detail.versions[0].summary).toEqual(version.summary)
+
+    const list = z.array(TripListItemSchema).parse(
+      await readBody(await getGroupTrips(requestWith(owner.cookie), routeParams({ id: groupId }))),
+    )
+    expect(list[0].latestVersion?.summary).toEqual(version.summary)
   })
 })

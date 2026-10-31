@@ -71,7 +71,19 @@
 - 글 형식은 화면 목업(`src/mocks/share-text.ts`)을 그대로 따른다: 머리말, 장소 순서·시간·예약, 장소별 걷는 시간(추정치), 쉼터 이름·종류(실내/야외), 탈것 구간, 하루 요약, 연락처, "출발 전 운영 여부를 꼭 확인하세요".
 - **숫자는 `engine.judge` 결과에서만** 쓴다. 모르면 지어내지 않는다: 장소 안 길 정보가 없으면 `길 정보 없음`, 걷기를 하나도 모르면 `하루 걷기 정보 부족 (장소 정보가 모이면 알려드려요)`, 여행자가 없으면 `하루 걷기 정보 부족 (함께 가는 사람을 입력하면 알려드려요)`. 목업은 이때 "0분"을 찍는데 그건 지어낸 숫자라 바꿨다.
 - 계단 문구는 **넣지 않았다**. 역할 문서·목업 형식에 없고, 장소 데이터가 없는 동안은 전부 '기록 없음'으로만 나온다. 장소 데이터가 들어오면 `confirmed_none`일 때만 '계단 없음', `unknown`은 '계단 기록 없음 (지도 데이터 기준)'으로 한 줄 더하는 것을 제안한다.
-- **장소·경로 연결은 6단계와 같이 쓴다**: `src/lib/trips/place-geo.ts`가 `getPlaceDetails`·`getLegs` 주입 지점이고(이동주 담당이라 그 폴더에 파일을 만들지 않았다), `src/lib/trips/judge-run.ts`의 `judgeStops`가 `requiredLegs → getLegs → judge` 순서를 한 군데 모아 둔다. 이동주 PR이 머지되면 `place-geo.ts`의 두 줄만 바꿔 끼운다.
+- **장소·경로 연결은 6단계와 같이 쓴다**: `src/lib/trips/place-geo.ts`가 `getPlaceDetails`·`getLegs` 주입 지점이고(이동주 담당이라 그 폴더에 파일을 만들지 않았다), `src/lib/trips/judge-run.ts`의 `judgeStops`가 `requiredLegs → getLegs → judge` 순서를 한 군데 모아 둔다. 이동주 PR이 머지돼 6단계에서 `place-geo.ts`가 실제 `getPlaceDetails`·`getLegs`를 쓰도록 바꿨다.
+
+6단계에서 정한 것 **[결정: 김경선 10/31]**:
+- 버전을 저장할 때(`saveVersion`·`createVersion`이 같이 쓰는 `save`) **여행자가 1명 이상이면 `engine.judge`로 판정해 `judge_summary`에 저장**한다. 여행자가 없으면 `null`(판정할 조건이 없다)이고, 이때는 장소·경로를 묻지도 않는다. 판정은 부모 버전 검사 뒤·번호 세기 전에 한다(번호가 겹쳐 다시 시도해도 장소·경로를 또 묻지 않는다).
+- `place-geo.ts`가 이동주의 `getPlaceDetails`(`src/lib/places`)와 `getLegs`(`src/lib/geo`)를 부른다. 그쪽 코드는 부르기만 하고 고치지 않았다.
+  - `getLegs`는 20개씩 나눠 묻는다. 한 묶음에서 하나도 못 받아 `GeoError`를 던지면 **그 묶음은 '경로 없음'으로 두고 잇는다** — 엔진이 `missingLegs`로 처리해 요약은 '정보 부족'이 되고 걷는 시간은 지어내지 않는다. `GeoError`가 아닌 오류(DB 등)는 숨기지 않고 올린다.
+  - 장소 id는 중복과 형식이 틀린 것을 빼고 100개씩 묻는다(AI 쪽 `createPlaceDetailsAdapter`와 같은 규칙). 하나 때문에 조회 전체가 실패하지 않게.
+  - 탈것(car·taxi·bus) 경로는 `getLegs`가 아직 지원하지 않아(`unsupported_mode`) 빠진다. 엔진은 탈것을 걷는 시간 0으로 확실히 보므로 판정에는 영향이 없고, 공유 글에는 "↓ 자가용 이동"만 나온다(시간은 지어내지 않는다).
+- 요약을 만들다 오류가 나도(장소 DB 오류 등) **버전은 저장하고 `judge_summary`만 `null`**, 서버 로그에만 남긴다. 5단계 `appliedOpinionIds`와 같은 생각 — 곁가지 정보 때문에 일정을 날리지 않는다.
+- 여행 목록·버전 목록의 판정 배지는 저장된 `summary`를 그대로 읽는다(`toVersion`이 `judge_summary`를 `summary`로 내보낸다). AI의 `getTripContext`의 `versions`도 같다. 테스트로 고정했다.
+- 공유 글은 저장된 요약이 아니라 **지금 여행자로 다시 판정**한 결과를 쓴다(`getShareText → judgeStops`) — 요약이 낡아도 글의 숫자는 낡지 않는다. 경로를 받지 못한 이동이 있으면 하루 요약 밑에 "(경로 정보를 받지 못한 이동 n곳은 걷는 시간에 넣지 않았어요)"를 붙인다. 빠진 경로는 시간에 안 들어가므로 숫자가 실제보다 작게 읽히지 않게 하려는 것이다.
+- **남은 일 (이번에 하지 않음)**: 여행자 정보를 고칠 때 그 여행의 버전 요약을 다시 계산하는 것. `travelers.ts`·여행자 API를 고쳐야 해서 따로 한다. 그때까지 목록 배지는 마지막으로 저장한 시점의 여행자 기준이고, 일정 화면은 브라우저에서 다시 판정한다.
+- **알아둘 점**: 저장할 때마다 새 경로를 TMAP에 묻는다(24시간 캐시가 있다). 경로마다 순차 호출이고 한 번 제한 시간이 8초라, 장소가 많고 TMAP이 느리면 저장 응답이 그만큼 늦다. 문제가 되면 저장 뒤에 요약을 채우는 방식을 검토한다.
 
 5단계에서 정한 것 **[결정: 김경선 10/31]**:
 - 의견 API는 버전 id만 받으므로 **버전 → 여행 → 그룹**을 따라가 구성원인지 본다(`requireVersionMember`). 버전이 없으면 404, 남의 그룹 버전이면 403.
@@ -89,7 +101,7 @@
 - 버전 목록은 **번호 오름차순**이고 `latestVersion`은 마지막이다(목업 `versionsOf`와 같은 규칙). 목록용 요약에는 `stops`가 없고 `madeByName`(= `madeByUserId`의 이름)을 서버가 채운다.
 - `trips.confirmed_version_id`에 외래키를 걸었다. `trips`와 `trip_versions`가 서로를 가리키므로 스키마에서 `AnyPgColumn`으로 타입 순환을 끊는다.
 - `version_opinions` 표는 4단계에 같이 만들었다(마이그레이션을 두 번 만들지 않으려고). **의견 API와 `createVersion`의 `appliedOpinionIds` 연결은 5단계**다. `getOpinions(versionId)`는 AI가 기다리는 함수라 4단계에 먼저 만들었다 — 의견이 없으면 빈 배열이 정상이다.
-- 판정 요약(`judge_summary`)은 6단계에서 채운다. 그때까지 `null`로 저장한다.
+- 판정 요약(`judge_summary`)은 4단계에서는 `null`로 저장했고, 6단계에서 채운다 (위 6단계 절).
 
 3단계에서 정한 것 **[결정: 김경선 10/31]**:
 - `trips`에 `status` 칸을 두지 않는다. 계약(`trip-api.ts`)에 없고 `confirmedVersionId === null`이면 '작성 중'이다. 칸이 둘이면 서로 어긋난다(설계 10.3의 `status` 제안을 쓰지 않음).
@@ -119,7 +131,7 @@ getOpinions(versionId): Promise<Opinion[]>
 
 ### 버전 저장 시 판정 요약
 
-`createVersion`은 저장 전에 판정 요약을 계산해 함께 저장한다:
+`createVersion`(AI)과 `saveVersion`(화면)은 저장 전에 판정 요약을 계산해 함께 저장한다:
 1. `src/lib/places`의 `getPlaceDetails(placeIds)` (이동주)
 2. `engine.requiredLegs` → `src/lib/geo`의 `getLegs(requests)` (이동주)
 3. `engine.judge(input)` (김태형) → `summary`(판정·이유·하루 총·가장 긴 연속)

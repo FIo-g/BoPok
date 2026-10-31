@@ -66,5 +66,8 @@ function daySummary(run: JudgeRun): string {
   const knowsWalk = result.stops.some(one => one.known) || result.legs.some(one => one.walkTime !== null)
   if (!knowsWalk) return '하루 걷기 정보 부족 (장소 정보가 모이면 알려드려요)'
 
-  return `하루 걷기 ${formatRange(result.day)} · 쉬지 않고 걷는 시간 최대 ${formatRange(result.longest)} (추정치)`
+  const day = `하루 걷기 ${formatRange(result.day)} · 쉬지 않고 걷는 시간 최대 ${formatRange(result.longest)} (추정치)`
+  // 경로를 받지 못한 이동은 위 시간에 들어 있지 않다. 숫자가 실제보다 작게 읽히지 않게 밝힌다 (설계 7.3 7번).
+  if (result.missingLegs.length === 0) return day
+  return `${day}\n(경로 정보를 받지 못한 이동 ${result.missingLegs.length}곳은 걷는 시간에 넣지 않았어요)`
 }
