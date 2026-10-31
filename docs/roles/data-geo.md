@@ -54,7 +54,7 @@ TourAPI 대전 관광지 → 유명한 곳을 골라 팀에 확인받는다. **�
 | `lib/places`: `matchPlaceByName(name)` | 붙여넣은 일정의 이름 → 장소 (별칭 포함) |
 | `lib/geo/tmap.ts` | 보행자 경로, 장소(POI) 검색, (필요하면) 자동차 경로. 키는 서버 환경 변수 |
 | `lib/geo/stairs.ts` | 경로 ↔ OSM 계단 겹침 검사 (`build-segments`와 `getLegs`가 같이 씀). OSM 계단 데이터는 서버에서 파일로 읽어 메모리에 둔다 |
-| `lib/geo/legs.ts`: `getLegs(requests: LegRequest[])` | 장소 사이 경로. `leg_cache` 먼저 보고 없으면 TMAP → 계단 검사 → 저장. 걷기는 보행자 경로, 탈것은 시간·거리 추정(택시는 대전 택시 요금으로 `fareKrw` 추정, 출처 주석) |
+| `lib/geo/legs.ts`: `getLegs(requests: LegRequest[])` | 장소 사이 경로. `leg_cache` 먼저 보고 없으면 TMAP → 계단 검사 → 저장. 걷기는 보행자 경로, 자동차·택시는 TMAP 자동차 경로(거리·`durationMin`; 택시 요금 `fareKrw`는 추정 방식이 정해지면 추가), 버스는 아직 미지원. 캐시 없는 경로를 TMAP에 묻다가 시간 초과가 나면 그 묶음의 나머지 캐시 없는 요청은 부르지 않고 실패로 뺀다 |
 | `GET /api/places?styles=&q=` | 장소 목록 (직접 고치기 화면) |
 | `GET /api/places/:id` | 장소 상세 |
 | `POST /api/places/details` | 여러 장소 상세 한 번에 `{ ids }` |
@@ -77,7 +77,7 @@ TourAPI 대전 관광지 → 유명한 곳을 골라 팀에 확인받는다. **�
 | 2 | `lib/geo/tmap.ts`, `stairs.ts` + 테스트(저장한 TMAP 응답으로) | 한 구간의 거리·계단 상태가 나옴 |
 | 3 | 시범 3~5곳 장소 파일 + `build-segments` + `load-db` | DB에 시범 장소 지점·구간이 들어감 |
 | 4 | `lib/places` 함수, `/api/places*` | 프론트가 진짜 장소로 지도를 그림 |
-| 5 | `getLegs` + `leg_cache` + `/api/legs`, 택시 추정 | 일정 순서를 바꾸면 새 경로가 옴 |
+| 5 | `getLegs` + `leg_cache` + `/api/legs`, 자동차·택시 경로(TMAP; 택시 요금 추정은 후속) | 일정 순서를 바꾸면 새 경로가 옴 |
 | 6 | 장소 목록 넓히기 (팀 확인), 계단 직접 확인 채우기 | 유명 관광지 대부분, 장소 안 구간에 `unknown`이 거의 없음 |
 | 7 | `searchCandidates`, `matchPlaceByName`, POI 검색 | AI가 후보·이름 매칭에 씀 |
 
