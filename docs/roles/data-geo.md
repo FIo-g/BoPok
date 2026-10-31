@@ -50,16 +50,17 @@ TourAPI 대전 관광지 → 유명한 곳을 골라 팀에 확인받는다. **�
 | 함수·API | 내용 |
 | --- | --- |
 | `lib/places`: `listPlaces(filters)`, `getPlaceDetails(ids)` | 장소 요약 목록, 지점·구간 포함 상세 |
-| `lib/places`: `searchCandidates({ styles, budget, transport, avoidStairs, limit })` | AI(김태형)용 후보 추리기. 계단 피하기면 계단 많은 곳을 뒤로 |
-| `lib/places`: `matchPlaceByName(name)` | 붙여넣은 일정의 이름 → 장소 (별칭 포함) |
-| `lib/geo/tmap.ts` | 보행자 경로, 장소(POI) 검색, (필요하면) 자동차 경로. 키는 서버 환경 변수 |
+| `lib/places/search.ts`: `searchCandidates({ styles, budget, transport, avoidStairs, limit })` | **구현됨.** AI(김태형)용 후보 추리기. 스타일 맞는 곳을 앞에, 계단 피하기면 계단 `present`인 장소를 뒤로(`unknown`은 그대로). 예산·이동수단은 장소 데이터에 칸이 생기면 쓴다 |
+| `lib/places/search.ts`: `matchPlaceByName(name)` | **구현됨.** 붙여넣은 일정의 이름 → 장소. 공백·기호 무시, 후보가 둘 이상이거나 "근처·앞·주변·옆"이 붙으면 `null`. 별칭은 DB에 칸이 생기면 |
+| `lib/geo/tmap.ts` | 보행자 경로(구현됨), (필요하면) 자동차 경로. 키는 서버 환경 변수 |
+| `lib/geo/poi.ts`: `searchPoi(name)` | **구현됨.** TMAP 장소(POI) 통합검색 → `{ name, coord }`. 대전 밖 결과는 버리고, 키가 없거나 실패하면 `null`. 설명은 `src/lib/geo/README.md` 마지막 절 |
 | `lib/geo/stairs.ts` | 경로 ↔ OSM 계단 겹침 검사 (`build-segments`와 `getLegs`가 같이 씀). OSM 계단 데이터는 서버에서 파일로 읽어 메모리에 둔다 |
 | `lib/geo/legs.ts`: `getLegs(requests: LegRequest[])` | 장소 사이 경로. `leg_cache` 먼저 보고 없으면 TMAP → 계단 검사 → 저장. 걷기는 보행자 경로, 탈것은 시간·거리 추정(택시는 대전 택시 요금으로 `fareKrw` 추정, 출처 주석) |
 | `GET /api/places?styles=&q=` | 장소 목록 (직접 고치기 화면) |
 | `GET /api/places/:id` | 장소 상세 |
 | `POST /api/places/details` | 여러 장소 상세 한 번에 `{ ids }` |
 | `POST /api/legs` | `{ requests: LegRequest[] }` → `Leg[]` (프론트가 즉시 재판정에 씀) |
-| `GET /api/places/search?q=` | DB에 없는 장소 좌표 찾기 (TMAP POI) |
+| `GET /api/places/search?q=` | DB에 없는 장소 좌표 찾기 (TMAP POI). **아직 없음** — AI는 `searchPoi`를 서버 함수로 직접 부른다 |
 
 `legKey(req)`는 contracts에 두어 프론트·엔진·서버가 같은 키를 쓰게 한다.
 

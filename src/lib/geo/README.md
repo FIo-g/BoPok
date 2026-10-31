@@ -296,3 +296,31 @@ base와 누적 변경을 검토한다. 이번 공유 준비에서는 병합·reb
 총 10개 파일이다. 공용 계약·기존 테스트·인증·DB 스키마·설정 변경은 없다.
 OSM 작업·대용량 결과·실제 TMAP 원본·`.env.local`·`.pglite/`·`.next/`·`node_modules/`는 제외한다.
 프론트는 기존 장소 API의 실행·적재 명령을 사용하고 로그인 후 `api.legs.get(requests)`를 호출한다.
+
+## 장소(POI) 검색 — `searchPoi`
+
+`src/lib/geo/poi.ts`의 `searchPoi(name)`은 TMAP 장소(POI) 통합검색(`https://apis.openapi.sk.com/tmap/pois`)으로
+이름에 맞는 **대전 안** 장소의 좌표 하나를 찾는다. AI(김태형)가 붙여넣은 일정의 이름이 장소 DB에 없을 때
+좌표만 얻으려고 부른다. 위 경로 API(walk 전용 `getLegs`)와 별개이며 DB·캐시를 쓰지 않는다.
+HTTP 라우트(`GET /api/places/search`)는 아직 만들지 않았고, AI는 서버 함수로 직접 부른다.
+
+- 반환: `{ name, coord: [경도, 위도] }` 또는 `null`. 좌표는 TMAP이 준 중심 좌표(없으면 입구 좌표)이며
+  입구로 검증된 값이 아니다. 시간·거리는 만들지 않는다.
+- 키: 서버 환경 변수 `TMAP_APP_KEY`(기존 변수, 새로 추가한 것 없음). 요청 헤더로만 보내고 주소·로그·응답에 넣지 않는다.
+  키가 없거나 이름이 비었거나 한 글자뿐(기호 제외)이면 외부 요청 없이 `null`이다.
+- 결과 고르기: TMAP 결과를 순서대로 보며 아래를 모두 통과한 **첫 결과**를 쓴다. 통과한 결과가 없으면 `null`이다.
+  - 결과 이름에 검색어가 들어 있다(공백·기호·대소문자 무시). 이름이 다른 가까운 곳의 좌표를 내놓지 않기 위해서다.
+  - 주소(`upperAddrName`)가 있으면 `대전`으로 시작한다.
+  - 좌표가 대전을 감싸는 사각형(경도 127.2~127.6, 위도 36.15~36.52) 안이다. 정확한 행정경계가 아닌 근사이며,
+    사각형에 걸치는 세종·옥천 등은 주소 검사가 거른다.
+- 실패: HTTP 오류·시간 초과(기본 8초, 재시도 없음)·잘못된 응답·네트워크 오류는 모두 `null`이고 예외를 던지지 않는다.
+  로그에는 `[geo] POI 검색 실패 <종류>`(`missing_key`, `invalid_request`, `upstream`, `timeout`, `unknown`)만 남기고
+  키·요청 헤더·외부 오류 본문은 남기지 않는다. 결과가 정상적으로 없을 때는 로그도 없다.
+  호출하는 쪽은 `null`이면 그 이름을 '정보 없음' 장소로 두면 된다. 직선거리·가짜 좌표로 채우지 않는다.
+- 검증: 테스트(`poi.test.ts`)는 가짜 fetch와 직접 만든 응답(`fixtures/tmap-poi.json`)만 쓰며 실제 TMAP은 부르지 않는다.
+  요청 파라미터(`searchKeyword`, `searchType=all`, `searchtypCd=A`, `reqCoordType/resCoordType=WGS84GEO`, `count=10`)는
+  SK open API 문서 기준이고 이번 작업에서 실제로 호출해 확인하지 않았다. 키를 넣은 배포 환경에서 실제 응답 모양을 한 번 확인한다.
+
+```powershell
+pnpm exec vitest run src/lib/geo/poi.test.ts
+```
