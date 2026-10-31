@@ -188,7 +188,12 @@ export const mockApi: Api = {
       return trip
     }),
     putTravelers: (tripId, travelers) => call(db => {
-      requireTrip(db, tripId)
+      const { trip } = requireTrip(db, tripId)
+      // 서버 규칙: userId 는 이 그룹의 구성원일 때만 저장한다. 한 계정은 한 여행에서 한 사람과만 연결된다
+      const memberIds = new Set(db.members.filter(m => m.groupId === trip.groupId).map(m => m.userId))
+      const linked = travelers.flatMap(t => (t.userId ? [t.userId] : []))
+      if (linked.some(id => !memberIds.has(id))) fail(400, 'invalid_request', '이 그룹의 구성원이 아닌 계정은 연결할 수 없어요')
+      if (new Set(linked).size !== linked.length) fail(400, 'invalid_request', '한 계정은 한 사람과만 연결할 수 있어요')
       db.travelers[tripId] = travelers
       refreshSummaries(db, tripId)
       return travelers
