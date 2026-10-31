@@ -6,7 +6,8 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useRequireUser } from '@/components/AuthProvider'
 import { PlacePicker } from '@/components/trip/PlacePicker'
 import { Badge, Button, Card, Chip, ErrorNotice, Field, Notice, PageShell, PageTitle, Spinner, TextArea, TextInput, cx } from '@/components/ui'
-import { api, isApiError } from '@/lib/api-client'
+import { api } from '@/lib/api-client'
+import { aiFailure, type AiFailure } from '@/lib/ai-fallback'
 import type { InterviewResponse, PlaceSummary, Stop, StartMode } from '@/lib/contracts'
 import { stopFromPlace } from '@/lib/plan/stop-edit'
 import { STYLE_OPTIONS } from '@/lib/trip-options'
@@ -71,7 +72,7 @@ function StartStep({ groupId, onCreated }: { groupId: string; onCreated: (tripId
 function PasteStep({ tripId, onParsed }: { tripId: string; onParsed: (stops: Stop[], unmatched: string[]) => void }) {
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<AiFailure | null>(null)
   const [pick, setPick] = useState(false)
 
   async function parse() {
@@ -81,8 +82,8 @@ function PasteStep({ tripId, onParsed }: { tripId: string; onParsed: (stops: Sto
       const res = await api.ai.parseSchedule({ tripId, text })
       onParsed(res.stops, res.unmatched)
     } catch (e) {
-      // AI 가 안 되면 장소를 직접 고르게 한다 (설계 6.4)
-      setError(isApiError(e) && e.fallback ? '일정을 정리하지 못했어요. 아래 “장소 직접 고르기”로 이어갈 수 있어요.' : errorMessage(e))
+      // AI 가 안 되면 장소를 직접 고르게 한다 (설계 6.4). pick_places 면 다시 시도 버튼은 숨긴다
+      setError(aiFailure(e))
       setBusy(false)
     }
   }
@@ -92,11 +93,13 @@ function PasteStep({ tripId, onParsed }: { tripId: string; onParsed: (stops: Sto
       <Field label="짜 둔 일정을 붙여 넣어 주세요" hint="시간과 장소가 줄마다 있으면 더 잘 정리돼요. 예) 10:00 한밭수목원">
         <TextArea rows={8} value={text} onChange={e => setText(e.target.value)} maxLength={5000} placeholder={'10:00 한밭수목원\n12:00 점심\n14:00 국립중앙과학관'} />
       </Field>
-      {error && <ErrorNotice message={error} />}
+      {error && <ErrorNotice message={error.message} />}
       <div className="flex flex-wrap gap-2">
-        <Button onClick={parse} disabled={busy || text.trim() === ''}>
-          {busy ? '정리하는 중…' : '장소별로 정리하기'}
-        </Button>
+        {(error?.canRetry ?? true) && (
+          <Button onClick={parse} disabled={busy || text.trim() === ''}>
+            {busy ? '정리하는 중…' : error ? '다시 정리하기' : '장소별로 정리하기'}
+          </Button>
+        )}
         <Button variant="secondary" onClick={() => setPick(true)} disabled={busy}>
           장소 직접 고르기
         </Button>
@@ -219,7 +222,7 @@ function InterviewStep({ tripId, onDone }: { tripId: string; onDone: () => void 
         onDone()
       }
     } catch (e) {
-      setError(isApiError(e) && e.fallback ? 'AI가 답을 이해하지 못했어요. 아래 버튼에서 골라 주세요.' : errorMessage(e))
+      setError(aiFailure(e).canPick ? 'AI가 답을 이해하지 못했어요. 아래 버튼에서 골라 주세요.' : errorMessage(e))
     }
     setBusy(false)
   }
@@ -292,7 +295,7 @@ function InterviewStep({ tripId, onDone }: { tripId: string; onDone: () => void 
 
 function MakingStep({ tripId, mode }: { tripId: string; mode: StartMode }) {
   const router = useRouter()
-  const [error, setError] = useState<{ message: string; fallback: boolean } | null>(null)
+  const [error, setError] = useState<AiFailure | null>(null)
   const [attempt, setAttempt] = useState(0)
   const [pick, setPick] = useState(false)
   const ran = useRef(-1)
@@ -304,7 +307,7 @@ function MakingStep({ tripId, mode }: { tripId: string; mode: StartMode }) {
     api.ai
       .generate({ tripId })
       .then(() => router.replace(`/trips/${tripId}`))
-      .catch(e => setError({ message: errorMessage(e), fallback: isApiError(e) && Boolean(e.fallback) }))
+      .catch(e => setError(aiFailure(e)))
   }, [attempt, tripId, router])
 
   if (error) {
@@ -313,8 +316,8 @@ function MakingStep({ tripId, mode }: { tripId: string; mode: StartMode }) {
       <div className="flex flex-col gap-3">
         <ErrorNotice message={`일정을 짜지 못했어요. ${error.message}`} />
         <div className="flex flex-wrap gap-2">
-          <Button onClick={() => { setError(null); setAttempt(a => a + 1) }}>다시 시도</Button>
-          <Button variant="secondary" onClick={mode === 'paste' ? () => router.replace(`/trips/${tripId}`) : () => setPick(true)}>{mode === 'paste' ? '정리한 일정 그대로 보기' : '장소를 직접 고르기'}</Button>
+          {error.canRetry && <Button onClick={() => { setError(null); setAttempt(a => a + 1) }}>다시 시도</Button>}
+          <Button variant={error.canRetry ? 'secondary' : 'primary'} onClick={mode === 'paste' ? () => router.replace(`/trips/${tripId}`) : () => setPick(true)}>{mode === 'paste' ? '정리한 일정 그대로 보기' : '장소를 직접 고르기'}</Button>
         </div>
         {pick && (
           <PlacePicker
@@ -327,7 +330,7 @@ function MakingStep({ tripId, mode }: { tripId: string; mode: StartMode }) {
                 await api.trips.saveVersion(tripId, { parentId: null, stops: [stopFromPlace(place, [])], madeBy: 'user', note: '직접 고른 일정' })
                 router.replace(`/trips/${tripId}`)
               } catch (e) {
-                setError({ message: errorMessage(e), fallback: true })
+                setError({ message: errorMessage(e), canRetry: true, canPick: true })
               }
             }}
           />

@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
 // 엔진은 서버뿐 아니라 브라우저에서 바로 돈다(판정이 화면에 도착하는 길, common.md 4장).
@@ -25,7 +26,8 @@ function tsSources(dir: string): string[] {
 
 describe('엔진 순수성', () => {
   it('엔진은 React·DB·fetch·환경 변수를 쓰지 않는다', () => {
-    const dir = new URL('.', import.meta.url).pathname
+    // Windows 드라이브와 한글 경로를 파일 시스템 경로로 변환한다.
+    const dir = fileURLToPath(new URL('.', import.meta.url))
     const offenders = tsSources(dir).flatMap((filePath) => {
       const text = readFileSync(filePath, 'utf8')
       return FORBIDDEN.filter((pattern) => pattern.test(text)).map(

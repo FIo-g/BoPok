@@ -12,22 +12,15 @@
     {
       "idx": 1,
       "version": "7",
-      "when": 1793370462755,
-      "tag": "0001_melted_starbolt",
+      "when": 1793392704381,
+      "tag": "0001_place-schema",
       "breakpoints": true
     },
     {
       "idx": 2,
       "version": "7",
-      "when": 1793419324920,
-      "tag": "0002_rich_miracleman",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1793420799102,
-      "tag": "0003_dizzy_famine",
+      "when": 1793436493153,
+      "tag": "0002_trips-versions",
       "breakpoints": true
     }
   ]

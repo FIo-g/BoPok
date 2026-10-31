@@ -8,6 +8,7 @@ import { Badge, Button, Card, Chip, ErrorNotice, Field, Notice, PageShell, PageT
 import { api } from '@/lib/api-client'
 import type { Condition, Pace, Sex, Traveler } from '@/lib/contracts'
 import { CONDITION_QUESTIONS, UNKNOWN_CHOICE_LABEL } from '@/lib/engine'
+import { canClaim, claimTraveler, markSelfFilled, myTraveler, releaseTraveler } from '@/lib/plan/travelers'
 import { errorMessage, useAsync } from '@/lib/use-async'
 
 const NUMBER_FIELDS = ['continuousMin', 'dayMin', 'restMin'] as const
@@ -15,7 +16,7 @@ type NumberField = (typeof NUMBER_FIELDS)[number]
 
 const question = (id: (typeof CONDITION_QUESTIONS)[number]['id']) => CONDITION_QUESTIONS.find(q => q.id === id)!
 
-function TravelerEditor({ traveler, onChange, onRemove, canRemove, isMe }: { traveler: Traveler; onChange: (next: Traveler) => void; onRemove: () => void; canRemove: boolean; isMe: boolean }) {
+function TravelerEditor({ traveler, onChange, onRemove, canRemove, isMe, linkedName, claimable, onClaim, onRelease }: { traveler: Traveler; onChange: (next: Traveler) => void; onRemove: () => void; canRemove: boolean; isMe: boolean; linkedName: string | null; claimable: boolean; onClaim: () => void; onRelease: () => void }) {
   const set = (patch: Partial<Traveler>) => onChange({ ...traveler, ...patch })
   const setCondition = (patch: Partial<Condition>) => set({ condition: { ...traveler.condition, ...patch } })
   const clearCondition = (field: keyof Condition) => {
@@ -37,6 +38,9 @@ function TravelerEditor({ traveler, onChange, onRemove, canRemove, isMe }: { tra
         </h2>
         <div className="flex flex-wrap items-center gap-2">
           {traveler.isParent && <Badge tone="brand">부모님</Badge>}
+          {traveler.userId && <Badge tone="brand">계정 연결: {isMe ? '나' : (linkedName ?? '가족')}</Badge>}
+          {claimable && <Button variant="secondary" className="min-h-10 px-3" onClick={onClaim}>이 사람이 저예요</Button>}
+          {isMe && <Button variant="ghost" className="min-h-10 px-3" onClick={onRelease}>연결 풀기</Button>}
           {traveler.filledBySelf ? <Badge tone="ok">✓ 본인이 직접 입력</Badge> : <Badge tone="info">대신 입력 · 본인 확인 전</Badge>}
           {canRemove && <Button variant="danger" className="min-h-10 px-3" onClick={onRemove} aria-label={`${traveler.label} 빼기`}>빼기</Button>}
         </div>
@@ -131,6 +135,9 @@ export function TravelersScreen({ tripId }: { tripId: string }) {
   const [draft, setDraft] = useState<Traveler[] | null>(null)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<{ tone: 'ok' | 'warn'; text: string } | null>(null)
+  // 계정이 연결된 사람의 이름을 보여 주려고 그룹 구성원을 받는다 (연결할 수 있는 계정은 그룹 구성원뿐)
+  const groupId = detail.data?.trip.groupId
+  const group = useAsync(() => api.groups.get(groupId ?? ''), `travelers-group:${groupId}`, user !== null && groupId !== undefined)
 
   if (!user || detail.loading) return <Spinner />
   if (detail.error || !detail.data) return <PageShell><ErrorNotice message={errorMessage(detail.error)} onRetry={detail.reload} /></PageShell>
@@ -142,8 +149,8 @@ export function TravelersScreen({ tripId }: { tripId: string }) {
     setBusy(true)
     setMessage(null)
     try {
-      // 내 계정과 연결된 사람의 정보를 내가 고치면 본인이 직접 입력한 것으로 본다 (설계 7.1.3)
-      const toSave = travelers.map(t => (t.userId === user?.id ? { ...t, filledBySelf: true } : t))
+      // 내 계정과 연결된 사람의 걷기 조건을 내가 고쳤을 때만 본인이 직접 입력한 것으로 본다 (설계 7.1.3)
+      const toSave = markSelfFilled(detail.data!.travelers, travelers, user!.id)
       const saved = await api.trips.putTravelers(tripId, toSave)
       detail.mutate({ ...detail.data!, travelers: saved })
       setDraft(null)
@@ -168,6 +175,11 @@ export function TravelersScreen({ tripId }: { tripId: string }) {
       />
       {message && <div className="mb-4"><Notice tone={message.tone}>{message.text}</Notice></div>}
       {travelers.length === 0 && <Notice tone="info">아직 함께 가는 사람이 없어요. 아래에서 추가해 주세요.</Notice>}
+      {travelers.length > 0 && !myTraveler(travelers, user.id) && (
+        <div className="mb-4">
+          <Notice tone="info">이 여행에 함께 가신다면, 나에 해당하는 사람에서 “이 사람이 저예요”를 눌러 주세요. 그러면 걷기 조건을 직접 입력할 수 있어요. (계정이 없는 분은 그대로 두세요)</Notice>
+        </div>
+      )}
       <div className="flex flex-col gap-4">
         {travelers.map((traveler, index) => (
           <TravelerEditor
@@ -177,6 +189,10 @@ export function TravelersScreen({ tripId }: { tripId: string }) {
             onRemove={() => setDraft(travelers.filter((_, i) => i !== index))}
             canRemove={travelers.length > 1}
             isMe={traveler.userId === user.id}
+            linkedName={group.data?.members.find(m => m.userId === traveler.userId)?.name ?? null}
+            claimable={canClaim(travelers, traveler, user.id)}
+            onClaim={() => { setDraft(claimTraveler(travelers, traveler.id, user.id)); setMessage({ tone: 'ok', text: `${traveler.label}에 내 계정을 연결했어요. “저장하기”를 누르면 적용돼요` }) }}
+            onRelease={() => setDraft(releaseTraveler(travelers, traveler.id, user.id))}
           />
         ))}
       </div>
