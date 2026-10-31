@@ -60,6 +60,7 @@ function errorBody(error: unknown, aiFallback: AiFallback | null): { body: AIErr
     }
   }
   if (error instanceof AiCallError) {
+    console.error('[ai] ai_failed', error.reason, error.message)
     return {
       body: {
         code: 'ai_failed',

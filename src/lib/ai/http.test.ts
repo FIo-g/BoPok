@@ -1,5 +1,5 @@
 // http.js 공용 도우미 검사. 외부 API를 부르지 않는다.
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 import { AiErrorSchema, ApiErrorSchema } from '@/lib/contracts'
 import type { TripVersion } from '@/lib/contracts'
@@ -168,6 +168,27 @@ describe('requireVersionInTrip', () => {
       expect.unreachable('버전이 없으면 던져야 한다')
     } catch (error) {
       expect(error).toMatchObject({ status: 404, code: 'not_found' })
+    }
+  })
+})
+
+describe('handle: AI 실패 로그', () => {
+  it('AiCallError는 reason과 함께 서버 로그를 남기고 응답은 그대로 502 ai_failed', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const response = await handle(async () => {
+        throw new AiCallError('provider_failed', 'upstage 공급자가 문제를 알렸어요 (HTTP 500)')
+      })
+      expect(spy).toHaveBeenCalledWith(
+        '[ai] ai_failed',
+        'provider_failed',
+        'upstage 공급자가 문제를 알렸어요 (HTTP 500)',
+      )
+      expect(response.status).toBe(502)
+      const body = AiErrorSchema.parse(await response.json())
+      expect(body.error.code).toBe('ai_failed')
+    } finally {
+      spy.mockRestore()
     }
   })
 })
