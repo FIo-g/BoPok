@@ -5,6 +5,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { usePathname, useRouter } from 'next/navigation'
 import { api, type SignInInput, type SignUpInput } from '@/lib/api-client'
 import type { User } from '@/lib/contracts'
+import { loginRedirectPath } from '@/lib/format'
 
 type AuthState = {
   user: User | null | undefined
@@ -53,7 +54,9 @@ export function useRequireUser(): User | null {
   const router = useRouter()
   const pathname = usePathname()
   useEffect(() => {
-    if (user === null) router.replace(`/login?next=${encodeURIComponent(pathname)}`)
+    // 쿼리(?group= 등)도 함께 돌아오게 한다. useSearchParams 는 Suspense 밖에서 쓰면 빌드가 막히는데(/groups 페이지에는 Suspense 가 없다)
+    // 이 effect 는 브라우저에서만 도므로 주소창의 값을 직접 읽는다
+    if (user === null) router.replace(loginRedirectPath(pathname, window.location.search))
   }, [user, router, pathname])
   return user ?? null
 }
