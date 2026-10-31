@@ -122,22 +122,26 @@ async function assertLinkedUsersAreMembers(
   }
 }
 
+// 걷기 조건 칸만 모은 모양. PUT(통째로 저장)과 PATCH(한 칸 고치기)가 같은 비교를 쓰게 한다.
+type ConditionFields = Pick<Traveler, (typeof CONDITION_FIELDS)[number]>
+
 // 연결된 본인이 걷기 조건을 실제로 바꿨거나 새로 만든 여행자일 때만 true.
 // 연결만 하고 조건이 그대로면 기존 값을 유지하고, 한 번 true면 계속 true다
-// (화면의 markSelfFilled와 같은 규칙).
+// (화면의 markSelfFilled와 같은 규칙). PUT·PATCH 둘 다 이 함수를 쓴다.
 function nextFilledBySelf(args: {
-  incoming: Traveler
+  next: ConditionFields
   existing?: TravelerRow
   userId: string | null
   actorUserId?: string
-  selfAnswered: boolean
+  selfAnswered?: boolean
 }): boolean {
   const was = args.existing?.filledBySelf ?? false
   if (was) return true
   if (args.selfAnswered) return true
   if (!args.actorUserId || args.userId !== args.actorUserId) return was
   if (!args.existing) return true // 새로 만든 여행자
-  return CONDITION_FIELDS.some(field => !sameValue(args.existing?.[field], args.incoming[field])) ? true : was
+  const existing = args.existing
+  return CONDITION_FIELDS.some(field => !sameValue(existing[field], args.next[field])) ? true : was
 }
 
 // PUT /api/trips/:id/travelers — 목록을 통째로 바꾼다. 받은 순서를 sort_order에 적어 그대로 돌려준다.
@@ -177,7 +181,7 @@ export async function replaceTravelers(
       isParent: incoming.isParent,
       condition: incoming.condition,
       filledBySelf: nextFilledBySelf({
-        incoming,
+        next: incoming,
         existing,
         userId,
         actorUserId: args.actorUserId,
@@ -222,13 +226,6 @@ export async function saveTravelers(tripId: string, travelers: Traveler[]): Prom
   )
 }
 
-// PATCH는 3단계에서 정한 규칙을 그대로 쓴다: 고치는 사람이 그 여행자와 연결된 본인이면 true,
-// 아니면 false. 화면(TravelersScreen)은 저장할 때 PUT만 쓰므로 이 길로는 거의 들어오지 않는다.
-// PUT의 '한 번 true면 계속 true'와는 다르다 — 바꾸려면 팀에 말하고 역할 문서를 고친다.
-function isSelf(travelerUserId: string | null | undefined, actorUserId: string | undefined): boolean {
-  return Boolean(actorUserId && travelerUserId && travelerUserId === actorUserId)
-}
-
 // PATCH /api/trips/:id/travelers/:tid — 보낸 칸만 바꾼다.
 // 몸체의 userId와 filledBySelf는 믿지 않는다:
 //  - userId는 이 API로 바꿀 수 없다 (계정 연결은 PUT으로 목록을 통째로 저장할 때만)
@@ -243,18 +240,29 @@ export async function patchTraveler(
   if (!existing) throw new HttpError(404, 'not_found', '그 여행자를 찾을 수 없어요')
 
   const { patch } = args
+  // 고친 뒤의 걷기 조건 — PUT과 같은 함수로 '실제로 바뀌었나'를 본다
+  const next: ConditionFields = {
+    age: 'age' in patch ? patch.age ?? undefined : existing.age ?? undefined,
+    heightCm: 'heightCm' in patch ? patch.heightCm ?? undefined : existing.heightCm ?? undefined,
+    sex: 'sex' in patch ? patch.sex ?? undefined : existing.sex ?? undefined,
+    pace: patch.pace ?? existing.pace,
+    mobilityAid: patch.mobilityAid ?? existing.mobilityAid,
+    condition: patch.condition ?? existing.condition,
+  }
+
   const [updated] = await db
     .update(tripTravelers)
     .set({
       label: patch.label ?? existing.label,
-      age: 'age' in patch ? patch.age ?? null : existing.age,
-      heightCm: 'heightCm' in patch ? patch.heightCm ?? null : existing.heightCm,
-      sex: 'sex' in patch ? patch.sex ?? null : existing.sex,
-      pace: patch.pace ?? existing.pace,
-      mobilityAid: patch.mobilityAid ?? existing.mobilityAid,
+      age: next.age ?? null,
+      heightCm: next.heightCm ?? null,
+      sex: next.sex ?? null,
+      pace: next.pace,
+      mobilityAid: next.mobilityAid,
       isParent: patch.isParent ?? existing.isParent,
-      condition: patch.condition ?? existing.condition,
-      filledBySelf: isSelf(existing.userId, args.actorUserId),
+      condition: next.condition,
+      // userId는 이 API로 바꿀 수 없으므로 기존 연결로 판단한다
+      filledBySelf: nextFilledBySelf({ next, existing, userId: existing.userId, actorUserId: args.actorUserId }),
     })
     .where(where)
     .returning()

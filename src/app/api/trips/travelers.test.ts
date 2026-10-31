@@ -440,15 +440,66 @@ describe('PATCH /api/trips/:id/travelers/:tid (한 사람 고치기)', () => {
     expect(updated.condition).toEqual({ continuousMin: 15, restMin: 10 })
   })
 
-  it('본인 계정과 연결된 여행자를 고치면 filledBySelf가 true가 된다', async () => {
-    const { owner, tripId } = await tripWithMom()
+  // 엄마가 '이 사람이 저예요'로 연결만 해 둔 상태 (조건은 그대로라 filledBySelf는 아직 false)
+  async function tripWithClaimedMom() {
+    const base = await tripWithOwner()
+    const mom = await signUp({ name: '엄마', email: 'mom@example.com' })
+    await addMember(testDb.db, { groupId: base.groupId, userId: mom.userId, role: 'member', relation: '엄마' })
 
-    const me = TravelerSchema.parse(
+    const written = traveler({ id: 't1', label: '엄마', isParent: true, age: 68, heightCm: 158 })
+    await putTravelers(putRequest(base.owner.cookie, [written]), routeParams({ id: base.tripId }))
+    const claimed = TravelerListSchema.parse(
       await readBody(
-        await patchTraveler(patchRequest(owner.cookie, { pace: 'normal' }), routeParams({ id: tripId, tid: 't2' })),
+        await putTravelers(
+          putRequest(mom.cookie, [{ ...written, userId: mom.userId }]),
+          routeParams({ id: base.tripId }),
+        ),
       ),
     )
-    expect(me.filledBySelf).toBe(true)
+    expect(claimed[0].filledBySelf).toBe(false) // 연결만 했으므로 아직 아니다
+    return { ...base, mom }
+  }
+
+  it('본인이 PATCH로 걷기 조건을 바꾸면 filledBySelf가 true가 된다', async () => {
+    const { mom, tripId } = await tripWithClaimedMom()
+
+    const answered = TravelerSchema.parse(
+      await readBody(
+        await patchTraveler(patchRequest(mom.cookie, { pace: 'slow' }), routeParams({ id: tripId, tid: 't1' })),
+      ),
+    )
+    expect(answered.filledBySelf).toBe(true)
+  })
+
+  it('본인이 고쳐도 걷기 조건이 그대로면 올라가지 않는다 (이름표만 바꿈)', async () => {
+    const { mom, tripId } = await tripWithClaimedMom()
+
+    const renamed = TravelerSchema.parse(
+      await readBody(
+        await patchTraveler(patchRequest(mom.cookie, { label: '어머니' }), routeParams({ id: tripId, tid: 't1' })),
+      ),
+    )
+    expect(renamed.label).toBe('어머니')
+    expect(renamed.filledBySelf).toBe(false)
+  })
+
+  it('한 번 true가 되면 남이 PATCH로 고쳐도 계속 true다', async () => {
+    const { owner, groupId, tripId } = await tripWithMom()
+    const son = await signUp({ name: '아들', email: 'son2@example.com' })
+    await addMember(testDb.db, { groupId, userId: son.userId, role: 'member' })
+
+    // t2는 자녀(owner)가 자기 계정으로 새로 만든 여행자라 이미 true다
+    const before = TravelerSchema.parse(
+      await readBody(await patchTraveler(patchRequest(owner.cookie, {}), routeParams({ id: tripId, tid: 't2' }))),
+    )
+    expect(before.filledBySelf).toBe(true)
+
+    const after = TravelerSchema.parse(
+      await readBody(
+        await patchTraveler(patchRequest(son.cookie, { pace: 'slow' }), routeParams({ id: tripId, tid: 't2' })),
+      ),
+    )
+    expect(after.filledBySelf).toBe(true)
   })
 
   it('계정이 연결 안 된 여행자를 고치면 filledBySelf는 false다', async () => {
@@ -462,15 +513,15 @@ describe('PATCH /api/trips/:id/travelers/:tid (한 사람 고치기)', () => {
     expect(mom.filledBySelf).toBe(false)
   })
 
-  it('다른 구성원이 내 여행자를 고치면 filledBySelf가 올라가지 않는다', async () => {
-    const { groupId, tripId } = await tripWithMom()
+  it('다른 구성원이 남의 여행자를 고쳐도 filledBySelf는 올라가지 않는다', async () => {
+    const { groupId, tripId } = await tripWithClaimedMom()
     const son = await signUp({ name: '아들', email: 'son@example.com' })
     await addMember(testDb.db, { groupId, userId: son.userId, role: 'member' })
 
-    // t2는 owner의 계정과 연결된 여행자다. 아들이 고쳐도 '본인이 채운 것'이 아니다
+    // t1은 엄마 계정과 연결된 여행자다. 아들이 조건을 고쳐도 '엄마가 직접 답한 것'은 아니다
     const patched = TravelerSchema.parse(
       await readBody(
-        await patchTraveler(patchRequest(son.cookie, { pace: 'slow' }), routeParams({ id: tripId, tid: 't2' })),
+        await patchTraveler(patchRequest(son.cookie, { pace: 'slow' }), routeParams({ id: tripId, tid: 't1' })),
       ),
     )
     expect(patched.filledBySelf).toBe(false)
