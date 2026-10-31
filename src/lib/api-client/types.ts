@@ -85,6 +85,7 @@ export interface Api {
     details(ids: string[]): Promise<PlaceDetail[]>
   }
   legs: {
+    // 한 번에 LEGS_REQUEST_MAX 개까지. 응답은 요청 순서가 아니라 leg.key 로 짝짓고, 못 받은 경로는 응답에서 빠진다
     get(requests: LegRequest[]): Promise<Leg[]>
   }
   ai: {

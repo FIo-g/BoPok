@@ -3,7 +3,7 @@
 // 일정 화면이 쓰는 장소 상세와 장소 사이 경로를 한 번만 받아 두는 곳 (일정이 바뀔 때 없는 것만 서버에 묻는다).
 // 같은 값을 여러 화면 부품이 쓰므로 모듈 안에 두고, 바뀌면 revision 숫자로 알린다 (useSyncExternalStore).
 import { SUPPORTED_LEG_MODES, api } from '@/lib/api-client'
-import { legKey, type Leg, type LegRequest, type PlaceDetail } from '@/lib/contracts'
+import { LEGS_REQUEST_MAX, legKey, type Leg, type LegRequest, type PlaceDetail } from '@/lib/contracts'
 
 const places = new Map<string, PlaceDetail>()
 const legs = new Map<string, Leg>()
@@ -54,14 +54,30 @@ export async function ensurePlaces(ids: string[]): Promise<void> {
   changed()
 }
 
-const LEG_PARALLEL = 4
-
 // 키 끝의 이동수단 (legKey 는 `...:walk` 처럼 끝난다)
 export const legModeOf = (key: string): string => key.slice(key.lastIndexOf(':') + 1)
 export const isLegModeSupported = (key: string): boolean => (SUPPORTED_LEG_MODES as readonly string[]).includes(legModeOf(key))
 
-// 경로는 하나씩 따로 요청한다. 서버는 배치에서 일부만 실패하면 실패한 항목만 빼고 200을 주므로(src/lib/geo/README.md)
-// 묶어 보내도 받을 수 있는 경로는 받는다. 그래도 하나씩 보내면 어느 요청이 왜 실패했는지(상태 코드)를 바로 알 수 있어 그대로 둔다.
+// 경로 한 묶음(서버 상한 이하)을 한 번에 요청한다. 서버는 일부만 실패하면 실패한 항목만 빼고 200을 주므로(src/lib/geo/README.md)
+// 응답은 순서가 아니라 leg.key 로 짝짓고, 응답에 없는 key 는 못 받은 경로로 적는다 (직선 거리나 가짜 시간으로 채우지 않는다).
+// 하나도 못 받으면 서버가 오류 상태 코드를 주므로(예외) 그 묶음은 모두 실패다.
+async function fetchLegBatch(batch: [string, LegRequest][]): Promise<void> {
+  try {
+    const response = await api.legs.get(batch.map(([, req]) => req))
+    const received = new Map(response.map((leg): [string, Leg] => [leg.key, leg]))
+    for (const [key] of batch) {
+      const leg = received.get(key)
+      if (leg) legs.set(key, leg)
+      else failedLegs.add(key)
+    }
+  } catch {
+    batch.forEach(([key]) => failedLegs.add(key))
+  } finally {
+    batch.forEach(([key]) => pendingLegs.delete(key))
+  }
+}
+
+// 경로는 지원하는 이동수단만 묶어서 보낸다. 한 요청에는 서버 상한(LEGS_REQUEST_MAX)까지만 담을 수 있어 넘으면 나눠 차례로 보낸다.
 // 지원하지 않는 이동수단은 서버에 보내지 않고 바로 "없음"으로 둔다.
 export async function ensureLegs(requests: LegRequest[]): Promise<void> {
   const byKey = new Map<string, LegRequest>()
@@ -76,19 +92,7 @@ export async function ensureLegs(requests: LegRequest[]): Promise<void> {
     else failedLegs.add(key)
   }
   sendable.forEach(([key]) => pendingLegs.add(key))
-  async function fetchOne([key, req]: [string, LegRequest]) {
-    try {
-      const [leg] = await api.legs.get([req])
-      // 서버가 key 를 줘도 우리 키로 저장한다(요청과 같은 legKey 규칙)
-      if (leg) legs.set(key, { ...leg, key })
-      else failedLegs.add(key)
-    } catch {
-      failedLegs.add(key)
-    } finally {
-      pendingLegs.delete(key)
-    }
-  }
-  for (let i = 0; i < sendable.length; i += LEG_PARALLEL) await Promise.all(sendable.slice(i, i + LEG_PARALLEL).map(fetchOne))
+  for (let i = 0; i < sendable.length; i += LEGS_REQUEST_MAX) await fetchLegBatch(sendable.slice(i, i + LEGS_REQUEST_MAX))
   changed()
 }
 

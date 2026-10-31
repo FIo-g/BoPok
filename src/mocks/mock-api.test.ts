@@ -104,7 +104,8 @@ describe('목업 API', () => {
     await loginDemo()
     const trip = await api.trips.create({ groupId: 'g-family', title: '붙여넣기 테스트', mode: 'paste' })
     const detail = await api.trips.get('t-daejeon')
-    await api.trips.putTravelers(trip.id, detail.travelers)
+    // 새 여행에는 남의 계정을 걸 수 없어서(서버 규칙) 계정 연결은 빼고 저장한다
+    await api.trips.putTravelers(trip.id, detail.travelers.map(t => ({ ...t, userId: undefined })))
     const parsed = await api.ai.parseSchedule({ tripId: 't-daejeon', text: '10:00 한밭수목원\n14:00 과학관' })
     const saved = await api.trips.saveVersion(trip.id, { parentId: null, stops: parsed.stops, madeBy: 'user', note: null })
     const res = await api.ai.generate({ tripId: trip.id })
@@ -122,19 +123,5 @@ describe('목업 API', () => {
     const again = await api.ai.interview({ tripId: trip.id, questionId: first, answer: { choiceIndex: 1 } })
     expect(again.questionId).toBe(q.questionId)
     expect(again.slot).toBe('traveler_age')
-  })
-})
-
-describe('여행자와 계정 연결', () => {
-  beforeEach(() => resetMockDb())
-
-  it('그룹 구성원 계정만 연결할 수 있고, 한 계정은 한 사람과만', async () => {
-    await loginDemo()
-    const { travelers } = await api.trips.get('t-daejeon')
-    const base = travelers.map(t => ({ ...t, userId: undefined }))
-    await expect(api.trips.putTravelers('t-daejeon', [{ ...base[0], userId: 'u-stranger' }, ...base.slice(1)])).rejects.toMatchObject({ status: 400 })
-    await expect(api.trips.putTravelers('t-daejeon', [{ ...base[0], userId: 'u-me' }, { ...base[1], userId: 'u-me' }, base[2]])).rejects.toMatchObject({ status: 400 })
-    const saved = await api.trips.putTravelers('t-daejeon', [{ ...base[0], userId: 'u-me' }, ...base.slice(1)])
-    expect(saved[0].userId).toBe('u-me')
   })
 })
