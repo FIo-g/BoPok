@@ -215,4 +215,26 @@ describe('callJson', () => {
     expect(error).toBeInstanceOf(Error)
     expect(String(error.message)).not.toContain('secret-key')
   })
+
+  it('401 오류 메시지에 code는 남기고 키 값은 가린다', async () => {
+    // 공급자 본문에 키가 되돌아와도 로그·메시지에는 원문이 남지 않아야 한다
+    const body = { error: { code: 'invalid_api_key', message: 'bad key sk-abcdefghijklmnopqrstuvwxyz123456' } }
+    const fn: FetchLike = async () =>
+      ({ ok: false, status: 401, json: async () => body }) as unknown as Response
+    const error = await callJson({ messages, schema }, { fetch: fn, providers: [upstage] }).catch(e => e)
+    expect(String(error.message)).toContain('HTTP 401')
+    expect(String(error.message)).toContain('invalid_api_key')
+    expect(String(error.message)).not.toContain('sk-abcdefghijklmnopqrstuvwxyz123456')
+  })
+
+  it('공급자 실패 때 공급자 이름과 함께 서버 로그를 남긴다', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const { fn } = fakeFetch(() => statusResponse(429))
+      await callJson({ messages, schema }, { fetch: fn, providers: [upstage] }).catch(() => undefined)
+      expect(spy).toHaveBeenCalledWith('[ai] 공급자 실패', 'upstage', 'm1', expect.stringContaining('HTTP 429'))
+    } finally {
+      spy.mockRestore()
+    }
+  })
 })

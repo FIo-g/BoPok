@@ -28,6 +28,30 @@ function stripTrailingSlash(baseUrl: string): string {
   return baseUrl.replace(/\/+$/, '')
 }
 
+// 로그에는 짧은 요약만 남긴다. 키처럼 긴 토큰은 가린다 (AGENTS.md 7장)
+function safeSnippet(text: string, max = 160): string {
+  return text.replace(/[A-Za-z0-9_\-]{24,}/g, '***').slice(0, max)
+}
+
+// 공급자 오류 응답의 code/type/message만 짧게 꺼낸다. 본문 전체는 남기지 않는다
+async function upstreamErrorSummary(response: Response): Promise<string> {
+  try {
+    const body: unknown = await response.json()
+    if (body && typeof body === 'object' && 'error' in body) {
+      const error = (body as { error: unknown }).error
+      if (error && typeof error === 'object') {
+        const e = error as { code?: unknown; type?: unknown; message?: unknown }
+        const parts = [e.code, e.type, e.message].filter((v): v is string => typeof v === 'string')
+        if (parts.length > 0) return safeSnippet(parts.join(' / '))
+      }
+      if (typeof error === 'string') return safeSnippet(error)
+    }
+  } catch {
+    // JSON이 아닌 오류 본문은 요약하지 않는다
+  }
+  return ''
+}
+
 // Upstage 먼저, opencode는 모델이 정해져 있을 때만. 키 없는 공급자는 뺀다
 export function providersFromEnv(env: Record<string, string | undefined> = process.env): AiProvider[] {
   const providers: AiProvider[] = []
@@ -122,10 +146,12 @@ async function askOnce(
     throw new Error(`${provider.name} 공급자 요청이 실패했어요 (네트워크·시간 초과)`)
   }
   if (response.status === 429 || response.status === 401 || response.status >= 500) {
-    throw new Error(`${provider.name} 공급자가 문제를 알렸어요 (HTTP ${response.status})`)
+    const detail = await upstreamErrorSummary(response)
+    throw new Error(`${provider.name} 공급자가 문제를 알렸어요 (HTTP ${response.status}${detail ? `: ${detail}` : ''})`)
   }
   if (!response.ok) {
-    throw new Error(`${provider.name} 공급자 요청이 형식 오류를 알렸어요 (HTTP ${response.status})`)
+    const detail = await upstreamErrorSummary(response)
+    throw new Error(`${provider.name} 공급자 요청이 형식 오류를 알렸어요 (HTTP ${response.status}${detail ? `: ${detail}` : ''})`)
   }
   return readContent(response)
 }
@@ -170,11 +196,13 @@ export async function callJson<T>(
         content = await askOnce(provider, currentMessages, fetchLike, temperature, Math.min(timeoutMs, remainingMs))
       } catch (error) {
         lastError = new AiCallError('provider_failed', error instanceof Error ? error.message : '공급자 호출 실패')
+        console.error('[ai] 공급자 실패', provider.name, provider.model, lastError.message)
         invalidSeen = false
         break
       }
       const parsed = parseWith(content, req.schema)
       if (parsed.ok) return parsed.value
+      console.error('[ai] 형식 불일치', provider.name, provider.model, `시도 ${attempt + 1}`, safeSnippet(parsed.issues, 200))
       invalidSeen = true
       // 앞 답을 보여 주고 JSON만 다시 보내라고 한다
       currentMessages = [
