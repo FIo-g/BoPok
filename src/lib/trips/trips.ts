@@ -9,6 +9,7 @@ import type { Db } from '@/lib/db/client'
 import { getDb } from '@/lib/db/client'
 import { trips } from '@/lib/db/schema'
 import { listTravelers } from './travelers'
+import { listVersionSummaries, summariesByTrip } from './versions'
 
 type TripRow = typeof trips.$inferSelect
 
@@ -56,10 +57,14 @@ export async function getTrip(tripId: string, db: Db = getDb()): Promise<Trip> {
   return toTrip(await findTrip(tripId, db))
 }
 
-// versions는 4단계(버전 테이블)에서 채운다. 지금은 빈 배열이라 화면이 '버전 없음'으로 그린다.
+// versions는 번호 오름차순이고 stops가 없는 요약이다 (화면은 마지막 것을 '최신'으로 본다).
 export async function getTripDetail(tripId: string, db: Db = getDb()): Promise<TripDetail> {
   const row = await findTrip(tripId, db)
-  return { trip: toTrip(row), travelers: await listTravelers(tripId, db), versions: [] }
+  return {
+    trip: toTrip(row),
+    travelers: await listTravelers(tripId, db),
+    versions: await listVersionSummaries(tripId, db),
+  }
 }
 
 // PATCH — 보낸 칸만 바꾼다. 빈 몸체({})면 지금 값을 그대로 돌려준다.
@@ -85,8 +90,21 @@ export async function updateTrip(
   return toTrip(row)
 }
 
-// GET /api/groups/:id/trips — 최신·확정 버전 요약은 4단계에서 채운다 (지금은 null).
+// GET /api/groups/:id/trips — 여행마다 최신 버전과 확정 버전 요약을 붙인다.
+// 요약은 한 번에 가져와 묶는다 (여행마다 묻지 않으려고).
 export async function listGroupTrips(groupId: string, db: Db = getDb()): Promise<TripListItem[]> {
   const rows = await db.select().from(trips).where(eq(trips.groupId, groupId)).orderBy(desc(trips.createdAt))
-  return rows.map(row => ({ trip: toTrip(row), latestVersion: null, confirmedVersion: null }))
+  const byTrip = await summariesByTrip(
+    rows.map(row => row.id),
+    db,
+  )
+
+  return rows.map(row => {
+    const versions = byTrip.get(row.id) ?? []
+    // 번호 오름차순이므로 마지막이 최신이다 (목업 mock-api.ts와 같은 규칙).
+    const latestVersion = versions.at(-1) ?? null
+    // 확정은 5단계에서 채운다 — confirmed_version_id가 null인 동안은 이 값도 null이다.
+    const confirmedVersion = versions.find(one => one.id === row.confirmedVersionId) ?? null
+    return { trip: toTrip(row), latestVersion, confirmedVersion }
+  })
 }
