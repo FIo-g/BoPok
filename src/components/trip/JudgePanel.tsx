@@ -3,19 +3,22 @@
 // 판정 이유 한 문장 + 배지 + 요약 카드 + 근거. 숫자와 문장은 모두 엔진 결과(JudgeResult)에서 가져온다.
 import Link from 'next/link'
 import type { JudgeResult, Traveler } from '@/lib/contracts'
-import { diffSummary, formatDiffItem, formatRange } from '@/lib/engine'
-import { CONDITION_LABEL, CONDITION_SOURCE_TEXT, conditionValueText } from '@/lib/format'
+import { diffSummary, formatDiffItem } from '@/lib/engine'
+import { CONDITION_LABEL, CONDITION_SOURCE_TEXT, conditionValueText, formatWalk } from '@/lib/format'
 import { Button, Card, Notice, VerdictBadge, cx } from '@/components/ui'
+import { isLegModeSupported } from '@/lib/plan/plan-cache'
 
-function SummaryCard({ title, value, sub, over }: { title: string; value: string; sub: string; over: boolean }) {
+// unknown: 정보가 없어 비교할 수 없음(? 회색) / plain: 비교하는 값이 아님(표시 없음). 둘 다 "✓ 조건 안"처럼 보이면 안 된다
+function SummaryCard({ title, value, sub, over, unknown = false, plain = false, estimate = true }: { title: string; value: string; sub: string; over: boolean; unknown?: boolean; plain?: boolean; estimate?: boolean }) {
   return (
     <div className="rounded-xl border border-line bg-white p-3">
       <p className="text-sm text-muted">{title}</p>
       <p className="my-1 text-lg font-extrabold">
-        {value} <span className="text-sm font-semibold text-muted">추정치</span>
+        {value}
+        {!unknown && estimate && <span className="ml-1 text-sm font-semibold text-muted">추정치</span>}
       </p>
-      <p className={cx('text-sm font-bold', over ? 'text-warn' : 'text-ok')}>
-        <span aria-hidden="true">{over ? '! ' : '✓ '}</span>
+      <p className={cx('text-sm font-bold', plain ? 'text-muted' : unknown ? 'text-info' : over ? 'text-warn' : 'text-ok')}>
+        <span aria-hidden="true">{plain ? '' : unknown ? '? ' : over ? '! ' : '✓ '}</span>
         {sub}
       </p>
     </div>
@@ -23,8 +26,11 @@ function SummaryCard({ title, value, sub, over }: { title: string; value: string
 }
 
 export function JudgePanel({
-  result, prev, travelers, tripId, stopNames, settled, incomplete, onRetry,
+  result, prev, travelers, tripId, stopNames, settled, incomplete, onRetry, explainText = null, explainFromAi = false,
 }: {
+  // 바뀐 점 한 줄 (화면에만 보여 주고 저장하지 않는다)
+  explainText?: string | null
+  explainFromAi?: boolean
   result: JudgeResult
   prev: JudgeResult | null
   travelers: Traveler[]
@@ -40,6 +46,10 @@ export function JudgePanel({
   const stairsOver = result.violations.filter(v => v.kind === 'stairs').length
   // 모든 구간·장소의 계단 기록이 있을 때만 "계단 구간 없음"이라고 말한다 (AGENTS.md 6장)
   const stairsFullyRecorded = result.stops.length > 0 && result.unrecordedStairs.length === 0 && result.unknownStopKeys.length === 0 && result.missingLegs.length === 0
+  // 장소 안 길을 아직 조사하지 못해 걷는 시간이 하나도 계산되지 않은 경우: 0분이 아니라 "정보 없음"
+  const missingSupported = result.missingLegs.filter(m => m.legKey === null || isLegModeSupported(m.legKey)).length
+  const missingUnsupported = result.missingLegs.length - missingSupported
+  const noWalkInfo = result.verdict === 'info' && result.day.high === 0
   const longestRoute = result.longest.fromStopKey
     ? result.longest.fromStopKey === result.longest.toStopKey
       ? stopNames[result.longest.fromStopKey]
@@ -60,14 +70,16 @@ export function JudgePanel({
       <div className="grid gap-2 sm:grid-cols-3">
         <SummaryCard
           title="하루 총 걷기"
-          value={formatRange(result.day)}
-          sub={dayOver ? `조건 ${condition.dayMin}분을 넘어요` : `조건 ${condition.dayMin}분 안`}
+          value={formatWalk(result.day, result.verdict)}
+          unknown={noWalkInfo}
+          sub={noWalkInfo ? '길 정보가 없어서 조건과 비교할 수 없어요' : dayOver ? `조건 ${condition.dayMin}분을 넘어요` : `조건 ${condition.dayMin}분 안`}
           over={dayOver}
         />
         <SummaryCard
           title="가장 긴 연속 걷기"
-          value={formatRange(result.longest)}
-          sub={longestOver ? `조건 ${condition.continuousMin}분을 넘어요` : `조건 ${condition.continuousMin}분 안`}
+          value={formatWalk(result.longest, result.verdict)}
+          unknown={noWalkInfo}
+          sub={noWalkInfo ? '길 정보가 없어서 조건과 비교할 수 없어요' : longestOver ? `조건 ${condition.continuousMin}분을 넘어요` : `조건 ${condition.continuousMin}분 안`}
           over={longestOver}
         />
         <SummaryCard
@@ -75,6 +87,9 @@ export function JudgePanel({
           value={stairsOver > 0 ? `${stairsOver}곳` : condition.avoidStairs ? '피하는 중' : '상관없어요'}
           sub={condition.avoidStairs ? (stairsOver > 0 ? '피해야 할 계단 구간이 있어요' : stairsFullyRecorded ? '확인된 모든 구간에 계단 없음' : '계단 기록 없음 (지도 데이터 기준)') : '계단은 조건에 넣지 않았어요'}
           over={stairsOver > 0}
+          estimate={false}
+          plain={!condition.avoidStairs}
+          unknown={condition.avoidStairs && stairsOver === 0 && !stairsFullyRecorded}
         />
       </div>
       {longestRoute && <p className="text-sm text-muted">가장 긴 연속 걷기 구간: {longestRoute}</p>}
@@ -83,13 +98,16 @@ export function JudgePanel({
         <Notice tone="info">계단 기록이 없는 구간 {result.unrecordedStairs.length}곳 · 지도 데이터 기준</Notice>
       )}
       {unknownNames.length > 0 && <Notice tone="info">길 정보가 아직 없는 장소: {unknownNames.join(', ')}. 판정은 “정보 부족”으로 나와요.</Notice>}
-      {(result.missingLegs.length > 0 || incomplete) && settled && (
+      {(missingSupported > 0 || incomplete) && settled && (
         <Notice tone="warn">
           <p>일부 이동 경로를 받지 못했어요. 받은 부분만으로 계산한 결과예요.</p>
           <Button variant="secondary" className="mt-2 min-h-10" onClick={onRetry}>
             다시 받아 보기
           </Button>
         </Notice>
+      )}
+      {missingUnsupported > 0 && (
+        <Notice tone="info">차·택시·버스로 이동하는 구간 {missingUnsupported}곳은 이동 시간을 아직 계산하지 못해요. 걷는 길만 계산한 결과예요.</Notice>
       )}
       {result.pendingConsents.length > 0 && (
         <Notice tone="info">
@@ -110,10 +128,16 @@ export function JudgePanel({
         </Notice>
       )}
 
-      {diff.length > 0 && (
-        <p className="rounded-xl bg-brand-soft px-4 py-3 font-semibold text-brand-strong">
-          이전 안과 달라진 점(추정치): {diff.join(' · ')}
-        </p>
+      {(diff.length > 0 || explainText) && (
+        <div className="rounded-xl bg-brand-soft px-4 py-3 text-brand-strong">
+          {explainText && (
+            <p className="text-lg font-extrabold">
+              {explainText}
+              {explainFromAi && <span className="ml-2 text-sm font-semibold text-muted">AI가 풀어 쓴 한 줄</span>}
+            </p>
+          )}
+          {diff.length > 0 && <p className="font-semibold">이전 안과 달라진 점(추정치): {diff.join(' · ')}</p>}
+        </div>
       )}
 
       <details>
