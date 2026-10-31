@@ -60,7 +60,7 @@ export function providersFromEnv(env: Record<string, string | undefined> = proce
     providers.push({
       name: 'upstage',
       baseUrl: stripTrailingSlash(textOrDefault(env.UPSTAGE_BASE_URL, 'https://api.upstage.ai/v1')),
-      model: textOrDefault(env.UPSTAGE_MODEL, 'solar-pro2'),
+      model: textOrDefault(env.UPSTAGE_MODEL, 'solar-pro4'),
       apiKey: upstageKey,
     })
   }

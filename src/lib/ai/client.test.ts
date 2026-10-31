@@ -202,14 +202,14 @@ describe('callJson', () => {
     expect(providersFromEnv({ ...env, OPENCODE_MODEL: 'm2' }).map(p => p.name)).toEqual(['upstage', 'opencode'])
     const only = providersFromEnv({ UPSTAGE_API_KEY: 'k1' })[0]
     expect(only?.baseUrl).toBe('https://api.upstage.ai/v1')
-    expect(only?.model).toBe('solar-pro2')
+    expect(only?.model).toBe('solar-pro4')
   })
 
   it('providersFromEnv: 빈 문자열·공백은 없음으로 본다', () => {
     // 주소·모델이 비어 있거나 공백이면 기본값을 쓴다
     const blank = providersFromEnv({ UPSTAGE_API_KEY: 'k', UPSTAGE_BASE_URL: '', UPSTAGE_MODEL: '  ' })[0]
     expect(blank?.baseUrl).toBe('https://api.upstage.ai/v1')
-    expect(blank?.model).toBe('solar-pro2')
+    expect(blank?.model).toBe('solar-pro4')
     // 공백뿐인 키·모델은 없는 것으로 본다
     expect(providersFromEnv({ UPSTAGE_API_KEY: '  ' })).toEqual([])
     expect(providersFromEnv({ OPENCODE_API_KEY: 'k2', OPENCODE_MODEL: '  ' }).map(p => p.name)).toEqual([])
