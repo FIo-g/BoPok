@@ -63,7 +63,7 @@
 - `filledBySelf`는 화면의 `markSelfFilled`와 같다: **연결된 본인이 저장하면서 걷기 조건 칸(`age`, `heightCm`, `sex`, `pace`, `mobilityAid`, `condition`)을 실제로 바꿨거나 새로 만든 여행자일 때만** `true`. 연결만 하고 조건이 그대로면 기존 값 유지, 한 번 `true`면 계속 `true`. 몸체의 값은 계속 무시한다.
   - 이름표(`label`)·부모님 여부(`isParent`)·계정 연결은 '조건을 말한 것'이 아니라 비교에서 뺀다.
   - **조건 비교는 키 순서를 맞춰서 한다.** `condition`은 jsonb라 DB에서 키 순서가 바뀌어 돌아온다. 순서만 다른 것을 '바뀌었다'로 보면 연결만 해도 `filledBySelf`가 올라간다(테스트로 고정).
-- AI 인터뷰(`saveTravelers`)는 이름표가 `'나'`이고 계정이 없는 여행자에 **여행을 만든 사람**(`trips.created_by`)을 연결하고 `filledBySelf`를 `true`로 둔다(그 사람이 직접 인터뷰에 답했다). 만든 사람이 이미 다른 여행자에 연결돼 있으면 건드리지 않는다.
+- AI 인터뷰(`saveTravelers`)는 이름표가 `'나'`이고 계정이 없는 여행자에 **여행을 만든 사람**(`trips.created_by`)을 연결하고 `filledBySelf`를 `true`로 둔다(그 사람이 직접 인터뷰에 답했다). 만든 사람이 이미 다른 여행자에 연결돼 있으면 건드리지 않는다. **만든 사람이 이미 그룹을 떠났으면 연결하지 않는다**(`userId`를 비우고 `filledBySelf`는 `false`로 저장한다). 구성원이 아닌 계정을 새로 연결하면 400이 되어 인터뷰 결과가 통째로 날아가기 때문이다(테스트로 고정).
 - `PATCH /api/trips/:id/travelers/:tid`도 **`PUT`과 같은 규칙**을 쓴다(같은 함수). 연결된 본인이 걷기 조건 칸을 실제로 바꿨을 때만 `true`, 아니면 기존 값 유지, 한 번 `true`면 계속 `true`. `userId`는 이 API로 바꿀 수 없으므로 기존 연결로 판단한다. (3단계의 '본인이 아니면 false'는 '한 번 true면 계속 true'와 어긋나서 10/31에 고쳤다.)
 
 7단계에서 정한 것 **[결정: 김경선 10/31]**:
@@ -101,10 +101,11 @@
   - `userId`(계정 연결)는 `PATCH`로 바꿀 수 없다. `PUT`으로 목록을 통째로 저장할 때만 바꾸며, 그때 **그 그룹 구성원이 아닌 계정이면 400**.
 - `PATCH`로는 나이·키·성별을 비울 수 없다(계약이 `optional`이라 `null`을 받지 않는다). 비우려면 `PUT`으로 목록을 다시 저장한다.
 - 여행 API는 모두 여행의 `groupId`로 `requireMember`를 거친다. **없는 여행도 403**으로 답한다(404로 나누면 그 여행이 있다는 사실이 새어 나간다).
+- **본문을 읽는 API는 로그인 검사를 본문 검사보다 먼저 한다.** 로그인 안 한 사람이 잘못된 본문을 보내도 400이 아니라 401이다. `POST /api/trips`는 몸체의 `groupId`로 구성원인지 봐야 해서 ① 로그인(`requireUser`) → ② 본문 검사 → ③ 구성원(`requireMember`) 순서다. 로그인은 했지만 구성원이 아닌 사람의 잘못된 본문은 그대로 400이다(테스트: `src/app/api/login-first.test.ts`).
 
 2단계에서 정한 것 **[결정: 김경선 10/30]**:
 - 참가할 때 `relation`을 선택 값으로 받는다. 설계 10.3의 `group_members.relation`을 채우는 곳이 다른 데 없어서, 안 받으면 그 칸이 영원히 빈다. 안 보내도(또는 `null`로 보내도) 참가는 된다.
-- `GroupDetail`에 `myRole`을 넣는다. 상세 화면이 '초대 링크 만들기'·'내보내기' 버튼을 보여줄지 이것만 보고 정하게.
+- `GroupDetail`에는 `myRole`을 **넣지 않는다** (처음에 넣기로 했던 것을 뒤집었다). 실제 계약 `src/lib/contracts/group.ts`의 `GroupDetail`은 `Group`(`ownerId` 포함) + `members`뿐이다. 상세 화면(`GroupScreen`)은 응답의 `ownerId`와 내 id를 비교해 '초대 링크 만들기'·'내보내기' 버튼을 보여줄지 정한다. 그룹장 넘기기가 MVP 밖이라 `ownerId`(= `groups.created_by`)와 `owner` 역할은 항상 같다. 역할(`role`)은 내 그룹 목록(`GroupSummary`)에만 있다.
 - 내보내기는 두 겹으로 막는다: 그룹장이 자기 자신을 내보내면 400, 내보낸 뒤 그룹장이 0명이 되면 400. 그룹장 넘기기·그룹 삭제·스스로 나가기는 MVP 밖.
 - 초대 링크의 전체 주소는 프론트가 만든다(`location.origin + '/invite/' + token`). API는 `{ token, expiresAt }`만 준다.
 
