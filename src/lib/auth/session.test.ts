@@ -20,7 +20,10 @@ beforeAll(async () => {
   vi.stubEnv('BETTER_AUTH_SECRET', 'test-secret-only-for-vitest')
   vi.stubEnv('BETTER_AUTH_URL', 'http://localhost:3000')
   testDb = await setupTestDb()
-})
+  // 제한 시간 60초: 메모리 PGlite를 띄우는 데 1.6초쯤 걸리는데, 느린 컴퓨터나 CI에서는
+  // vitest 기본값 5초를 넘겨 '초기화 시간 초과'로 실패한다 (이동주 제보).
+  // vitest.config.ts는 공용 파일이라 건드리지 않고 이 파일에서만 늘린다.
+}, 60_000)
 
 beforeEach(async () => {
   await testDb.reset()
