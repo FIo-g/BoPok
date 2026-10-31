@@ -124,3 +124,17 @@ describe('목업 API', () => {
     expect(again.slot).toBe('traveler_age')
   })
 })
+
+describe('여행자와 계정 연결', () => {
+  beforeEach(() => resetMockDb())
+
+  it('그룹 구성원 계정만 연결할 수 있고, 한 계정은 한 사람과만', async () => {
+    await loginDemo()
+    const { travelers } = await api.trips.get('t-daejeon')
+    const base = travelers.map(t => ({ ...t, userId: undefined }))
+    await expect(api.trips.putTravelers('t-daejeon', [{ ...base[0], userId: 'u-stranger' }, ...base.slice(1)])).rejects.toMatchObject({ status: 400 })
+    await expect(api.trips.putTravelers('t-daejeon', [{ ...base[0], userId: 'u-me' }, { ...base[1], userId: 'u-me' }, base[2]])).rejects.toMatchObject({ status: 400 })
+    const saved = await api.trips.putTravelers('t-daejeon', [{ ...base[0], userId: 'u-me' }, ...base.slice(1)])
+    expect(saved[0].userId).toBe('u-me')
+  })
+})
