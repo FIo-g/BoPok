@@ -44,9 +44,12 @@ ID는 영문·숫자로 시작하는 영문·숫자·밑줄·하이픈 문자열
 잘못된 입력·JSON·16 KiB 초과 본문은 400, JSON이 아닌 POST는 415이다.
 서버 또는 응답 계약 검사 실패는 내부 정보를 숨기는 500이다. 오류는 공용
 `{ "error": { "code": "...", "message": "..." } }` 모양이며 응답은 `no-store`이다.
+한글 검색어는 주소에서 인코딩(퍼센트 인코딩)해야 한다. 그대로 보내면 400이다.
 
 ```powershell
-Invoke-RestMethod 'http://localhost:3000/api/places?q=미술관'
+Invoke-RestMethod "http://localhost:3000/api/places?q=$([uri]::EscapeDataString('미술관'))"
+# 같은 주소: http://localhost:3000/api/places?q=%EB%AF%B8%EC%88%A0%EA%B4%80
+curl 'http://localhost:3000/api/places?q=%EB%AF%B8%EC%88%A0%EA%B4%80'
 Invoke-RestMethod 'http://localhost:3000/api/places/hanbat'
 Invoke-RestMethod 'http://localhost:3000/api/places/details' -Method Post -ContentType 'application/json' -Body '{"ids":["leeungno","hanbat","art"]}'
 ```
