@@ -53,6 +53,15 @@
 
 요청·응답 모양은 모두 `src/lib/contracts`에 zod로 정하고, 서버에서 검사한다.
 
+4단계에서 정한 것 **[결정: 김경선 10/31]**:
+- 버전 번호는 여행마다 1부터. `db.transaction()`을 못 쓰므로(Neon HTTP) **`(trip_id, number)` 유니크 제약 + 겹치면 다시 세어 넣기(최대 5회)**로 막는다. 두 명이 동시에 저장해도 번호가 겹치거나 빠지지 않는다.
+- `POST /api/trips/:id/versions`(화면)와 `createVersion`(AI)이 **같은 저장 함수**를 쓴다. 번호·`parentId` 검사가 한 곳에만 있다.
+- `parentId`는 같은 여행의 버전이어야 한다. 아니면 **400 "이전 버전을 찾을 수 없어요"**(목업과 같은 코드·문구). `GET .../versions/:vid`에서 다른 여행의 버전 id면 **404 "버전을 찾을 수 없어요"**.
+- 버전 목록은 **번호 오름차순**이고 `latestVersion`은 마지막이다(목업 `versionsOf`와 같은 규칙). 목록용 요약에는 `stops`가 없고 `madeByName`(= `madeByUserId`의 이름)을 서버가 채운다.
+- `trips.confirmed_version_id`에 외래키를 걸었다. `trips`와 `trip_versions`가 서로를 가리키므로 스키마에서 `AnyPgColumn`으로 타입 순환을 끊는다.
+- `version_opinions` 표는 4단계에 같이 만들었다(마이그레이션을 두 번 만들지 않으려고). **의견 API와 `createVersion`의 `appliedOpinionIds` 연결은 5단계**다. `getOpinions(versionId)`는 AI가 기다리는 함수라 4단계에 먼저 만들었다 — 의견이 없으면 빈 배열이 정상이다.
+- 판정 요약(`judge_summary`)은 6단계에서 채운다. 그때까지 `null`로 저장한다.
+
 3단계에서 정한 것 **[결정: 김경선 10/31]**:
 - `trips`에 `status` 칸을 두지 않는다. 계약(`trip-api.ts`)에 없고 `confirmedVersionId === null`이면 '작성 중'이다. 칸이 둘이면 서로 어긋난다(설계 10.3의 `status` 제안을 쓰지 않음).
 - 날짜는 `date({ mode: 'string' })`로 `'YYYY-MM-DD'` 문자열을 주고받는다. `Date`로 받으면 시간대 때문에 하루 밀린다.

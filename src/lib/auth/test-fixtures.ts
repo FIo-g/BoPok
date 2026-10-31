@@ -1,9 +1,9 @@
 // 테스트에서만 쓰는 보조 함수. 가입해서 로그인 쿠키를 얻고, 그룹·구성원을 넣는다.
 // `.test.ts`가 아니라 여기 둔 이유: 여러 테스트 파일이 같이 쓴다.
 import 'server-only'
-import type { GroupRole, Traveler } from '@/lib/contracts'
+import type { GroupRole, Reaction, Stop, Traveler } from '@/lib/contracts'
 import type { Db } from '@/lib/db/client'
-import { groupInvites, groupMembers, groups, trips, user } from '@/lib/db/schema'
+import { groupInvites, groupMembers, groups, trips, user, versionOpinions } from '@/lib/db/schema'
 import { getAuth } from './auth'
 
 const BASE_URL = 'http://localhost:3000'
@@ -144,4 +144,35 @@ export function traveler(args: Partial<Traveler> & { id: string; label: string }
     filledBySelf: false,
     ...args,
   }
+}
+
+// 일정 한 장소. 넘긴 칸만 바꾼다 (4단계 버전 테스트용).
+export function stop(args: Partial<Stop> & { key: string; name: string }): Stop {
+  return {
+    placeId: null,
+    mustVisit: false,
+    arriveBy: 'car',
+    skipSegmentIds: [],
+    detourMap: {},
+    restNodeIds: [],
+    ...args,
+  }
+}
+
+// 의견 한 줄을 DB에 바로 넣는다 — 의견 API는 5단계라서 getOpinions를 검사하려면 직접 넣어야 한다.
+export async function insertOpinion(
+  db: Db,
+  args: { versionId: string; userId: string; stopKey?: string | null; reactions?: Reaction[]; comment?: string },
+): Promise<string> {
+  const [row] = await db
+    .insert(versionOpinions)
+    .values({
+      versionId: args.versionId,
+      userId: args.userId,
+      stopKey: args.stopKey ?? null,
+      reactions: args.reactions ?? [],
+      comment: args.comment ?? null,
+    })
+    .returning({ id: versionOpinions.id })
+  return row.id
 }
