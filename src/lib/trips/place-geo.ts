@@ -43,7 +43,7 @@ export function createPlaceGeoDeps(source: PlaceGeoDeps): PlaceGeoDeps {
           // getLegs는 한 묶음에서 하나도 못 받으면 첫 실패를 던진다. 그 묶음은 '경로 없음'으로 두고
           // 판정을 잇는다 (엔진이 missingLegs로 알려 준다). DB 오류 같은 내부 오류는 숨기지 않는다.
           if (!(error instanceof GeoError)) throw error
-          // 탈것은 아직 지원하지 않는 게 정상이라 로그를 남기지 않는다. 키·원문 없이 종류만 남긴다.
+          // 버스는 아직 지원하지 않는 게 정상이라 로그를 남기지 않는다. 키·원문 없이 종류만 남긴다.
           if (error.kind !== 'unsupported_mode') console.error('[acct] 경로를 받지 못해 빈 값으로 판정', error.kind)
         }
       }

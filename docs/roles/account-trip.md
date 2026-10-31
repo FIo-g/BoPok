@@ -78,7 +78,7 @@
 - `place-geo.ts`가 이동주의 `getPlaceDetails`(`src/lib/places`)와 `getLegs`(`src/lib/geo`)를 부른다. 그쪽 코드는 부르기만 하고 고치지 않았다.
   - `getLegs`는 20개씩 나눠 묻는다. 한 묶음에서 하나도 못 받아 `GeoError`를 던지면 **그 묶음은 '경로 없음'으로 두고 잇는다** — 엔진이 `missingLegs`로 처리해 요약은 '정보 부족'이 되고 걷는 시간은 지어내지 않는다. `GeoError`가 아닌 오류(DB 등)는 숨기지 않고 올린다.
   - 장소 id는 중복과 형식이 틀린 것을 빼고 100개씩 묻는다(AI 쪽 `createPlaceDetailsAdapter`와 같은 규칙). 하나 때문에 조회 전체가 실패하지 않게.
-  - 탈것(car·taxi·bus) 경로는 `getLegs`가 아직 지원하지 않아(`unsupported_mode`) 빠진다. 엔진은 탈것을 걷는 시간 0으로 확실히 보므로 판정에는 영향이 없고, 공유 글에는 "↓ 자가용 이동"만 나온다(시간은 지어내지 않는다).
+  - 자동차·택시(car·taxi) 경로는 `getLegs`가 TMAP 자동차 경로로 받아 탈것 시간(`durationMin`)이 들어간다. 버스(bus)는 아직 지원하지 않아(`unsupported_mode`) 빠지고 공유 글에는 시간 없이 이동만 나온다(시간은 지어내지 않는다). 엔진은 탈것을 걷는 시간 0으로 보므로 판정에는 영향이 없다.
 - 요약을 만들다 오류가 나도(장소 DB 오류 등) **버전은 저장하고 `judge_summary`만 `null`**, 서버 로그에만 남긴다. 5단계 `appliedOpinionIds`와 같은 생각 — 곁가지 정보 때문에 일정을 날리지 않는다.
 - 여행 목록·버전 목록의 판정 배지는 저장된 `summary`를 그대로 읽는다(`toVersion`이 `judge_summary`를 `summary`로 내보낸다). AI의 `getTripContext`의 `versions`도 같다. 테스트로 고정했다.
 - 공유 글은 저장된 요약이 아니라 **지금 여행자로 다시 판정**한 결과를 쓴다(`getShareText → judgeStops`) — 요약이 낡아도 글의 숫자는 낡지 않는다. 경로를 받지 못한 이동이 있으면 하루 요약 밑에 "(경로 정보를 받지 못한 이동 n곳은 걷는 시간에 넣지 않았어요)"를 붙인다. 빠진 경로는 시간에 안 들어가므로 숫자가 실제보다 작게 읽히지 않게 하려는 것이다.
