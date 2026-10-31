@@ -1,0 +1,25 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [127.38, 36.36] },
+      "properties": { "index": 0, "pointType": "SP", "totalDistance": 300, "totalTime": 240 }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "LineString", "coordinates": [[127.38, 36.36], [127.381, 36.361]] },
+      "properties": { "index": 1, "distance": 150, "time": 120, "facilityType": 11 }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "LineString", "coordinates": [[127.381, 36.361], [127.382, 36.362]] },
+      "properties": { "index": 2, "distance": 150, "time": 120, "facilityType": 11 }
+    },
+    {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [127.382, 36.362] },
+      "properties": { "index": 3, "pointType": "EP" }
+    }
+  ]
+}
