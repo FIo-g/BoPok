@@ -8,16 +8,17 @@ import { CONDITION_LABEL, CONDITION_SOURCE_TEXT, conditionValueText, formatWalk 
 import { Button, Card, Notice, VerdictBadge, cx } from '@/components/ui'
 import { isLegModeSupported } from '@/lib/plan/plan-cache'
 
-function SummaryCard({ title, value, sub, over, unknown = false }: { title: string; value: string; sub: string; over: boolean; unknown?: boolean }) {
+// unknown: 정보가 없어 비교할 수 없음(? 회색) / plain: 비교하는 값이 아님(표시 없음). 둘 다 "✓ 조건 안"처럼 보이면 안 된다
+function SummaryCard({ title, value, sub, over, unknown = false, plain = false, estimate = true }: { title: string; value: string; sub: string; over: boolean; unknown?: boolean; plain?: boolean; estimate?: boolean }) {
   return (
     <div className="rounded-xl border border-line bg-white p-3">
       <p className="text-sm text-muted">{title}</p>
       <p className="my-1 text-lg font-extrabold">
         {value}
-        {!unknown && <span className="ml-1 text-sm font-semibold text-muted">추정치</span>}
+        {!unknown && estimate && <span className="ml-1 text-sm font-semibold text-muted">추정치</span>}
       </p>
-      <p className={cx('text-sm font-bold', unknown ? 'text-info' : over ? 'text-warn' : 'text-ok')}>
-        <span aria-hidden="true">{unknown ? '? ' : over ? '! ' : '✓ '}</span>
+      <p className={cx('text-sm font-bold', plain ? 'text-muted' : unknown ? 'text-info' : over ? 'text-warn' : 'text-ok')}>
+        <span aria-hidden="true">{plain ? '' : unknown ? '? ' : over ? '! ' : '✓ '}</span>
         {sub}
       </p>
     </div>
@@ -86,6 +87,9 @@ export function JudgePanel({
           value={stairsOver > 0 ? `${stairsOver}곳` : condition.avoidStairs ? '피하는 중' : '상관없어요'}
           sub={condition.avoidStairs ? (stairsOver > 0 ? '피해야 할 계단 구간이 있어요' : stairsFullyRecorded ? '확인된 모든 구간에 계단 없음' : '계단 기록 없음 (지도 데이터 기준)') : '계단은 조건에 넣지 않았어요'}
           over={stairsOver > 0}
+          estimate={false}
+          plain={!condition.avoidStairs}
+          unknown={condition.avoidStairs && stairsOver === 0 && !stairsFullyRecorded}
         />
       </div>
       {longestRoute && <p className="text-sm text-muted">가장 긴 연속 걷기 구간: {longestRoute}</p>}
