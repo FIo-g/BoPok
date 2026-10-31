@@ -13,11 +13,13 @@ import { PlacePicker } from '@/components/trip/PlacePicker'
 import { QuickFixPanel } from '@/components/trip/QuickFixPanel'
 import { StopList, type StopEditing } from '@/components/trip/StopList'
 import { TripMap } from '@/components/trip/TripMap'
+import { useExplain } from '@/components/trip/useExplain'
 import { useJudged } from '@/components/trip/useJudged'
 import { VersionBar, VersionCompare } from '@/components/trip/VersionBar'
 import { Button, Card, ErrorNotice, Notice, PageTitle, Spinner } from '@/components/ui'
-import { api, isApiError } from '@/lib/api-client'
-import type { Condition, OpinionInput, PlaceSummary, QuickFix, Stop } from '@/lib/contracts'
+import { api } from '@/lib/api-client'
+import { aiFailure } from '@/lib/ai-fallback'
+import type { Condition, OpinionInput, PlaceSummary, QuickFix, QuickFixChange, Stop } from '@/lib/contracts'
 import { fixedChangeSentence } from '@/lib/engine'
 import { formatDate } from '@/lib/format'
 import { moveStop, removeStop, replaceStopPlace, sameStops, stopFromPlace, updateStop } from '@/lib/plan/stop-edit'
@@ -56,6 +58,17 @@ export function TripScreen({ tripId }: { tripId: string }) {
   const stops = draft ?? version.data?.stops
   const judged = useJudged(stops, travelers, tuned)
   const prevJudged = useJudged(parent.data?.stops, travelers, tuned)
+  // 빠른 수정안으로 만든 버전의 바뀐 내용(고정 문장의 재료). 새로고침하면 사라지고, 그때는 비교 숫자로만 설명한다
+  const [quickFixChanges, setQuickFixChanges] = useState<Record<string, QuickFixChange[]>>({})
+  const explain = useExplain({
+    tripId,
+    versionId: parent.data && activeId ? activeId : null,
+    prev: prevJudged?.settled ? prevJudged.result : null,
+    next: judged?.settled ? judged.result : null,
+    changes: activeId ? quickFixChanges[activeId] : undefined,
+    // 조건 바꿔 보기 중에는 저장된 두 안의 비교가 아니므로 설명하지 않는다
+    enabled: !tuned && !draft,
+  })
   const dirty = draft !== null && version.data !== undefined && !sameStops(draft, version.data.stops)
 
   // 열어 둔 동안 새 의견을 몇 초마다 다시 받아 온다 (설계 5장)
@@ -102,6 +115,7 @@ export function TripScreen({ tripId }: { tripId: string }) {
   async function applyQuickFix(fix: QuickFix) {
     if (!activeId) return
     const saved = await api.trips.saveVersion(tripId, { parentId: activeId, stops: fix.stops, madeBy: 'quick_fix', note: fixedChangeSentence(fix.changes) })
+    setQuickFixChanges(cur => ({ ...cur, [saved.id]: fix.changes }))
     await afterNewVersion(saved.id, `${saved.number}번째 안으로 저장했어요: ${fixedChangeSentence(fix.changes)}`)
   }
 
@@ -114,8 +128,8 @@ export function TripScreen({ tripId }: { tripId: string }) {
       await afterNewVersion(res.version.id, `의견 ${res.appliedOpinionIds.length}개를 반영해서 ${res.version.number}번째 안을 만들었어요`)
     } catch (e) {
       // AI 가 안 될 때는 다시 시도하거나 직접 고치도록 안내한다 (설계 6.4)
-      const fallback = isApiError(e) && e.fallback
-      setMessage({ tone: 'warn', text: fallback ? 'AI가 지금 일정을 못 짰어요. 잠시 뒤에 다시 시도하거나 “직접 고치기”로 바꿔 주세요.' : errorMessage(e) })
+      const failure = aiFailure(e)
+      setMessage({ tone: 'warn', text: failure.canPick ? `AI가 지금 일정을 못 짰어요. ${failure.canRetry ? '잠시 뒤에 다시 시도하거나 ' : ''}“직접 고치기”로 바꿔 주세요.` : failure.message })
     }
     setBusy(null)
   }
@@ -216,6 +230,8 @@ export function TripScreen({ tripId }: { tripId: string }) {
               <JudgePanel
                 result={judged.result}
                 prev={parent.data && prevJudged ? prevJudged.result : null}
+                explainText={explain?.text ?? null}
+                explainFromAi={explain?.source === 'ai'}
                 travelers={detail.data.travelers}
                 tripId={tripId}
                 stopNames={stopNames}

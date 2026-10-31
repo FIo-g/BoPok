@@ -7,6 +7,7 @@ import type { JudgeResult, Leg, Opinion, OpinionInput, PlaceDetail, Stop, StopRe
 import { formatRange } from '@/lib/engine'
 import { CONFIDENCE_TEXT, TRANSPORT_TEXT, sourceLine, stairsText, stopStairsState } from '@/lib/format'
 import { legItemId, segmentItemId, stopItemId } from '@/components/map'
+import { isLegModeSupported } from '@/lib/plan/plan-cache'
 import { Badge, Button, cx } from '@/components/ui'
 import { OpinionForm, OpinionList } from './OpinionBox'
 
@@ -86,7 +87,7 @@ function LegRow({ result, leg, selectedId, onSelect, nextStop, editing }: { resu
         {leg?.fareKrw !== undefined && <span> · 택시 요금 약 {leg.fareKrw.toLocaleString()}원</span>}
         {result.mode === 'walk' && <span> · {stairsText(result.stairsStatus, leg?.stairsCount)}</span>}
         {result.mode === 'walk' && <span className="ml-2"><StatusBadge warn={result.status === 'warn'} info={result.stairsStatus === 'unknown'} /></span>}
-        {missing && <span className="block text-sm text-warn">이 구간의 경로를 아직 받지 못했어요</span>}
+        {missing && (isLegModeSupported(result.legKey) ? <span className="block text-sm text-warn">이 구간의 경로를 아직 받지 못했어요</span> : <span className="block text-sm text-muted">{TRANSPORT_TEXT[result.mode]} 이동 시간은 아직 계산하지 못해요 (보행 경로만 지원해요)</span>)}
         {leg && <span className="block text-sm text-muted">{sourceLine(leg.source, leg.checkedAt)}</span>}
       </button>
       {editing && (
@@ -191,6 +192,11 @@ export function StopList(props: Props) {
                   </span>
                 )}
               </div>
+              {place && stopResult && !stopResult.known && (
+                <p className="mt-1 text-sm text-muted">
+                  이 장소 안의 길(입구·계단·쉼터)은 아직 조사하지 못했어요. 걷는 시간과 계단은 계산하지 않았고, 지도의 점은 장소 대표 위치예요(입구가 아니에요).
+                </p>
+              )}
               {place && (
                 <p className="mt-1 text-sm text-muted">
                   {sourceLine(place.source, place.checkedAt)} · 신뢰 {place.confidence}({CONFIDENCE_TEXT[place.confidence]})

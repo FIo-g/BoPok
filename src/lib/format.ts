@@ -1,5 +1,6 @@
 // 화면에 보이는 문장을 만드는 작은 함수들. 판정·걷는 시간 숫자는 만들지 않고 엔진 결과를 글로만 바꾼다.
-import type { Confidence, Reaction, SegmentResult, StairsStatus, Transport, VersionSummary } from '@/lib/contracts'
+import type { Confidence, Minutes, Reaction, SegmentResult, StairsStatus, Transport, Verdict, VersionSummary } from '@/lib/contracts'
+import { formatRange } from '@/lib/engine'
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토']
 
@@ -17,12 +18,23 @@ function checkedMonth(checkedAt?: string | null): string | null {
   return m ? `${m[1]}.${m[2]}` : null
 }
 
+// 출처가 주소(URL)면 읽기 쉬운 이름으로: TMAP 은 "TMAP 보행자 경로", 그 밖은 사이트 이름(도메인)
+export function sourceName(source: string): string {
+  if (!source.toLowerCase().startsWith('http://') && !source.toLowerCase().startsWith('https://')) return source
+  try {
+    const host = new URL(source).hostname.replace(/^www\./, '')
+    return host === 'apis.openapi.sk.com' ? 'TMAP 보행자 경로' : host
+  } catch {
+    return source
+  }
+}
+
 // 근거 줄: "출처: {source} · {YYYY.MM} 확인". 출처나 날짜가 비어 있으면 "출처 확인 중" (설계 2.3)
 export function sourceLine(source?: string | null, checkedAt?: string | null): string {
   const month = checkedMonth(checkedAt)
   const name = source?.trim()
   if (!name || !month) return '출처 확인 중'
-  return `출처: ${name} · ${month} 확인`
+  return `출처: ${sourceName(name)} · ${month} 확인`
 }
 
 export const CONFIDENCE_TEXT: Record<Confidence, string> = {
@@ -73,6 +85,12 @@ export function madeByText(v: Pick<VersionSummary, 'madeBy' | 'madeByName'>): st
   if (v.madeBy === 'ai') return 'AI가 만들었어요'
   if (v.madeBy === 'quick_fix') return `${v.madeByName ?? '가족'}이 빠른 수정안으로 만들었어요`
   return `${v.madeByName ?? '가족'}이 만들었어요`
+}
+
+// 걷는 시간 문장. 장소 안 길을 아직 조사하지 못해 아무것도 계산되지 않았을 때(정보 부족, 합계 0)는
+// "약 0분"이라고 하면 걷지 않는다는 뜻으로 읽히므로 "정보 없음"으로 보여 준다 (장소 API 안내: 빈 경로를 걷기 0분으로 해석하면 안 됨)
+export function formatWalk(minutes: Minutes, verdict: Verdict): string {
+  return verdict === 'info' && minutes.high === 0 ? '정보 없음' : formatRange(minutes)
 }
 
 // 클립보드에 복사. 막혀 있으면 false (화면이 직접 복사하라고 안내한다)

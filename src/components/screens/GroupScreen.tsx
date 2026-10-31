@@ -7,8 +7,7 @@ import { useRequireUser } from '@/components/AuthProvider'
 import { Badge, Button, ButtonLink, Card, ErrorNotice, Notice, PageShell, PageTitle, Spinner, VerdictBadge } from '@/components/ui'
 import { api } from '@/lib/api-client'
 import type { GroupDetail, Invite, TripListItem } from '@/lib/contracts'
-import { formatRange } from '@/lib/engine'
-import { copyText, formatDate, madeByText, versionLabel } from '@/lib/format'
+import { copyText, formatDate, formatWalk, madeByText, versionLabel } from '@/lib/format'
 import { errorMessage, useAsync } from '@/lib/use-async'
 
 function TripCard({ item }: { item: TripListItem }) {
@@ -30,7 +29,7 @@ function TripCard({ item }: { item: TripListItem }) {
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <VerdictBadge verdict={shown.summary.verdict} />
             <span className="text-muted">
-              {versionLabel(shown)} · 하루 걷기 {formatRange(shown.summary.day)} · 추정치
+              {versionLabel(shown)} · 하루 걷기 {formatWalk(shown.summary.day, shown.summary.verdict)}{shown.summary.verdict === 'info' && shown.summary.day.high === 0 ? '' : ' · 추정치'}
             </span>
           </div>
         ) : (

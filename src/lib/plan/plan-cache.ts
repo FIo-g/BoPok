@@ -2,7 +2,7 @@
 
 // 일정 화면이 쓰는 장소 상세와 장소 사이 경로를 한 번만 받아 두는 곳 (일정이 바뀔 때 없는 것만 서버에 묻는다).
 // 같은 값을 여러 화면 부품이 쓰므로 모듈 안에 두고, 바뀌면 revision 숫자로 알린다 (useSyncExternalStore).
-import { api } from '@/lib/api-client'
+import { SUPPORTED_LEG_MODES, api } from '@/lib/api-client'
 import { legKey, type Leg, type LegRequest, type PlaceDetail } from '@/lib/contracts'
 
 const places = new Map<string, PlaceDetail>()
@@ -54,6 +54,14 @@ export async function ensurePlaces(ids: string[]): Promise<void> {
   changed()
 }
 
+const LEG_PARALLEL = 4
+
+// 키 끝의 이동수단 (legKey 는 `...:walk` 처럼 끝난다)
+export const legModeOf = (key: string): string => key.slice(key.lastIndexOf(':') + 1)
+export const isLegModeSupported = (key: string): boolean => (SUPPORTED_LEG_MODES as readonly string[]).includes(legModeOf(key))
+
+// 경로는 하나씩 따로 요청한다. 서버가 배치 안에 실패가 하나만 있어도 전체를 실패시키기 때문에(캐시 없음·외부 오류),
+// 하나 묶어 보내면 받을 수 있는 경로까지 못 받는다. 지원하지 않는 이동수단은 서버에 보내지 않고 바로 "없음"으로 둔다.
 export async function ensureLegs(requests: LegRequest[]): Promise<void> {
   const byKey = new Map<string, LegRequest>()
   for (const req of requests) {
@@ -61,18 +69,25 @@ export async function ensureLegs(requests: LegRequest[]): Promise<void> {
     if (!legs.has(key) && !failedLegs.has(key) && !pendingLegs.has(key)) byKey.set(key, req)
   }
   if (byKey.size === 0) return
-  const keys = [...byKey.keys()]
-  keys.forEach(key => pendingLegs.add(key))
-  try {
-    const received = await api.legs.get(keys.map(key => byKey.get(key)!))
-    // 응답은 요청 순서와 같다. 서버가 key 를 주면 그것을, 아니면 순서대로 짝을 짓는다
-    received.forEach((leg, i) => legs.set(keys[i] ?? leg.key, { ...leg, key: keys[i] ?? leg.key }))
-    for (const key of keys) if (!legs.has(key)) failedLegs.add(key)
-  } catch {
-    keys.forEach(key => failedLegs.add(key))
-  } finally {
-    keys.forEach(key => pendingLegs.delete(key))
+  const sendable: [string, LegRequest][] = []
+  for (const [key, req] of byKey) {
+    if (isLegModeSupported(key)) sendable.push([key, req])
+    else failedLegs.add(key)
   }
+  sendable.forEach(([key]) => pendingLegs.add(key))
+  async function fetchOne([key, req]: [string, LegRequest]) {
+    try {
+      const [leg] = await api.legs.get([req])
+      // 서버가 key 를 줘도 우리 키로 저장한다(요청과 같은 legKey 규칙)
+      if (leg) legs.set(key, { ...leg, key })
+      else failedLegs.add(key)
+    } catch {
+      failedLegs.add(key)
+    } finally {
+      pendingLegs.delete(key)
+    }
+  }
+  for (let i = 0; i < sendable.length; i += LEG_PARALLEL) await Promise.all(sendable.slice(i, i + LEG_PARALLEL).map(fetchOne))
   changed()
 }
 
