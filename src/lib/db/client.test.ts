@@ -29,7 +29,6 @@ describe('getDb', () => {
     expect(Reflect.has(globalThis, '__bopokDb')).toBe(false)
   })
 
-  // 첫 WASM 초기화가 느린 환경에서도 실제 쿼리를 검증할 시간을 확보한다.
   it('DATABASE_URL 없이도 로컬 PGlite로 쿼리가 된다', async () => {
     vi.stubEnv('DATABASE_URL', '')
     vi.stubEnv('PGLITE_DIR', 'memory://')
@@ -37,14 +36,16 @@ describe('getDb', () => {
     // 날 SQL(execute)의 결과는 드라이버마다 타입이 달라 unknown이다. 앱 코드는 타입이 붙는 쿼리 빌더를 쓴다.
     const result = await getDb().execute(sql`select 1 as one`)
     expect(result).toMatchObject({ rows: [{ one: 1 }] })
-  }, 30000)
+    // 제한 시간 60초: PGlite 띄우기가 1.6초쯤 걸려서, 테스트 파일이 많아지면
+    // vitest 기본값 5초를 넘긴다. vitest.config.ts는 공용 파일이라 여기서만 늘린다.
+  }, 60_000)
 
   it('다시 부르면 같은 연결', async () => {
     vi.stubEnv('DATABASE_URL', '')
     vi.stubEnv('PGLITE_DIR', 'memory://')
     const { getDb } = await import('./client')
     expect(getDb()).toBe(getDb())
-  })
+  }, 60_000)
 
   it('개발 서버가 코드를 다시 불러와도(HMR) 같은 연결 — PGlite 폴더를 두 번 열지 않게', async () => {
     vi.stubEnv('DATABASE_URL', '')
@@ -53,5 +54,5 @@ describe('getDb', () => {
     vi.resetModules()
     const second = (await import('./client')).getDb()
     expect(second).toBe(first)
-  })
+  }, 60_000)
 })

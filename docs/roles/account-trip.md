@@ -8,7 +8,7 @@
 
 ## 맡는 폴더
 
-`src/app/api/{auth,groups,invites,trips,versions,opinions}/**`, `src/lib/auth`, `src/lib/trips`, `src/lib/db/client.ts`, `src/lib/db/schema/{auth,groups,trips}.ts`
+`src/app/api/{auth,groups,invites,trips,versions,opinions}/**`, `src/lib/auth`, `src/lib/groups`, `src/lib/trips`, `src/lib/db/client.ts`, `src/lib/db/schema/{auth,groups,trips}.ts`
 
 ## 설계 가이드
 
@@ -35,7 +35,7 @@
 | `POST /api/groups/:id/invites` | 초대 링크 만들기 (토큰 32바이트 base64url, 7일, 여러 명 사용 가능) | owner |
 | `DELETE /api/groups/:id/members/:userId` | 내보내기 | owner |
 | `GET /api/invites/:token` | 그룹 이름 미리보기 (만료면 410) | 누구나 |
-| `POST /api/invites/:token/accept` | 참가 (이미 구성원이면 그대로 성공) | 로그인 |
+| `POST /api/invites/:token/accept` | 참가 `{ relation? }` (이미 구성원이면 그대로 성공 — role·relation을 덮어쓰지 않는다) | 로그인 |
 | `GET /api/groups/:id/trips` | 여행 목록 + 각 여행의 최신·확정 버전 요약 | 구성원 |
 | `POST /api/trips` | 여행 만들기 `{ groupId, title, date, mode: 'paste' \| 'scratch' }` | 구성원 |
 | `GET /api/trips/:id` | 여행 + 여행자 + 버전 목록(요약만) | 구성원 |
@@ -52,6 +52,61 @@
 | `GET /api/trips/:id/share-text` | 확정 버전의 공유 글 | 구성원 |
 
 요청·응답 모양은 모두 `src/lib/contracts`에 zod로 정하고, 서버에서 검사한다.
+
+여행자 계정 연결("이 사람이 저예요") **[결정: 김경선 10/31]** — 화면 PR #10(`src/lib/plan/travelers.ts`)과 같은 규칙:
+- **한 계정은 한 여행에서 한 사람과만** 연결된다. 어기면 400 "한 계정은 한 사람과만 연결할 수 있어요"(화면 목업과 같은 문구).
+- 연결하는 계정은 그 그룹 구성원이어야 한다. 아니면 400 "이 그룹의 구성원이 아닌 계정은 연결할 수 없어요".
+- **내 연결만 걸고 풀 수 있다** (`PUT /api/trips/:id/travelers`):
+  - 새로 거는 연결은 저장하는 본인 계정만. 남의 계정을 새로 연결하면 400 "내 계정만 연결할 수 있어요".
+  - 이미 다른 사람과 연결된 여행자는 **그 본인만** 풀거나 바꿀 수 있다. 남이 몸체에서 빼거나 바꿔도 **기존 값을 유지**한다(400이 아니다 — 화면이 남의 연결을 건드릴 수 없게 막혀 있어 오류로 볼 일이 아니다).
+  - 저장하는 사람이 없는 길(AI `saveTravelers`)에서는 연결을 걸거나 풀지 않는다. 보내온 연결은 버리고 서버 로그에 남긴다(인터뷰 결과를 통째로 날리지 않는다).
+- `filledBySelf`는 화면의 `markSelfFilled`와 같다: **연결된 본인이 저장하면서 걷기 조건 칸(`age`, `heightCm`, `sex`, `pace`, `mobilityAid`, `condition`)을 실제로 바꿨거나 새로 만든 여행자일 때만** `true`. 연결만 하고 조건이 그대로면 기존 값 유지, 한 번 `true`면 계속 `true`. 몸체의 값은 계속 무시한다.
+  - 이름표(`label`)·부모님 여부(`isParent`)·계정 연결은 '조건을 말한 것'이 아니라 비교에서 뺀다.
+  - **조건 비교는 키 순서를 맞춰서 한다.** `condition`은 jsonb라 DB에서 키 순서가 바뀌어 돌아온다. 순서만 다른 것을 '바뀌었다'로 보면 연결만 해도 `filledBySelf`가 올라간다(테스트로 고정).
+- AI 인터뷰(`saveTravelers`)는 이름표가 `'나'`이고 계정이 없는 여행자에 **여행을 만든 사람**(`trips.created_by`)을 연결하고 `filledBySelf`를 `true`로 둔다(그 사람이 직접 인터뷰에 답했다). 만든 사람이 이미 다른 여행자에 연결돼 있으면 건드리지 않는다.
+- `PATCH /api/trips/:id/travelers/:tid`도 **`PUT`과 같은 규칙**을 쓴다(같은 함수). 연결된 본인이 걷기 조건 칸을 실제로 바꿨을 때만 `true`, 아니면 기존 값 유지, 한 번 `true`면 계속 `true`. `userId`는 이 API로 바꿀 수 없으므로 기존 연결로 판단한다. (3단계의 '본인이 아니면 false'는 '한 번 true면 계속 true'와 어긋나서 10/31에 고쳤다.)
+
+7단계에서 정한 것 **[결정: 김경선 10/31]**:
+- `GET /api/trips/:id/share-text`는 **확정된 버전**으로 글을 만든다. 확정 전이면 **404 "확정된 일정이 아직 없어요"**(목업과 같은 코드·문구).
+- 글 형식은 화면 목업(`src/mocks/share-text.ts`)을 그대로 따른다: 머리말, 장소 순서·시간·예약, 장소별 걷는 시간(추정치), 쉼터 이름·종류(실내/야외), 탈것 구간, 하루 요약, 연락처, "출발 전 운영 여부를 꼭 확인하세요".
+- **숫자는 `engine.judge` 결과에서만** 쓴다. 모르면 지어내지 않는다: 장소 안 길 정보가 없으면 `길 정보 없음`, 걷기를 하나도 모르면 `하루 걷기 정보 부족 (장소 정보가 모이면 알려드려요)`, 여행자가 없으면 `하루 걷기 정보 부족 (함께 가는 사람을 입력하면 알려드려요)`. 목업은 이때 "0분"을 찍는데 그건 지어낸 숫자라 바꿨다.
+- 계단 문구는 **넣지 않았다**. 역할 문서·목업 형식에 없고, 장소 데이터가 없는 동안은 전부 '기록 없음'으로만 나온다. 장소 데이터가 들어오면 `confirmed_none`일 때만 '계단 없음', `unknown`은 '계단 기록 없음 (지도 데이터 기준)'으로 한 줄 더하는 것을 제안한다.
+- **장소·경로 연결은 6단계와 같이 쓴다**: `src/lib/trips/place-geo.ts`가 `getPlaceDetails`·`getLegs` 주입 지점이고(이동주 담당이라 그 폴더에 파일을 만들지 않았다), `src/lib/trips/judge-run.ts`의 `judgeStops`가 `requiredLegs → getLegs → judge` 순서를 한 군데 모아 둔다. 이동주 PR이 머지되면 `place-geo.ts`의 두 줄만 바꿔 끼운다.
+
+5단계에서 정한 것 **[결정: 김경선 10/31]**:
+- 의견 API는 버전 id만 받으므로 **버전 → 여행 → 그룹**을 따라가 구성원인지 본다(`requireVersionMember`). 버전이 없으면 404, 남의 그룹 버전이면 403.
+- `userName`은 세션에서 채운다. 클라이언트가 몸체로 보낸 이름·`userId`는 쓰지 않는다.
+- **의견 지우기는 두 단계 순서가 중요하다: ① 지금도 그 그룹 구성원인지 → ② 그다음 내 의견인지.** 그룹에서 내보내진 사람은 예전에 남긴 자기 의견도 지울 수 없고(403), 남이 남의 의견 id를 넣어도 '내 의견이 아니다'는 사실조차 알 수 없다. 순서를 뒤집으면 그 정보가 새어 나간다 — 테스트로 고정했다.
+- 확정은 여행당 한 버전. `trips.confirmed_version_id` 한 칸이라 다른 버전을 확정하면 **덮어써지며 이전 확정이 자동으로 풀린다**. 다른 여행의 버전으로 확정하면 400 "확정할 버전을 찾을 수 없어요"(목업과 같은 문구). 확정·풀기는 구성원 누구나 할 수 있고(설계 10.4), 풀기는 이미 풀린 상태에서도 성공한다(멱등).
+- `confirmedByName`은 `confirmed_by_user_id`의 `user.name`을 이어 붙여 만든다(저장하지 않는다 — 이름이 바뀌면 따라 바뀌어야 한다).
+- `createVersion`의 `appliedOpinionIds` 가운데 **그 여행의 의견이 아닌 id는 건너뛰고 서버 로그에만 남긴다**. 400으로 막으면 AI가 방금 만든 새 일정이 통째로 날아가는데, 잘못된 id는 곁가지 정보라서 그만한 값이 없다.
+- 공유 글(`share-text`)은 7단계로 미뤘다.
+
+4단계에서 정한 것 **[결정: 김경선 10/31]**:
+- 버전 번호는 여행마다 1부터. `db.transaction()`을 못 쓰므로(Neon HTTP) **`(trip_id, number)` 유니크 제약 + 겹치면 다시 세어 넣기(최대 5회)**로 막는다. 두 명이 동시에 저장해도 번호가 겹치거나 빠지지 않는다.
+- `POST /api/trips/:id/versions`(화면)와 `createVersion`(AI)이 **같은 저장 함수**를 쓴다. 번호·`parentId` 검사가 한 곳에만 있다.
+- `parentId`는 같은 여행의 버전이어야 한다. 아니면 **400 "이전 버전을 찾을 수 없어요"**(목업과 같은 코드·문구). `GET .../versions/:vid`에서 다른 여행의 버전 id면 **404 "버전을 찾을 수 없어요"**.
+- 버전 목록은 **번호 오름차순**이고 `latestVersion`은 마지막이다(목업 `versionsOf`와 같은 규칙). 목록용 요약에는 `stops`가 없고 `madeByName`(= `madeByUserId`의 이름)을 서버가 채운다.
+- `trips.confirmed_version_id`에 외래키를 걸었다. `trips`와 `trip_versions`가 서로를 가리키므로 스키마에서 `AnyPgColumn`으로 타입 순환을 끊는다.
+- `version_opinions` 표는 4단계에 같이 만들었다(마이그레이션을 두 번 만들지 않으려고). **의견 API와 `createVersion`의 `appliedOpinionIds` 연결은 5단계**다. `getOpinions(versionId)`는 AI가 기다리는 함수라 4단계에 먼저 만들었다 — 의견이 없으면 빈 배열이 정상이다.
+- 판정 요약(`judge_summary`)은 6단계에서 채운다. 그때까지 `null`로 저장한다.
+
+3단계에서 정한 것 **[결정: 김경선 10/31]**:
+- `trips`에 `status` 칸을 두지 않는다. 계약(`trip-api.ts`)에 없고 `confirmedVersionId === null`이면 '작성 중'이다. 칸이 둘이면 서로 어긋난다(설계 10.3의 `status` 제안을 쓰지 않음).
+- 날짜는 `date({ mode: 'string' })`로 `'YYYY-MM-DD'` 문자열을 주고받는다. `Date`로 받으면 시간대 때문에 하루 밀린다.
+- `trip_travelers`의 기본키는 `(trip_id, id)`다. `id`는 화면·AI가 만들어 보내는 값이라 여행마다 `t1` 같은 짧은 값이 올 수 있다.
+- `trip_travelers.sort_order`를 둔다. 계약 `Traveler`에 순서 칸이 없어 화면은 배열 순서를 믿는다.
+- **몸체의 `filledBySelf`와 `userId`는 믿지 않는다** (판정 근거를 꾸밀 수 없게):
+  - `filledBySelf`는 서버가 정한다. `PATCH`·`PUT` 모두 '저장하는 사람이 그 여행자와 연결된 본인인지'로 정하고, 본인이 아니면 `PUT`은 기존 값을 유지(새 여행자는 `false`), `PATCH`는 `false`. 화면의 여행자 편집이 `PUT`만 쓰므로 부모님이 자기 계정으로 자기 칸을 저장하는 길이 `PUT`이다.
+  - `userId`(계정 연결)는 `PATCH`로 바꿀 수 없다. `PUT`으로 목록을 통째로 저장할 때만 바꾸며, 그때 **그 그룹 구성원이 아닌 계정이면 400**.
+- `PATCH`로는 나이·키·성별을 비울 수 없다(계약이 `optional`이라 `null`을 받지 않는다). 비우려면 `PUT`으로 목록을 다시 저장한다.
+- 여행 API는 모두 여행의 `groupId`로 `requireMember`를 거친다. **없는 여행도 403**으로 답한다(404로 나누면 그 여행이 있다는 사실이 새어 나간다).
+
+2단계에서 정한 것 **[결정: 김경선 10/30]**:
+- 참가할 때 `relation`을 선택 값으로 받는다. 설계 10.3의 `group_members.relation`을 채우는 곳이 다른 데 없어서, 안 받으면 그 칸이 영원히 빈다. 안 보내도(또는 `null`로 보내도) 참가는 된다.
+- `GroupDetail`에 `myRole`을 넣는다. 상세 화면이 '초대 링크 만들기'·'내보내기' 버튼을 보여줄지 이것만 보고 정하게.
+- 내보내기는 두 겹으로 막는다: 그룹장이 자기 자신을 내보내면 400, 내보낸 뒤 그룹장이 0명이 되면 400. 그룹장 넘기기·그룹 삭제·스스로 나가기는 MVP 밖.
+- 초대 링크의 전체 주소는 프론트가 만든다(`location.origin + '/invite/' + token`). API는 `{ token, expiresAt }`만 준다.
 
 ### 다른 역할이 부르는 서버 함수 (`src/lib/trips`)
 

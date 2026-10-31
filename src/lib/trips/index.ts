@@ -1,0 +1,17 @@
+// 여행·여행자의 서버 함수 창구. route.ts와 다른 역할(AI)은 이것만 import한다.
+// 담당: 김경선 (docs/roles/account-trip.md)
+export { requireOwnOpinion, requireTripMember, requireVersionMember } from './access'
+export type { OpinionOwner, TripMember, VersionMember } from './access'
+export { createTrip, getTrip, getTripDetail, listGroupTrips, updateTrip } from './trips'
+export { listTravelers, patchTraveler, replaceTravelers, saveTravelers } from './travelers'
+export { getTripContext } from './context'
+export { getInterview, interviews, saveInterview } from './interviews'
+export { createVersion, getVersion, listVersions, listVersionSummaries, saveVersion, summariesByTrip } from './versions'
+export { addOpinion, getOpinions, markOpinionsApplied, removeOpinion } from './opinions'
+export { confirmVersion, getShareText, unconfirmVersion } from './confirm'
+export { judgeStops, summaryOf } from './judge-run'
+export type { JudgeRun } from './judge-run'
+export { getPlaceGeoDeps } from './place-geo'
+export type { PlaceGeoDeps } from './place-geo'
+export { buildShareText } from './share-text'
+export type { TripContext, TripInfo } from './context'

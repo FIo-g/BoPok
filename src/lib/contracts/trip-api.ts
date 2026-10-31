@@ -74,6 +74,14 @@ export type UpdateTripRequest = z.infer<typeof UpdateTripRequestSchema>
 export const PutTravelersRequestSchema = z.object({ travelers: z.array(TravelerSchema).min(1) })
 export type PutTravelersRequest = z.infer<typeof PutTravelersRequestSchema>
 
+// PATCH /api/trips/:id/travelers/:tid — 바꿀 칸만 보낸다 (id는 주소로 받으므로 몸체에서 뺀다).
+// 화면(api-client)이 쓰는 Partial<Omit<Traveler, 'id'>>와 같은 모양이다. 3단계에서 더함 — 김경선.
+// 단, 서버는 이 몸체의 userId와 filledBySelf를 무시한다:
+//  - userId(계정 연결)는 PUT /api/trips/:id/travelers로 목록을 통째로 저장할 때만 바꿀 수 있다
+//  - filledBySelf는 '고치는 사람이 그 여행자 본인인지'로 서버가 정한다 (판정 근거를 꾸밀 수 없게)
+export const PatchTravelerRequestSchema = TravelerSchema.omit({ id: true }).partial()
+export type PatchTravelerRequest = z.infer<typeof PatchTravelerRequestSchema>
+
 // POST /api/trips/:id/versions — 직접 고친 일정, 빠른 수정안 저장
 export const SaveVersionRequestSchema = z.object({
   parentId: z.string().nullable(),

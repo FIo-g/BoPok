@@ -1,12 +1,13 @@
 // 그룹 구성원인지 DB에서 확인한다. 권한 검사(session.ts)의 재료.
 import 'server-only'
 import { and, eq } from 'drizzle-orm'
+import type { GroupRole } from '@/lib/contracts'
 import type { Db } from '@/lib/db/client'
 import { getDb } from '@/lib/db/client'
 import { groupMembers } from '@/lib/db/schema'
 
-export type GroupRole = 'owner' | 'member'
-
+// GroupRole('owner'|'member')의 원본은 src/lib/contracts/group.ts다 (AGENTS.md 4장: 경계는 contracts).
+// 여기서 다시 정의하면 한쪽만 고쳤을 때 조용히 어긋난다.
 export type Membership = {
   groupId: string
   userId: string
