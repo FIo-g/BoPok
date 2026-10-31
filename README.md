@@ -9,7 +9,7 @@
 
 <br/>
 
-![SVC Seoul](https://img.shields.io/badge/2026_SVC_Seoul-AI_해커톤_관광×AI-FF7A59?style=for-the-badge)
+![BoPok](https://img.shields.io/badge/BoPok-보폭-FF7A59?style=for-the-badge)
 
 ![Next.js](https://img.shields.io/badge/Next.js_16-000000?style=flat-square&logo=nextdotjs&logoColor=white)
 ![React](https://img.shields.io/badge/React_19-61DAFB?style=flat-square&logo=react&logoColor=black)
@@ -350,7 +350,7 @@ pnpm dev                     # 개발 서버 (DATABASE_URL을 비워 두면 로�
 
 <div align="center">
 
-**2026 SVC Seoul AI 해커톤** · 2026.11.2 – 11.6 · SVC Seoul
+**BoPok · 보폭**
 
 부모님의 한 걸음 한 걸음에 맞춘 여행을 만듭니다 🚶‍♂️🚶‍♀️
 

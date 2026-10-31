@@ -79,7 +79,7 @@ pnpm create next-app@16.4.3 bopok-scaffold --ts --tailwind --eslint --app --src-
 
 - [ ] **Step 2: 레포로 옮기기**
 
-`bopok-scaffold`의 파일을 `26_SVC_Seoul`로 복사하되 **기존 `AGENTS.md`, `CLAUDE.md`, `docs/`, `.github/`는 덮어쓰지 않는다.** create-next-app이 만든 `AGENTS.md`/`CLAUDE.md`/`README.md`가 있으면 버리고, `public/`의 예제 SVG도 버린다. `.gitignore`는 기존 줄(`.superpowers/`, `.env`, `.env*.local`)을 유지하며 create-next-app 줄을 합친다(`.env*`는 쓰지 말고 `.env.example`이 커밋되게 `.env`, `.env*.local`만).
+`bopok-scaffold`의 파일을 `BoPok`로 복사하되 **기존 `AGENTS.md`, `CLAUDE.md`, `docs/`, `.github/`는 덮어쓰지 않는다.** create-next-app이 만든 `AGENTS.md`/`CLAUDE.md`/`README.md`가 있으면 버리고, `public/`의 예제 SVG도 버린다. `.gitignore`는 기존 줄(`.superpowers/`, `.env`, `.env*.local`)을 유지하며 create-next-app 줄을 합친다(`.env*`는 쓰지 말고 `.env.example`이 커밋되게 `.env`, `.env*.local`만).
 
 - [ ] **Step 3: 패키지 이름과 스크립트**
 

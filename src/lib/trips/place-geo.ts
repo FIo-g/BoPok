@@ -2,6 +2,7 @@
 // 여기서는 그 함수를 우리 쪽 모양으로 감싼다 (AGENTS.md 3·4장 — import만 한다).
 import 'server-only'
 import type { Leg, LegRequest, PlaceDetail } from '@/lib/contracts'
+import { PlaceIdInputSchema } from '@/lib/contracts'
 import { getLegsPartial } from '@/lib/geo/legs'
 import { getPlaceDetails } from '@/lib/places'
 
@@ -22,34 +23,43 @@ function chunk<T>(items: T[], size: number): T[][] {
 // 받은 경로만 돌려준다. 못 받은 구간은 넣지 않고, 엔진이 missingLegs('경로 정보 없음')로 처리한다 —
 // 숫자를 지어내지 않는다 (AGENTS.md 6장).
 async function fetchLegs(requests: LegRequest[]): Promise<Leg[]> {
-  // src/lib/geo는 walk만 지원한다. 탈것을 보내면 구간별 '실패'로 돌아오고,
-  // 전부 탈것이면 getLegs가 던지기까지 한다 — 그래서 걷는 구간만 골라 보낸다.
-  const walk = requests.filter(request => request.mode === 'walk')
-  if (walk.length === 0) return []
+  // src/lib/geo는 walk·car·taxi를 지원하고 bus는 아직 지원하지 않는다(구간별 '실패'로 돌아온다).
+  // 그래서 버스만 빼고 보낸다 — 탈것 시간(durationMin)은 공유 글에 쓰인다.
+  const routed = requests.filter(request => request.mode !== 'bus')
+  if (routed.length === 0) return []
 
   const legs: Leg[] = []
-  for (const part of chunk(walk, LEGS_PER_CALL)) {
+  for (const part of chunk(routed, LEGS_PER_CALL)) {
     try {
       // getLegsPartial은 구간별 실패로는 던지지 않는다 (키 없음·TMAP 오류·시간 초과 등).
       const outcome = await getLegsPartial(part)
       legs.push(...outcome.legs)
       if (outcome.failed.length > 0) {
-        console.error('[acct] 일부 보행 경로를 받지 못했어요 (그 구간은 경로 정보 없음)', {
+        console.error('[acct] 일부 경로를 받지 못했어요 (그 구간은 경로 정보 없음)', {
           failed: outcome.failed.map(one => ({ key: one.key, kind: one.error.kind })),
         })
       }
     } catch (error) {
       // 20개 초과·DB 오류 같은 배치 전체 오류. 판정은 그 구간들을 '정보 없음'으로 본다.
-      console.error('[acct] 보행 경로 요청이 실패했어요', error instanceof Error ? error.message : error)
+      console.error('[acct] 경로 요청이 실패했어요', error instanceof Error ? error.message : error)
     }
   }
   return legs
 }
 
+// 장소 상세는 한 번에 100개까지다(src/lib/places). 중복·형식이 틀린 id 하나 때문에
+// 전체가 던지지 않게 먼저 거르고 나눠 부른다.
+const PLACES_PER_CALL = 100
+
+async function fetchPlaceDetails(ids: string[]): Promise<PlaceDetail[]> {
+  const valid = [...new Set(ids)].filter(id => PlaceIdInputSchema.safeParse(id).success)
+  const out: PlaceDetail[] = []
+  for (const part of chunk(valid, PLACES_PER_CALL)) out.push(...(await getPlaceDetails(part)))
+  return out
+}
+
 const realDeps: PlaceGeoDeps = {
-  // 장소 상세는 한 번에 100개까지다. 일정의 장소 수가 그보다 많으면 던지는데,
-  // 부르는 쪽(safeSummary)이 잡아서 요약을 null로 둔다.
-  getPlaceDetails: ids => getPlaceDetails(ids),
+  getPlaceDetails: fetchPlaceDetails,
   getLegs: fetchLegs,
 }
 
