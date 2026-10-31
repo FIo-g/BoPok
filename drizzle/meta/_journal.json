@@ -15,6 +15,13 @@
       "when": 1793370462755,
       "tag": "0001_melted_starbolt",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793419324920,
+      "tag": "0002_rich_miracleman",
+      "breakpoints": true
     }
   ]
 }
