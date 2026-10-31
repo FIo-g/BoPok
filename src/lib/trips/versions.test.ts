@@ -6,7 +6,7 @@ import { OpinionSchema } from '@/lib/contracts'
 import { tripVersions } from '@/lib/db/schema'
 import type { TestDb } from '@/lib/db/test-db'
 import { setupTestDb } from '@/lib/db/test-db'
-import { createGroup as insertGroup, insertOpinion, insertTrip, signUp, stop } from '@/lib/auth/test-fixtures'
+import { addMember, createGroup as insertGroup, insertOpinion, insertTrip, signUp, stop } from '@/lib/auth/test-fixtures'
 import { createVersion, getVersion, listVersions, saveVersion } from './versions'
 import { getOpinions } from './opinions'
 import { getTripContext } from './context'
@@ -207,5 +207,99 @@ describe('getVersion·listVersions', () => {
 
     await expect(getVersion({ tripId: otherTripId, versionId: version.id })).rejects.toThrow('버전을 찾을 수 없어요')
     await expect(listVersions(otherTripId)).resolves.toEqual([])
+  })
+})
+
+describe('createVersion의 appliedOpinionIds (의견 반영 표시)', () => {
+  it('그 여행의 의견이면 appliedInVersionId가 찍힌다', async () => {
+    const { owner, groupId, tripId } = await tripFor()
+    const mom = await signUp({ name: '엄마', email: 'mom@example.com' })
+    await addMember(testDb.db, { groupId, userId: mom.userId, role: 'member', relation: '엄마' })
+
+    const first = await saveVersion({ tripId, userId: owner.userId, input: { parentId: null, stops: oneStop, madeBy: 'user' } })
+    const opinionId = await insertOpinion(testDb.db, {
+      versionId: first.id,
+      userId: mom.userId,
+      stopKey: 's1',
+      reactions: ['too_far'],
+    })
+
+    const revised = await createVersion(tripId, {
+      parentId: first.id,
+      stops: oneStop,
+      madeBy: 'ai',
+      note: '의견을 반영했어요',
+      appliedOpinionIds: [opinionId],
+    })
+
+    const opinions = await getOpinions(first.id)
+    expect(opinions[0].appliedInVersionId).toBe(revised.id)
+  })
+
+  it('다른 여행의 의견 id는 건너뛰고, 새 버전은 그대로 저장된다 (로그만 남긴다)', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { owner, groupId, tripId } = await tripFor()
+    const otherTripId = await insertTrip(testDb.db, { groupId, createdBy: owner.userId, title: '다른 여행' })
+    const otherVersion = await saveVersion({
+      tripId: otherTripId,
+      userId: owner.userId,
+      input: { parentId: null, stops: oneStop, madeBy: 'user' },
+    })
+    const otherOpinionId = await insertOpinion(testDb.db, {
+      versionId: otherVersion.id,
+      userId: owner.userId,
+      reactions: ['must_go'],
+    })
+
+    // 새 일정은 저장돼야 한다 — 곁가지 정보 때문에 일정을 날리지 않는다
+    const revised = await createVersion(tripId, {
+      parentId: null,
+      stops: oneStop,
+      madeBy: 'ai',
+      appliedOpinionIds: [otherOpinionId],
+    })
+    expect(revised.number).toBe(1)
+
+    // 다른 여행의 의견에는 표시가 찍히지 않았다
+    const untouched = await getOpinions(otherVersion.id)
+    expect(untouched[0].appliedInVersionId ?? null).toBeNull()
+    // 서버 로그에는 남는다
+    expect(logged).toHaveBeenCalled()
+    expect(JSON.stringify(logged.mock.calls)).toContain(otherOpinionId)
+    logged.mockRestore()
+  })
+
+  it('섞여 와도 그 여행의 의견만 표시한다', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { owner, groupId, tripId } = await tripFor()
+    const otherTripId = await insertTrip(testDb.db, { groupId, createdBy: owner.userId, title: '다른 여행' })
+    const mine = await saveVersion({ tripId, userId: owner.userId, input: { parentId: null, stops: oneStop, madeBy: 'user' } })
+    const theirs = await saveVersion({
+      tripId: otherTripId,
+      userId: owner.userId,
+      input: { parentId: null, stops: oneStop, madeBy: 'user' },
+    })
+    const mineOpinion = await insertOpinion(testDb.db, { versionId: mine.id, userId: owner.userId, reactions: ['too_far'] })
+    const theirOpinion = await insertOpinion(testDb.db, { versionId: theirs.id, userId: owner.userId, reactions: ['must_go'] })
+
+    const revised = await createVersion(tripId, {
+      parentId: mine.id,
+      stops: oneStop,
+      madeBy: 'ai',
+      appliedOpinionIds: [mineOpinion, theirOpinion],
+    })
+
+    expect((await getOpinions(mine.id))[0].appliedInVersionId).toBe(revised.id)
+    expect((await getOpinions(theirs.id))[0].appliedInVersionId ?? null).toBeNull()
+    logged.mockRestore()
+  })
+
+  it('appliedOpinionIds를 안 주면 아무것도 바뀌지 않는다', async () => {
+    const { owner, tripId } = await tripFor()
+    const first = await saveVersion({ tripId, userId: owner.userId, input: { parentId: null, stops: oneStop, madeBy: 'user' } })
+    await insertOpinion(testDb.db, { versionId: first.id, userId: owner.userId, reactions: ['too_far'] })
+
+    await createVersion(tripId, { parentId: first.id, stops: oneStop, madeBy: 'ai' })
+    expect((await getOpinions(first.id))[0].appliedInVersionId ?? null).toBeNull()
   })
 })
