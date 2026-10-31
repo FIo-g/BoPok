@@ -1,0 +1,26 @@
+{
+  "searchPoiInfo": {
+    "totalCount": "3",
+    "count": "3",
+    "page": "1",
+    "pois": {
+      "poi": [
+        {
+          "id": "9000001", "name": "한밭수목원 서울전시관",
+          "frontLat": "37.566500", "frontLon": "126.978000", "noorLat": "37.566500", "noorLon": "126.978000",
+          "upperAddrName": "서울", "middleAddrName": "중구"
+        },
+        {
+          "id": "9000002", "name": "한밭수목원",
+          "frontLat": "36.366100", "frontLon": "127.388200", "noorLat": "36.365932", "noorLon": "127.387876",
+          "upperAddrName": "대전", "middleAddrName": "서구"
+        },
+        {
+          "id": "9000003", "name": "한밭수목원 주차장",
+          "frontLat": "36.364900", "frontLon": "127.389200", "noorLat": "36.364800", "noorLon": "127.389100",
+          "upperAddrName": "대전", "middleAddrName": "서구"
+        }
+      ]
+    }
+  }
+}
