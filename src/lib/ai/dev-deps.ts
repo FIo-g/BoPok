@@ -1,5 +1,5 @@
-// 다른 역할 함수(src/lib/trips·places·geo·auth)가 생기기 전까지 쓰는 메모리 가짜 (계획 4B).
-// 실제 함수가 생기면 이 파일이 내놓는 deps를 그쪽으로 바꿔 끼운다.
+// 테스트 전용 메모리 가짜 연결 지점. 실제 실행(개발 서버·배포)은 real-deps.ts의 getAiDeps()를 쓴다.
+// 라우트·서버 코드는 이 파일을 import하지 않는다 — x-dev-user 헤더로 로그인 없이 들어오는 길을 실제 실행에 두지 않으려는 것이다.
 // 개발용 데이터는 전부 source '개발용 가짜 데이터'·'개발용 추정', confidence 'C'로 표시해 진짜 데이터와 섞이지 않게 한다.
 import 'server-only'
 import type {
@@ -321,6 +321,10 @@ function estimateLegs(requests: LegRequest[]): Leg[] {
 }
 
 export function createDevDeps(seed?: { opinions?: Opinion[] }): AiDeps {
+  // 한 번 더 막는다: 가짜 로그인(x-dev-user)이 배포 환경에 올라가면 누구나 들어올 수 있다.
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('개발용 가짜 연결(dev-deps)은 production에서 쓸 수 없어요')
+  }
   const trips = new Map<string, DevTrip>([
     [
       'trip-dev',
@@ -336,7 +340,7 @@ export function createDevDeps(seed?: { opinions?: Opinion[] }): AiDeps {
   const interviews = memoryInterviewStore()
 
   const requireTripMember = async (request: Request, tripId: string): Promise<SessionUser> => {
-    // 임시 로그인: 개발용 헤더 x-dev-user에 아이디가 있으면 그 사용자로 본다. 실제는 김경선 requireMember.
+    // 가짜 로그인: 개발용 헤더 x-dev-user에 아이디가 있으면 그 사용자로 본다. 실제는 real-deps.ts의 김경선 requireTripMember.
     const userId = request.headers.get('x-dev-user')
     if (!userId) throw new HttpError(401, 'unauthorized', '로그인이 필요해요')
     if (tripId !== 'trip-dev') throw new HttpError(403, 'forbidden', '이 여행의 구성원이 아니에요')
@@ -410,46 +414,4 @@ export function createDevDeps(seed?: { opinions?: Opinion[] }): AiDeps {
     callJson, // 실제 호출 그대로 — 키가 없으면 client.ts가 AiCallError를 던진다
   }
   return deps
-}
-
-// production에서는 가짜를 쓰지 않게 501로 막는다 — 실제 함수를 붙이기 전에는 배포하지 않는다.
-function notConnected(): never {
-  throw new HttpError(501, 'external_api_failed', '연결 전')
-}
-
-// notConnected는 호출 즉시 던진다 — 연결 지점 함수는 모두 Promise를 돌려줘야 하므로 async 도우미로 감싼다.
-async function notConnectedAsync(): Promise<never> {
-  return notConnected()
-}
-
-// notConnectedAsync는 인자를 받지 않지만, 어차피 실행되면 던지므로 호출 모양은 캐스팅으로 맞춘다.
-const NOT_CONNECTED_CALL_JSON = notConnectedAsync as unknown as typeof callJson
-
-const NOT_CONNECTED_DEPS: AiDeps = {
-  requireTripMember: async () => notConnected(),
-  getTripContext: async () => notConnected(),
-  getOpinions: async () => notConnected(),
-  createVersion: async () => notConnected(),
-  saveTravelers: async () => notConnected(),
-  searchCandidates: async () => notConnected(),
-  matchPlaceByName: async () => notConnected(),
-  searchPoi: async () => notConnected(),
-  getPlaceDetails: async () => notConnected(),
-  getLegs: async () => notConnected(),
-  interviews: {
-    get: async () => notConnected(),
-    save: async () => notConnected(),
-  },
-  callJson: NOT_CONNECTED_CALL_JSON,
-}
-
-// 같은 가짜를 계속 쓴다 — 요청마다 새로 만들면 인터뷰 상태·버전이 이어지지 않는다.
-type GlobalWithDevDeps = typeof globalThis & { __bopokAiDevDeps?: AiDeps }
-
-export function getAiDeps(): AiDeps {
-  // 가짜는 development·test에서만 쓴다. 그 밖(production 포함, 비어 있음)은 501을 던지는 deps로 막는다
-  if (process.env.NODE_ENV !== 'development' && process.env.NODE_ENV !== 'test') return NOT_CONNECTED_DEPS
-  const shared = globalThis as GlobalWithDevDeps
-  if (!shared.__bopokAiDevDeps) shared.__bopokAiDevDeps = createDevDeps()
-  return shared.__bopokAiDevDeps
 }

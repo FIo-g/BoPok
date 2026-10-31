@@ -46,22 +46,23 @@ AI 실패 시: 붙여넣기는 "장소를 직접 골라 주세요"로, 처음부
 - 주는 것: `src/lib/engine` 전체(오하연·김경선), `/api/ai/*`(오하연)
 - 장소 DB가 아직 없으면 `src/mocks`의 장소 2~3곳으로 엔진·AI를 개발한다
 
-### AI가 부르는 다른 역할 함수의 모양 **[김태형 10/30]**
+### AI가 부르는 다른 역할 함수의 모양 **[김태형 10/30, 10/31 실제 연결로 교체]**
 
-`src/lib/ai/deps.ts`에 이 모양으로 연결 지점을 두었다. 진짜 함수가 생기기 전에는 `src/lib/ai/dev-deps.ts`의 메모리 가짜를 쓴다(개발·테스트에서만 켜짐). 이름이나 인자가 다르게 만들어지면 알려 주면 연결 쪽에서 맞춘다.
+`src/lib/ai/deps.ts`가 AI가 부르는 함수의 모양(`AiDeps`)을 정하고, `src/lib/ai/real-deps.ts`의 `getAiDeps()`가 실제 함수로 채운다. 모든 AI 라우트는 이것만 쓴다. `src/lib/ai/dev-deps.ts`의 메모리 가짜(`x-dev-user` 가짜 로그인)는 **테스트에서만** 쓰고 실제 실행(개발 서버·배포)에는 들어가지 않는다 — `src/lib/ai/routes.test.ts`가 지킨다. 이름이나 인자가 바뀌면 `real-deps.ts`에서 맞춘다.
 
-- 김경선 (`src/lib/trips`, `src/lib/auth`)
+- 김경선 (`src/lib/trips`, `src/lib/auth`) — 모두 연결됨
+  - `requireTripMember(request, tripId)` → 로그인 안 했으면 401, 그 여행 그룹의 구성원이 아니면 403(없는 여행도 403). 던지는 `HttpError`는 `src/lib/auth/http.ts`의 것이고, AI의 `HttpError`가 그 자식이라 AI의 `handle`이 401/403/404를 그대로 응답 코드로 바꾼다
   - `createVersion(tripId, { parentId, stops, madeBy: 'ai', madeByUserId?, note?, appliedOpinionIds? })` → `TripVersion`
-  - `getTripContext(tripId)` → `{ trip: { id, groupId, startMode: 'paste'|'scratch' }, travelers: Traveler[], versions: TripVersion[] }` — 다시 짜기가 현재 일정을 읽으므로 `versions`에 `stops`가 들어 있어야 한다
+  - `getTripContext(tripId)` → `{ trip: { id, groupId, startMode: 'paste'|'scratch' }, travelers: Traveler[], versions: TripVersion[] }` (`versions`에 `stops` 포함)
   - `getOpinions(versionId)` → `Opinion[]`
   - `saveTravelers(tripId, travelers: Traveler[])` — 인터뷰가 끝나면 부른다
-  - 권한: AI API는 `requireUser()` 뒤 여행의 `groupId`로 `requireMember(groupId)`를 부르는 어댑터로 검사한다. 401/403은 그대로 응답 코드가 되게 한다
-  - `trip_interviews`: `src/lib/contracts/ai.ts`의 `InterviewState`(`filled`, `cursor`, `history`)를 그대로 저장할 칸(jsonb)이 필요하다
+  - `interviews.get/save` — `InterviewState`를 `trip_interviews`의 jsonb 한 칸에 저장한다
+  - 알려진 한계: 저장된 버전의 `summary`(판정 요약)는 아직 null이다. AI API 응답의 `summary`는 엔진 결과로 따로 돌려준다
 - 이동주 (`src/lib/places`, `src/lib/geo`)
-  - `searchCandidates({ styles, budget?, transport, avoidStairs, limit })` → `PlaceSummary[]`
-  - `matchPlaceByName(name)` → `PlaceSummary | null`
-  - `getPlaceDetails(ids)` → `PlaceDetail[]`, `getLegs(requests: LegRequest[])` → `Leg[]`
-  - POI 검색 `searchPoi(name)` → `{ name, coord } | null` (TMAP)
+  - `getPlaceDetails(ids)` → `PlaceDetail[]` — 연결됨. 형식이 틀린 id는 빼고 묻는다
+  - `getLegs(requests)` → `Leg[]` — `getLegsPartial`을 20개씩 나눠 부른다. 걷는 구간(walk)만 묻고, 받지 못한 경로는 빼서 엔진이 '정보 부족'으로 판정한다
+  - `searchCandidates({ styles, budget?, transport, avoidStairs, limit })`, `matchPlaceByName(name)` — 이동주 쪽에 아직 없어 `src/lib/ai/place-adapters.ts`가 `listPlaces`로 대신 만든다. 후보는 스타일이 맞는 순서로 정렬할 뿐 거르지 않는다(예산·이동수단·계단은 장소 요약에 없다). 이름 맞추기는 이름이 같거나 입력에 장소 이름이 통째로 들어 있을 때만 맞추고, 후보가 둘 이상이면 null이다
+  - `searchPoi(name)` — TMAP POI 검색이 아직 없어 항상 null이다. 붙여넣기 정리가 그 이름을 '정보 없음' 자리(좌표 없음)로 둔다(설계 6.4). 이동주가 같은 이름의 함수를 만들면 `place-adapters.ts`의 해당 부분을 그쪽으로 바꾼다
 
 ## 작업 순서
 

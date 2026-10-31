@@ -1,4 +1,4 @@
-import { getAiDeps } from '@/lib/ai/dev-deps'
+import { getAiDeps } from '@/lib/ai/real-deps'
 import { handleParseSchedule } from '@/lib/ai/parse-schedule'
 
 export const maxDuration = 60

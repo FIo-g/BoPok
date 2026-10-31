@@ -60,8 +60,9 @@ const LEG_PARALLEL = 4
 export const legModeOf = (key: string): string => key.slice(key.lastIndexOf(':') + 1)
 export const isLegModeSupported = (key: string): boolean => (SUPPORTED_LEG_MODES as readonly string[]).includes(legModeOf(key))
 
-// 경로는 하나씩 따로 요청한다. 서버가 배치 안에 실패가 하나만 있어도 전체를 실패시키기 때문에(캐시 없음·외부 오류),
-// 하나 묶어 보내면 받을 수 있는 경로까지 못 받는다. 지원하지 않는 이동수단은 서버에 보내지 않고 바로 "없음"으로 둔다.
+// 경로는 하나씩 따로 요청한다. 서버는 배치에서 일부만 실패하면 실패한 항목만 빼고 200을 주므로(src/lib/geo/README.md)
+// 묶어 보내도 받을 수 있는 경로는 받는다. 그래도 하나씩 보내면 어느 요청이 왜 실패했는지(상태 코드)를 바로 알 수 있어 그대로 둔다.
+// 지원하지 않는 이동수단은 서버에 보내지 않고 바로 "없음"으로 둔다.
 export async function ensureLegs(requests: LegRequest[]): Promise<void> {
   const byKey = new Map<string, LegRequest>()
   for (const req of requests) {

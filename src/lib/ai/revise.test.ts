@@ -8,7 +8,6 @@ import {
   type Opinion,
   type Stop,
 } from '@/lib/contracts'
-import { POST } from '@/app/api/ai/revise/route'
 import { AiCallError } from './client'
 import { createDevDeps } from './dev-deps'
 import type { AiDeps } from './deps'
@@ -644,7 +643,11 @@ describe('handleRevise: 404·502', () => {
   })
 })
 
-describe('POST /api/ai/revise', () => {
+// 라우트(POST)는 실제 연결(real-deps)을 쓰므로, 같은 처리를 하는 handler에 개발용 가짜를 넣어 검사한다.
+// 라우트가 handler와 real-deps를 제대로 잇는지는 routes.test.ts가 본다.
+describe('POST /api/ai/revise 와 같은 처리 (개발용 가짜 연결)', () => {
+  const POST = (request: Request) => handleRevise(request, createDevDeps())
+
   it('API 401·403', async () => {
     const unauthorized = await POST(makeRequest({ tripId: 'trip-dev', versionId: 'v1' }, null))
     expect(unauthorized.status).toBe(401)

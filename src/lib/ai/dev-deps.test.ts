@@ -1,8 +1,8 @@
 // dev-deps 가짜 연결 지점 검사. 외부 API를 부르지 않는다.
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { LegSchema, PlaceDetailSchema } from '@/lib/contracts'
-import type { InterviewState, Opinion, Traveler } from '@/lib/contracts'
-import { createDevDeps, getAiDeps } from './dev-deps'
+import type { Opinion, Traveler } from '@/lib/contracts'
+import { createDevDeps } from './dev-deps'
 
 describe('dev requireTripMember', () => {
   it('dev requireTripMember: 헤더 없으면 401, 다른 여행 403', async () => {
@@ -124,49 +124,18 @@ describe('dev-deps 가짜 데이터', () => {
   })
 })
 
-describe('getAiDeps', () => {
+describe('production 막기', () => {
   afterEach(() => {
     vi.unstubAllEnvs()
   })
 
-  it('개발 환경이면 메모리 가짜를 돌려준다', () => {
-    vi.stubEnv('NODE_ENV', 'development')
-    expect(getAiDeps()).toBeTruthy()
-  })
-
-  it('test 환경이면 메모리 가짜를 돌려준다', () => {
-    vi.stubEnv('NODE_ENV', 'test')
-    expect(getAiDeps()).toBeTruthy()
-  })
-
-  it('getAiDeps() 두 번은 같은 객체이고 인터뷰 상태가 이어진다', async () => {
-    vi.stubEnv('NODE_ENV', 'development')
-    const first = getAiDeps()
-    const second = getAiDeps()
-    expect(second).toBe(first) // 요청마다 새로 만들면 인터뷰 상태·버전이 이어지지 않는다
-    const state: InterviewState = {
-      filled: { mode: 'scratch', travelers: [], styles: [], mustVisit: [], fixTargets: [] },
-      cursor: { slot: 'travelers', travelerIndex: 0, questionIndex: 0 },
-      history: [],
-    }
-    await first.interviews.save('trip-singleton', state)
-    await expect(second.interviews.get('trip-singleton')).resolves.toEqual(state)
-  })
-
-  it('production이면 501 연결 전 오류를 던지는 deps', async () => {
+  it('production이면 개발용 가짜를 만들 수 없다 (x-dev-user 가짜 로그인이 배포에 올라가지 않게)', () => {
     vi.stubEnv('NODE_ENV', 'production')
-    const deps = getAiDeps()
-    const request = new Request('https://example.com/api/ai/interview', { method: 'POST' })
-    await expect(deps.requireTripMember(request, 'trip-dev')).rejects.toMatchObject({ status: 501 })
-    await expect(deps.callJson({ messages: [], schema: { safeParse: () => null } as never })).rejects.toMatchObject({
-      status: 501,
-    })
+    expect(() => createDevDeps()).toThrow('production에서 쓸 수 없어요')
   })
 
-  it('NODE_ENV가 비어 있어도 501 연결 전 오류를 던지는 deps', async () => {
-    vi.stubEnv('NODE_ENV', '')
-    const deps = getAiDeps()
-    const request = new Request('https://example.com/api/ai/interview', { method: 'POST' })
-    await expect(deps.requireTripMember(request, 'trip-dev')).rejects.toMatchObject({ status: 501 })
+  it('test 환경에서는 만들어진다', () => {
+    vi.stubEnv('NODE_ENV', 'test')
+    expect(createDevDeps()).toBeTruthy()
   })
 })

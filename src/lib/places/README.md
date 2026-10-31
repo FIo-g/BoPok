@@ -44,7 +44,8 @@ ID는 영문·숫자로 시작하는 영문·숫자·밑줄·하이픈 문자열
 잘못된 입력·JSON·16 KiB 초과 본문은 400, JSON이 아닌 POST는 415이다.
 서버 또는 응답 계약 검사 실패는 내부 정보를 숨기는 500이다. 오류는 공용
 `{ "error": { "code": "...", "message": "..." } }` 모양이며 응답은 `no-store`이다.
-한글 검색어는 주소에서 인코딩(퍼센트 인코딩)해야 한다. 그대로 보내면 400이다.
+한글 검색어는 주소에서 인코딩(퍼센트 인코딩)해서 보낸다. 라우트는 한글을 그대로 받아도 200이지만,
+Windows PowerShell처럼 클라이언트에 따라 글자가 깨져 전달되면 400이 날 수 있다.
 
 ```powershell
 Invoke-RestMethod "http://localhost:3000/api/places?q=$([uri]::EscapeDataString('미술관'))"

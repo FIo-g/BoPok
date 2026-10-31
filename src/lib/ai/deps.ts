@@ -1,6 +1,6 @@
 // AI 파트가 다른 역할(`src/lib/trips`·`src/lib/places`·`src/lib/geo`·`src/lib/auth`)의 함수를 부르는 지점.
-// 이름·인자는 역할 문서(account-trip.md, data-geo.md)에서 그대로 왔다 — 구현은 각 역할,
-// 그때까지는 같은 모양을 따르는 개발용 가짜(dev-deps.ts)가 채운다.
+// 이름·인자는 역할 문서(account-trip.md, data-geo.md)에서 그대로 왔다.
+// 실제 실행은 real-deps.ts가 실제 함수로 채우고, 테스트는 같은 모양의 개발용 가짜(dev-deps.ts)를 쓴다.
 import 'server-only'
 import type { Budget, Opinion, PlaceDetail, PlaceSummary, Transport, Traveler, TripVersion, Coord } from '@/lib/contracts'
 import type { StartMode, InterviewState, AiFallback, ApiErrorCode } from '@/lib/contracts'
@@ -38,9 +38,8 @@ export interface InterviewStore {
 }
 
 export interface AiDeps {
-  // 김경선 auth — 로그인 안 하면 401, 구성원이 아니면 403을 HttpError로 던진다.
-  // 김경선 requireMember(groupId)로 바꿔 끼울 때 trip→group을 찾고,
-  // 401/403을 HttpError로 바꾸는 어댑터를 둔다
+  // 김경선 trips — 로그인 안 하면 401, 그 여행 그룹의 구성원이 아니면 403(없는 여행도 403)을 HttpError로 던진다.
+  // 던지는 쪽은 src/lib/auth/http.ts의 HttpError이고, 이 폴더의 HttpError가 그 자식이라 handle이 둘 다 잡는다.
   requireTripMember(request: Request, tripId: string): Promise<SessionUser>
   getTripContext(tripId: string): Promise<TripContext>
   getOpinions(versionId: string): Promise<Opinion[]>

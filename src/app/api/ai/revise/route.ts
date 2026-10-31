@@ -1,4 +1,4 @@
-import { getAiDeps } from '@/lib/ai/dev-deps'
+import { getAiDeps } from '@/lib/ai/real-deps'
 import { handleRevise } from '@/lib/ai/revise'
 
 export const maxDuration = 60
