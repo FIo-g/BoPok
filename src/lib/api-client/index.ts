@@ -9,8 +9,9 @@ export const USE_MOCKS = process.env.NEXT_PUBLIC_USE_MOCKS === '1'
 
 export const api: Api = USE_MOCKS ? mockApi : realApi
 
-// 경로 API(POST /api/legs)가 계산해 주는 이동수단. 실제 서버는 지금 보행(walk)만 지원하고, 보행 아닌 요청이 하나라도 섞이면
-// 배치 전체를 422로 거절한다(이동주 PR #7). 그래서 화면은 지원하는 이동수단만 보내고, 나머지는 "아직 지원하지 않아요"로 보여 준다.
+// 경로 API(POST /api/legs)가 계산해 주는 이동수단. 실제 서버는 지금 보행(walk)만 지원한다. 보행 아닌 요청은 응답에서 빠지고
+// (다른 경로를 하나라도 받으면 200, 하나도 못 받으면 첫 실패의 상태 코드 — src/lib/geo/README.md) 전부 보행이 아니면 422다.
+// 그래서 화면은 지원하는 이동수단만 보내고, 나머지는 "아직 지원하지 않아요"로 보여 준다.
 // 서버가 car·taxi·bus 를 지원하면 여기에 더한다. 목업은 모두 지원한다
 export const SUPPORTED_LEG_MODES: readonly Transport[] = USE_MOCKS ? ['walk', 'car', 'taxi', 'bus'] : ['walk']
 

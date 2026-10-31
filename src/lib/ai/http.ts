@@ -5,17 +5,20 @@ import type { AiError, ApiErrorCode, ApiError, TripVersion } from '@/lib/contrac
 import { AiErrorSchema, ApiErrorSchema } from '@/lib/contracts'
 import type { AiFallback, TripContext } from './deps'
 import { AiCallError } from './client'
+import { HttpError as BaseHttpError } from '@/lib/auth/http'
 
 // API가 정상 실패(401·403·404·400 등)를 내는 정해진 방법 — 각 route에서 throw한다.
-export class HttpError extends Error {
+// 김경선의 src/lib/auth/http.ts HttpError(권한·여행·버전 함수가 던진다)를 부모로 삼는다:
+// handle이 부모 클래스로 잡으면 두 쪽의 에러가 모두 같은 응답 모양(401·403·404·400)으로 나간다.
+// fallback은 AI 실패에만 붙는 칸이라 이쪽에만 있다.
+export class HttpError extends BaseHttpError {
   constructor(
-    readonly status: number,
-    readonly code: ApiErrorCode,
+    status: number,
+    code: ApiErrorCode,
     message: string,
     readonly fallback?: AiFallback,
   ) {
-    super(message)
-    this.name = 'HttpError'
+    super(status, code, message)
   }
 }
 
@@ -44,12 +47,14 @@ type AIErrorBody = AiError['error'] | ApiError['error']
 
 // aiFallback이 null이면 fallback 칸 없이 돌려준다 (handle에 옵션을 안 넘긴 경우)
 function errorBody(error: unknown, aiFallback: AiFallback | null): { body: AIErrorBody; status: number } {
-  if (error instanceof HttpError) {
+  if (error instanceof BaseHttpError) {
+    // acct가 던진 에러에는 fallback 칸이 없다
+    const fallback = error instanceof HttpError ? error.fallback : undefined
     return {
       body: {
         code: error.code,
         message: error.message,
-        ...(error.fallback ? { fallback: error.fallback } : {}),
+        ...(fallback ? { fallback } : {}),
       },
       status: error.status,
     }

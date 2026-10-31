@@ -12,7 +12,6 @@ import {
   type StartMode,
   type Traveler,
 } from '@/lib/contracts'
-import { POST } from '@/app/api/ai/interview/route'
 import { AiCallError } from './client'
 import { createDevDeps } from './dev-deps'
 import type { AiDeps } from './deps'
@@ -863,7 +862,11 @@ describe('모드별 칸', () => {
   })
 })
 
-describe('POST /api/ai/interview', () => {
+// 라우트(POST)는 실제 연결(real-deps)을 쓰므로, 같은 처리를 하는 handler에 개발용 가짜를 넣어 검사한다.
+// 라우트가 handler와 real-deps를 제대로 잇는지는 routes.test.ts가 본다.
+describe('POST /api/ai/interview 와 같은 처리 (개발용 가짜 연결)', () => {
+  const POST = (request: Request) => handleInterview(request, createDevDeps())
+
   it('API: 401·403·400', async () => {
     const unauthorized = await POST(makeRequest({ tripId: 'trip-dev' }, null))
     expect(unauthorized.status).toBe(401)

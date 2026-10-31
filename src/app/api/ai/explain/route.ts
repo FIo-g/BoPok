@@ -1,4 +1,4 @@
-import { getAiDeps } from '@/lib/ai/dev-deps'
+import { getAiDeps } from '@/lib/ai/real-deps'
 import { handleExplain } from '@/lib/ai/explain'
 
 export const maxDuration = 30

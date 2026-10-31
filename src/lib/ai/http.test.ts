@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import { AiErrorSchema, ApiErrorSchema } from '@/lib/contracts'
 import type { TripVersion } from '@/lib/contracts'
+import { HttpError as AcctHttpError } from '@/lib/auth/http'
 import { AiCallError } from './client'
 import type { TripContext } from './deps'
 import { HttpError, errorResponse, handle, readJson, requireVersionInTrip } from './http'
@@ -73,6 +74,30 @@ describe('errorResponse', () => {
     expect(response.status).toBe(400)
     const parsed = (await response.json()) as { error: Record<string, unknown> }
     expect('fallback' in parsed.error).toBe(false)
+  })
+})
+
+describe('김경선(src/lib/auth)의 HttpError', () => {
+  it('401·403·404는 500이 아니라 그 상태 코드와 메시지 그대로 나간다', async () => {
+    for (const [status, code] of [
+      [401, 'unauthorized'],
+      [403, 'forbidden'],
+      [404, 'not_found'],
+    ] as const) {
+      const response = await handle(async () => {
+        throw new AcctHttpError(status, code, '권한 메시지')
+      })
+      expect(response.status).toBe(status)
+      const body = ApiErrorSchema.parse(await response.json())
+      expect(body.error).toEqual({ code, message: '권한 메시지' })
+    }
+  })
+
+  it('AI 쪽 HttpError는 fallback이 그대로 붙는다', async () => {
+    const response = await handle(async () => {
+      throw new HttpError(502, 'ai_failed', 'AI 요청이 실패했어요', 'pick_places')
+    })
+    expect(AiErrorSchema.parse(await response.json()).error.fallback).toBe('pick_places')
   })
 })
 
