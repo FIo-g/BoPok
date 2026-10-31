@@ -50,7 +50,7 @@ export function useJudged(stops: Stop[] | undefined, travelers: Traveler[] | und
     [stops, travelers, tuned, places, legs],
   )
   const settled = placesReady && missing.every(req => legFailed(legKey(req)))
-  // 지원하지 않는 이동수단(차·택시·버스)의 경로는 "받지 못한 것"이 아니라 아직 없는 기능이라 따로 센다
+  // 지원하지 않는 이동수단(버스)의 경로는 "받지 못한 것"이 아니라 아직 없는 기능이라 따로 센다
   const incomplete = placeIds.some(id => !Object.hasOwn(places, id)) || missing.some(req => isLegModeSupported(legKey(req)))
 
   // 받는 중에는 직전에 완성된 결과를 그대로 둔다(숫자가 잠깐 "정보 없음"으로 깜빡이지 않게). 렌더 중 상태 맞추기 패턴

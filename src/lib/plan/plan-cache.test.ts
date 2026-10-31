@@ -2,10 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Leg, LegRequest } from '@/lib/contracts'
 import { LEGS_REQUEST_MAX, legKey } from '@/lib/contracts'
 
-// 실제 서버 모드(보행만 지원)에서 경로를 받는 방법: 보행만, 서버 상한 단위로 묶어 한 번에, 응답은 leg.key 로 짝짓는다
+// 실제 서버 모드(보행·자동차·택시 지원, 버스 미지원)에서 경로를 받는 방법: 지원하는 수단만, 서버 상한 단위로 묶어 한 번에, 응답은 leg.key 로 짝짓는다
 // (서버는 일부만 실패하면 실패한 항목만 빼고 200을 주고, 하나도 못 받으면 오류 상태 코드를 준다)
 const get = vi.fn<(requests: LegRequest[]) => Promise<Leg[]>>()
-vi.mock('@/lib/api-client', () => ({ SUPPORTED_LEG_MODES: ['walk'], api: { legs: { get: (r: LegRequest[]) => get(r) }, places: { details: vi.fn() } } }))
+vi.mock('@/lib/api-client', () => ({ SUPPORTED_LEG_MODES: ['walk', 'car', 'taxi'], api: { legs: { get: (r: LegRequest[]) => get(r) }, places: { details: vi.fn() } } }))
 
 const { clearPlanCache, ensureLegs, getLegsRecord, legFailed, isLegModeSupported, resetFailures } = await import('./plan-cache')
 
@@ -20,22 +20,25 @@ describe('경로 받기', () => {
     get.mockReset()
   })
 
-  it('지원하는 이동수단만 한 번에 묶어 보내고, 나머지는 서버에 묻지 않고 없음으로 둔다', async () => {
+  it('지원하는 이동수단(걷기·자동차·택시)만 한 번에 묶어 보내고, 버스는 서버에 묻지 않고 없음으로 둔다', async () => {
     get.mockImplementation(answerAll)
-    await ensureLegs([req('walk'), req('car'), req('walk', 127.4), req('bus', 127.5)])
+    await ensureLegs([req('walk'), req('car'), req('taxi', 127.4), req('bus', 127.5)])
     expect(get).toHaveBeenCalledTimes(1)
-    expect(get.mock.calls[0][0].map(r => legKey(r))).toEqual([legKey(req('walk')), legKey(req('walk', 127.4))])
-    expect(Object.keys(getLegsRecord()).sort()).toEqual([legKey(req('walk')), legKey(req('walk', 127.4))].sort())
-    expect(legFailed(legKey(req('car')))).toBe(true)
+    const sent = [legKey(req('walk')), legKey(req('car')), legKey(req('taxi', 127.4))]
+    expect(get.mock.calls[0][0].map(r => legKey(r))).toEqual(sent)
+    expect(Object.keys(getLegsRecord()).sort()).toEqual([...sent].sort())
     expect(legFailed(legKey(req('bus', 127.5)))).toBe(true)
-    expect(isLegModeSupported(legKey(req('car')))).toBe(false)
+    expect(isLegModeSupported(legKey(req('car')))).toBe(true)
+    expect(isLegModeSupported(legKey(req('taxi')))).toBe(true)
     expect(isLegModeSupported(legKey(req('walk')))).toBe(true)
+    expect(isLegModeSupported(legKey(req('bus')))).toBe(false)
   })
 
-  it('지원하지 않는 이동수단뿐이면 서버를 부르지 않는다', async () => {
-    await ensureLegs([req('car'), req('taxi', 127.4)])
+  it('지원하지 않는 이동수단(버스)뿐이면 서버를 부르지 않는다', async () => {
+    await ensureLegs([req('bus'), req('bus', 127.4)])
     expect(get).not.toHaveBeenCalled()
-    expect(legFailed(legKey(req('car')))).toBe(true)
+    expect(legFailed(legKey(req('bus')))).toBe(true)
+    expect(legFailed(legKey(req('bus', 127.4)))).toBe(true)
   })
 
   it('응답은 순서가 아니라 leg.key 로 짝짓는다', async () => {

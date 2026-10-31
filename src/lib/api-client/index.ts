@@ -10,12 +10,12 @@ export const USE_MOCKS = process.env.NEXT_PUBLIC_USE_MOCKS === '1'
 
 export const api: Api = USE_MOCKS ? lazyMockApi : realApi
 
-// 경로 API(POST /api/legs)가 계산해 주는 이동수단. 실제 서버는 지금 보행(walk)만 지원한다. 지원하지 않거나 못 받은 경로는 응답에서 빠지고
-// (하나라도 받으면 200, 하나도 못 받으면 첫 실패의 상태 코드 — src/lib/geo/README.md) 보행이 아닌 요청만 보내면 422다.
-// 그래서 화면(plan-cache.ensureLegs)은 지원하는 이동수단만 한 번에 묶어 보내고(서버 상한 단위로 나눠), 응답에 없는 key 는 실패로 보며,
-// 나머지 이동수단은 "아직 지원하지 않아요"로 보여 준다.
-// 서버가 car·taxi·bus 를 지원하면 여기에 더한다. 목업은 모두 지원한다
-export const SUPPORTED_LEG_MODES: readonly Transport[] = USE_MOCKS ? ['walk', 'car', 'taxi', 'bus'] : ['walk']
+// 경로 API(POST /api/legs)가 계산해 주는 이동수단. 실제 서버는 보행(walk)·자동차(car)·택시(taxi)를 지원하고 버스(bus)는 아직 지원하지 않는다.
+// 지원하지 않거나 못 받은 경로는 응답에서 빠지고 (하나라도 받으면 200, 하나도 못 받으면 첫 실패의 상태 코드 — src/lib/geo/README.md)
+// 버스만 보내면 422다. 그래서 화면(plan-cache.ensureLegs)은 지원하는 이동수단만 한 번에 묶어 보내고(서버 상한 단위로 나눠),
+// 응답에 없는 key 는 실패로 보며, 버스는 "아직 지원하지 않아요"로 보여 준다.
+// 서버가 bus 를 지원하면 여기에 더한다. 목업은 모두 지원한다
+export const SUPPORTED_LEG_MODES: readonly Transport[] = USE_MOCKS ? ['walk', 'car', 'taxi', 'bus'] : ['walk', 'car', 'taxi']
 
 export { ApiRequestError, isApiError } from './http'
 export type { Api, PlaceQuery, SignInInput, SignUpInput } from './types'

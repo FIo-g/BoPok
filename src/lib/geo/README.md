@@ -167,7 +167,7 @@ Remove-Variable session
 - **`fareKrw`(택시 요금)는 만들지 않는다.** TMAP 응답의 `taxiFare`·`totalFare`는 읽지 않는다. 대전 택시 요금 추정 방식이 설계에서 정해지지 않았다.
 - `bus`는 계속 `unsupported_mode`다. 묶음에서는 그 항목만 실패로 빼고, 요청이 bus뿐이면 422다.
 - **시간 초과 보호**: 캐시에 없는 경로를 TMAP에 차례로 물을 때 `timeout`이 한 번 나면, 같은 요청 묶음의 나머지 캐시 없는 걷기·자동차·택시 요청은 TMAP을 부르지 않고 `timeout` 실패로 뺀다. 이미 받은 경로와 캐시에 있는 경로는 그대로 돌려주고 `bus`는 그대로 `unsupported_mode`다. 시간 초과가 아닌 실패(키 없음·502)는 다음 요청을 막지 않는다. 시간 초과 때문에 더 기다리는 시간은 요청 제한 시간(8초) 한 번뿐이다. 하나도 못 받으면 첫 실패의 상태 코드(504 포함)를 쓴다. 이 보호는 한 번의 요청 묶음 안에서만 적용된다.
-- 프론트 `SUPPORTED_LEG_MODES`와 AI의 걷기 전용 어댑터(`createLegsAdapter`)는 아직 walk만 묻는다. car·taxi를 묻게 바꾸는 것은 각 담당의 후속 작업이다.
+- 프론트 `SUPPORTED_LEG_MODES`는 walk·car·taxi를 묻는다(통합 정리에서 더함). AI의 걷기 전용 어댑터(`createLegsAdapter`)는 아직 walk만 묻는다. car·taxi를 묻게 바꾸는 것은 AI 담당의 후속 작업이다.
 
 ## 캐시와 중복
 
