@@ -2,12 +2,14 @@
 // POST /api/trips/:id/versions(화면)과 createVersion(AI)이 같은 저장 함수를 쓴다.
 import 'server-only'
 import { and, asc, eq, inArray, sql } from 'drizzle-orm'
-import type { SaveVersionRequest, Stop, TripVersion, VersionSummary } from '@/lib/contracts'
+import type { JudgeSummary, SaveVersionRequest, Stop, TripVersion, VersionSummary } from '@/lib/contracts'
 import { HttpError } from '@/lib/auth/http'
 import type { Db } from '@/lib/db/client'
 import { getDb } from '@/lib/db/client'
 import { tripVersions, user } from '@/lib/db/schema'
+import { safeSummary } from './judge-run'
 import { markOpinionsApplied } from './opinions'
+import { listTravelers } from './travelers'
 
 type VersionRow = typeof tripVersions.$inferSelect
 
@@ -57,6 +59,7 @@ type SaveInput = {
   madeBy: TripVersion['madeBy']
   madeByUserId?: string | null
   note?: string | null
+  summary?: JudgeSummary | null
 }
 
 // 번호는 여행마다 1, 2, 3…. db.transaction()을 못 쓰므로(Neon HTTP) '세어서 넣고,
@@ -78,7 +81,7 @@ async function insertWithNextNumber(input: SaveInput, db: Db): Promise<VersionRo
           madeBy: input.madeBy,
           madeByUserId: input.madeByUserId ?? null,
           stops: input.stops,
-          judgeSummary: null, // 6단계에서 채운다
+          judgeSummary: input.summary ?? null,
           note: input.note ?? null,
         })
         .returning()
@@ -105,7 +108,14 @@ async function assertParentInTrip(args: { tripId: string; parentId: string | nul
 
 async function save(input: SaveInput, db: Db): Promise<TripVersion> {
   await assertParentInTrip({ tripId: input.tripId, parentId: input.parentId }, db)
-  return toVersion(await insertWithNextNumber(input, db))
+
+  // 판정 요약을 먼저 계산해 insert 한 번에 넣는다. safeSummary는 던지지 않으므로
+  // 요약을 못 만들어도(장소·경로 실패, 시간 초과, 여행자 0명) null로 저장되고 버전은 남는다.
+  // 저장 뒤에 UPDATE로 채우면 그 UPDATE가 실패해 '저장은 됐는데 오류'가 될 수 있다.
+  const travelers = await listTravelers(input.tripId, db)
+  const summary = await safeSummary({ stops: input.stops, travelers })
+
+  return toVersion(await insertWithNextNumber({ ...input, summary }, db))
 }
 
 // POST /api/trips/:id/versions — 직접 고친 일정·빠른 수정안 (madeBy는 user 또는 quick_fix)
