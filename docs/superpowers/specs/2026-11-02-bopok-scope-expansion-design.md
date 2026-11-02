@@ -55,17 +55,17 @@
 - `PlaceNodeKindSchema`에 `smoking`(흡연장) 추가. **DB 반영 필요**: DB enum `place_node_kind`(`src/lib/db/schema/places.ts`)가 `PlaceNodeKindSchema`에서 만들어지므로, `smoking`을 저장하려면 이동주가 마이그레이션(`drizzle/`)을 만들어야 한다 (타입만 먼저 들어가 있고 DB는 아직 모른다)
 - 지점(`PlaceNode`)에 `floor?`(층, 1=1층·-1=지하 1층)와 `guideNo?`(안내도의 볼거리 번호 ①②③, 1 이상 정수) 추가
 - `PlaceDetail.courses?`: 공식 관람 코스 목록 `{ id, name, recommended }`에 출처·확인 날짜·신뢰 등급이 붙은 `PlaceCourse`. 구간(`PlaceSegment`)에 `courseId?`. 코스가 여러 개면(예: 한밭수목원 동원·서원) 고를 수 있게 한다
-- `PlaceDetail.zones?`: 실내 3D를 세울 구역 도형 `{ id, name, floor, polygon: Coord[] }`(`PlaceZone`). 꼭짓점이 3개 미만이면 거부 (5장)
-- `PlaceDetail.model?`: 손으로 만든 3D 모형 `{ url, anchor: Coord, rotationDeg, scale, altitudeM }`(`PlaceModel`). `scale`은 0보다 커야 한다 (5장)
+- `PlaceDetail.zones?`: 실내 3D를 세울 구역 도형 `{ id, name, floor, polygon: Coord[] }`에 출처·확인 날짜·신뢰 등급이 붙은 `PlaceZone`. 꼭짓점이 3개 미만이면 거부 (5장)
+- `PlaceDetail.model?`: 손으로 만든 3D 모형 `{ url, anchor: Coord, rotationDeg, scale, altitudeM }`(`PlaceModel`). `scale`은 0보다 커야 한다 (5장). 보기 전용 자산이라 판정·엔진이 읽지 않아 출처 칸을 두지 않는다
 - `PlaceDetail.menus?`: `{ name, priceKrw?, foodTags: FoodTag[] }`에 출처·확인 날짜·신뢰 등급이 붙은 `MenuItem`. `FoodTag`는 음식 종류 태그로 지금은 `sugary`(단 음식), `salty`(짠 음식), `fatty`(기름진 음식), `alcohol`(술), `grapefruit`(자몽), `leafy_greens`(녹색 채소) 여섯 가지다. 목록은 4.4의 주의 규칙 표와 함께 늘린다 [빌더]
 - `courses`·`zones`·`model`·`menus`는 **상세(`PlaceDetail`)에만** 둔다. 목록 응답(`PlaceSummary`)이 커지지 않게 하기 위해서다
 - 모든 새 데이터에 출처·확인 날짜·신뢰 등급을 붙인다 (AGENTS 6장)
 
 ### 4.2 여러 날 여행 (`trip.ts`, `trip-api.ts`, 주인 김경선)
 
-- `Stop.day?`: 몇째 날 (1 이상 정수) **[제안]**. 칸이 없으면 1일차 — 읽는 쪽은 `stopDay(stop)`을 쓰고, 지금 저장된 하루 일정은 그대로 1일차가 된다. 날짜별 도우미 `stopsOfDay(stops, day)`, `tripDays(stops)`(나오는 일차 번호를 오름차순·중복 없이)도 `trip.ts`에 있다. `day`를 `.default(1)`이 아니라 선택 칸으로 둔 까닭은 위 4장 머리말과 같다
+- `Stop.day?`: 몇째 날 (1 이상 정수) **[제안]**. 칸이 없으면 1일차 — 읽는 쪽은 `stopDay(stop)`을 쓰고, 지금 저장된 하루 일정은 그대로 1일차가 된다. 날짜별 도우미 `stopsOfDay(stops, day)`, `tripDays(stops)`(장소가 있는 일차 번호만 오름차순·중복 없이 — 날짜 탭 수는 `Trip.date`~`endDate`로 센다)도 `trip.ts`에 있다. `stopsOfDay`는 `Stop`을 넓힌 모양(화면용 장소)도 그 타입 그대로 돌려준다. `day`를 `.default(1)`이 아니라 선택 칸으로 둔 까닭은 위 4장 머리말과 같다
 - `Trip.date`는 시작일로 두고 `Trip.endDate?`(끝나는 날, 없으면 당일 여행)를 더한다. `CreateTripRequest`·`UpdateTripRequest`와 인터뷰 결과(`InterviewFilled.endDate`)에도 같은 칸이 있다
-- **끝 날짜가 시작 날짜보다 앞서면 거부**한다(400). 계약의 검사는 시작·끝이 **둘 다 들어온 요청**만 본다. 수정 요청(PATCH)에 `endDate`만 오면 계약만으로는 못 잡으므로, 서버가 저장된 시작일과 맞춰 봐야 한다 [2단계]
+- **끝 날짜가 시작 날짜보다 앞서면 거부**한다(400). 순서 검사 함수 `tripDatesOutOfOrder(date, endDate)`(둘 다 있고 끝이 빠를 때만 `true`)를 `trip-api.ts`가 내보내고, 요청 스키마도 이 함수를 쓴다. 만들기 요청(`CreateTripRequest`)은 시작 없이 `endDate`만 오면 거부한다('시작 날짜를 먼저 정해 주세요'). 수정 요청(PATCH)은 계약만으로는 한쪽만 온 경우를 못 잡으므로, **서버가 저장된 값과 요청을 합친 뒤 `tripDatesOutOfOrder`를 부른다** — `{ endDate }`만, `{ date }`만, `{ date: null }` 요청 모두 그렇게 본다 [2단계]
 - 숙박은 그날 마지막 `Stop`(`kind: lodging` 장소)으로 둔다
 - 엔진은 **날마다 따로** 판정한다(`day`로 묶어 `judge`를 날마다 부름). 걷기 조건(연속·하루 총)은 하루 기준 그대로다
 - 인터뷰의 날짜 칸이 기간을 받는다. 출발·귀가 시간은 날마다 같다고 본다 **[제안]**
@@ -73,7 +73,7 @@
 
 ### 4.3 일차별 만족도 (`feedback.ts`, 주인 김경선)
 
-- `DayFeedback`: `{ tripId, day, userId, score(1~5 정수), comment?(100자까지, 의견과 같음), createdAt }`. 요청 본문 `DayFeedbackInput`은 `{ day, score, comment? }`만 받고 나머지는 서버가 정한다. 묻는 항목은 [2단계]
+- `DayFeedback`: `{ tripId, day, userId, score(1~5 정수), comment?(100자까지, 의견과 같음), createdAt }`. `comment`는 DB의 NULL 행도 읽도록 `null`도 받는다. 요청 본문 `DayFeedbackInput`은 `{ day, score, comment? }`만 받고 나머지는 서버가 정한다. 묻는 항목은 [2단계]
 
 ### 4.4 건강 정보와 식단 주의 (`health.ts`, 주인 김경선·김태형)
 
@@ -87,9 +87,10 @@
 
 **모양** **[제안]**
 
-- `TravelerHealth`: `{ travelerId, conditions: HealthCondition[], medicationClasses: MedicationClass[], visibility: 'group' | 'self', consentAt, enteredByUserId }`. 저장 요청 `TravelerHealthInput`은 `{ conditions, medicationClasses, visibility, consent: true }`
+- `TravelerHealth`: `{ tripId, travelerId, conditions: HealthCondition[], medicationClasses: MedicationClass[], visibility: 'group' | 'self', consentAt, enteredByUserId }`. 저장 키는 `(tripId, travelerId)`다 — `travelerId`는 여행 안에서만 유일하다(인터뷰가 `t1`, `t2`로 만들고, `trip_travelers`의 기본키도 `(trip_id, id)`). 저장 요청 `TravelerHealthInput`은 `{ conditions, medicationClasses, visibility, consent: true }`
+- **김경선에게**: `replaceTravelers`는 여행자를 지우고 다시 넣는다. 건강 테이블에 `ON DELETE CASCADE`를 걸면 여행자를 저장할 때마다 동의받은 건강 정보가 지워진다 — cascade를 걸지 말 것
 - 여행자 정보와 **다른 테이블**에 둔다. 따로 지우고, 따로 권한을 검사하고, 여행자 목록 API로 새어 나가지 않게 하기 위해서다
-- "본인"은 계정이 연결된 여행자면 그 사람, 아니면 대신 입력한 사람(`enteredByUserId`)이다. 이 규칙은 `canSeeHealth(health, viewerUserId, travelerUserId?)`가 정한다 — `travelerUserId`는 여행자에 연결된 계정이고, "본인만"일 때 계정이 있으면 대신 입력한 사람도 못 본다
+- "본인"은 계정이 연결된 여행자면 그 사람, 아니면 대신 입력한 사람(`enteredByUserId`)이다. 이 규칙은 `canSeeHealth(health, viewerUserId, travelerUserId: string | null)`가 정한다 — `travelerUserId`는 여행자에 연결된 계정이고(부르는 쪽은 `traveler.userId ?? null`을 넘긴다), **꼭 넘겨야 한다**(계정 없는 여행자는 `null`). "본인만"일 때 계정이 있으면 대신 입력한 사람도 못 본다. `'group'`이면 누구에게나 `true`이므로, 보는 사람이 이 그룹 구성원인지는 API(route)가 먼저 검사한다
 
 **보이는 범위** **[결정]**
 
@@ -102,7 +103,7 @@
 
 - 주의할지는 **사람이 만든 주의 규칙 표**가 정한다: `병 또는 약 종류 → 주의할 음식 태그 → 근거 구절·출처(질병관리청·식약처 등)·확인 날짜`
 - 규칙 한 줄 `DietRule`은 `{ id, foodTag, sentence, source, checkedAt }`에 `reasonKind`가 `condition`이면 `condition`, `medication`이면 `medicationClass`가 붙는다. `source`·`checkedAt`은 **필수**다(근거 없는 "괜찮아요" 금지, 7장)
-- 엔진에 순수 함수 `dietCautions(travelers, health, stops, places, rules)`를 둔다(1단계에는 타입만 있고 함수는 [2단계]). 결과 `DietCaution`: `{ stopKey, menuName?, foodTag, travelerId, reasonKind, reason, sentence, source, checkedAt }`. `reason`은 화면에 보일 이유(예: 당뇨)로, 보는 사람이 볼 수 있을 때만 서버가 내려준다
+- 엔진에 순수 함수 `dietCautions(travelers, health, stops, places, rules)`를 둔다(1단계에는 타입만 있고 함수는 [2단계]). 결과 `DietCaution`: `{ stopKey, menuName?, foodTag, travelerId, reasonKind, reason, sentence, source, checkedAt }`. `reason`은 화면에 보일 이유(예: 당뇨)다. 서버는 **주의 결과 전체를 `canSeeHealth`가 `true`인 사람에게만 내려준다 — 이유만 빼고 보내지 않는다.** 문장·음식 태그·`travelerId`만으로도 누가 무슨 병인지 드러나기 때문이다
 - 주의는 **띄우되 막지 않는다.** 그 식당을 넣거나 확정하는 것은 사용자가 정한다
 - AI(일정 짜기·다시 짜기)는 서버에서 전체 정보로 주의를 반영한다. 다만 **가족 모두가 보는 문장(메모, 바뀐 점 한 줄, 다시 짜기 이유)에는 병·약·식단 이유를 쓰지 않는다.** `text-guard`가 검사한다
 - AI 문장은 규칙 표의 근거 구절만 쓴다. AI가 의학 정보를 새로 만들지 않는다 (MVP 설계 2.3과 같은 원칙)
@@ -110,13 +111,13 @@
 ### 4.5 그룹 채팅 (`chat.ts`, 주인 김경선)
 
 - `ChatMessage`: `{ id, tripId, userId, userName, text(1~`CHAT_TEXT_MAX`자), createdAt }`. 한 글의 한도 `CHAT_TEXT_MAX`는 500이다(의견 한 줄 100자보다 길게)
-- `GET /api/trips/[id]/chat?after=`(`ChatListQuery`), `POST /api/trips/[id]/chat`(`ChatPostRequest`: `{ text }`, 앞뒤 공백을 자른 뒤 길이를 재서 공백뿐인 글은 거부) (여행 구성원만)
+- `GET /api/trips/[id]/chat?after=`(`ChatListQuery`: `after`는 ISO 날짜·시각이고 모르는 키는 거부한다. 이 시각 이후(같은 시각 포함, `>=`)의 글을 `ChatListResponse` `{ messages }`로 주므로 화면이 `id`로 중복을 거른다), `POST /api/trips/[id]/chat`(`ChatPostRequest`: `{ text }`, 앞뒤 공백을 자른 뒤 길이를 재서 공백뿐인 글은 거부) (여행 구성원만). `POST`는 저장된 글 하나(`ChatMessage`)를 돌려준다
 - "AI에게 전달하기": 다시 짜기(`POST /api/ai/revise`)가 의견과 함께 최근 채팅을 받는다. 요청 본문 `ReviseRequest`에 `includeChat?: boolean`을 더했다(없으면 `false`). **RAG를 쓰지 않고** 대화를 그대로 넘기고, 길면 요약한다 **[결정]**
 - 채팅 글은 다른 사람이 쓴 글이라 의견과 같은 프롬프트 방어(`sanitizePromptText`)를 거친다
 
 ### 4.6 비용 (`cost.ts`, 주인 [2단계])
 
-- `CostEstimate`: `{ perPersonKrw: { low, high }, items: { stopKey, kind, krw }[], bufferRate }`. `kind`(`CostItemKind`)는 `admission`(입장료), `meal`(식사), `taxi`(택시), `lodging`(숙박), `other`(기타)다. 숙박처럼 일정 전체에 드는 돈은 `stopKey: null`이다. 돈은 모두 원 단위 정수이고, `low`가 `high`보다 크면 거부한다. 입장료·메뉴 가격·택시 요금에서 계산하고 "넉넉히" 여유를 더한다. 여유 비율과 담당 폴더는 [2단계]
+- `CostEstimate`: `{ perPersonKrw: { low, high }, items: { stopKey, kind, krw }[], bufferRate }`. `kind`(`CostItemKind`)는 `admission`(입장료), `meal`(식사), `taxi`(택시), `lodging`(숙박), `other`(기타)다. 숙박은 그날 마지막 `Stop`(숙박 장소, 4.2)의 `stopKey`에 붙고, KTX 왕복표처럼 일정 전체에 드는 돈은 `stopKey: null`(`kind: other`)이다. 돈은 모두 원 단위 정수이고, `low`가 `high`보다 크면 거부한다. **[제안]** `krw`는 **한 사람 기준**이다(택시·숙박처럼 함께 내는 돈은 일행 수로 나눈 값). `low` = 항목 `krw`의 합계, `high` = `round(low × (1 + bufferRate))`다. 스키마가 이 계산을 검사하지는 않는다 입장료·메뉴 가격·택시 요금에서 계산하고 "넉넉히" 여유를 더한다. 여유 비율과 담당 폴더는 [2단계]
 
 ### 4.7 AI와 RAG (`src/lib/ai`, 주인 김태형)
 
@@ -146,6 +147,8 @@
 - 비용을 "넉넉히" 잡는 기준과 담당 (9번)
 - 채팅 갱신 주기, 만족도 조사 항목 (17번, 12번)
 - 주의 규칙 표의 병·약 종류·음식 태그 목록과 출처를 조사할 사람
+- 건강 정보를 여행마다 다시 입력·동의받을지, 사람마다 한 번만 받을지
+- `smoking` 지점 마이그레이션은 이동주가 먼저 넣는다 — 다른 사람이 `db:generate`를 돌리면 그 마이그레이션에 섞여 들어간다
 - 의견 남기기 토글 크기 (16번, 오하연)
 
 ## 7. 지킬 것
