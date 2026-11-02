@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  MenuItemSchema, PlaceCourseSchema, PlaceDetailSchema, PlaceKindSchema, PlaceModelSchema, PlaceNodeSchema,
+  MenuItemSchema, PlaceCourseSchema, PlaceDetailSchema, PlaceKindSchema, PlaceModelSchema, PlaceNodeKindSchema, PlaceNodeSchema,
   PlaceZoneSchema, placeKindOf,
 } from './index'
 
@@ -51,10 +51,14 @@ describe('장소 종류', () => {
 })
 
 describe('장소 안 안내도', () => {
-  it('흡연장 지점과 층·안내도 번호', () => {
-    const node = { id: 'n1', placeId: 'aq', kind: 'smoking', name: '흡연 구역', restType: null, coord: [127.38, 36.35], floor: -1, guideNo: 3 }
+  it('지점의 층·안내도 번호', () => {
+    const node = { id: 'n1', placeId: 'aq', kind: 'toilet', name: '지하 1층 화장실', restType: null, coord: [127.38, 36.35], floor: -1, guideNo: 3 }
     expect(PlaceNodeSchema.safeParse(node).success).toBe(true)
     expect(PlaceNodeSchema.safeParse({ ...node, guideNo: 0 }).success).toBe(false)
+  })
+  // 건강을 위한 서비스라 흡연장은 지점 종류로 두지 않는다 [결정: 김태형 11/2]
+  it('흡연장은 지점 종류가 아니다', () => {
+    expect(PlaceNodeKindSchema.safeParse('smoking').success).toBe(false)
   })
   it('구역은 꼭짓점 3개 이상', () => {
     const zone = { id: 'z1', name: '1층 전시실', floor: 1, polygon: [[127.38, 36.35], [127.381, 36.35], [127.381, 36.351]], confidence: 'B' }

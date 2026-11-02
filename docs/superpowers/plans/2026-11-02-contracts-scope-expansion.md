@@ -42,7 +42,7 @@
 - Produces (모두 `place.ts`에서 export):
   - `PlaceKindSchema = z.enum(['attraction', 'restaurant', 'cafe', 'lodging'])`, `type PlaceKind`
   - `placeKindOf(place: Pick<PlaceSummary, 'kind'>): PlaceKind` — `kind`가 없으면 `'attraction'`
-  - `PlaceNodeKindSchema`에 `'smoking'` 추가 (기존 7개 유지)
+  - ~~`PlaceNodeKindSchema`에 `'smoking'` 추가~~ — 11/2 김태형 결정으로 뺌(건강을 위한 서비스라 흡연장은 안내하지 않음). 기존 7개 그대로
   - `PlaceNodeSchema`에 `floor?: number(int)`(1=1층, -1=지하 1층), `guideNo?: number(int ≥ 1)`(안내도 번호)
   - `PlaceSegmentSchema`에 `courseId?: string`
   - `PlaceCourseSchema = SourceInfoSchema.extend({ id, name: min(1), recommended: boolean })`, `type PlaceCourse`

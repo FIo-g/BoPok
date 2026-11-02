@@ -6,7 +6,8 @@ import { CoordSchema, nonNegative, SourceInfoSchema, StairsStatusSchema } from '
 export const PlaceKindSchema = z.enum(['attraction', 'restaurant', 'cafe', 'lodging'])
 export type PlaceKind = z.infer<typeof PlaceKindSchema>
 
-export const PlaceNodeKindSchema = z.enum(['parking', 'stop', 'entrance', 'sight', 'exit', 'rest', 'toilet', 'smoking'])
+// 흡연장은 넣지 않는다 — 건강을 위한 서비스라 안내하지 않는다 [결정: 김태형 11/2]
+export const PlaceNodeKindSchema = z.enum(['parking', 'stop', 'entrance', 'sight', 'exit', 'rest', 'toilet'])
 export type PlaceNodeKind = z.infer<typeof PlaceNodeKindSchema>
 
 export const PlaceNodeSchema = z.object({
