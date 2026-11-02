@@ -4,6 +4,8 @@ import {
   ApiErrorCodeSchema,
   BudgetSchema,
   CoordSchema,
+  EXERCISE_FREQUENCY_LABEL,
+  ExerciseFrequencySchema,
   ExplainRequestSchema,
   ExplainResponseSchema,
   GenerateRequestSchema,
@@ -240,6 +242,30 @@ describe('Traveler', () => {
     delete rest.isParent
     expect(TravelerSchema.safeParse(rest).success).toBe(false)
   })
+  it('운동 횟수가 없는 기존 여행자도 통과 (칸이 늘어도 옛 데이터가 깨지지 않는다)', () => {
+    expect(traveler.exerciseFrequency).toBeUndefined()
+    expect(TravelerSchema.safeParse(traveler).success).toBe(true)
+    expect(TravelerSchema.parse(traveler)).not.toHaveProperty('exerciseFrequency')
+  })
+  it('운동 횟수: 정해진 값 통과, 모르는 값 거부', () => {
+    expect(TravelerSchema.parse({ ...traveler, exerciseFrequency: 'three_four' }).exerciseFrequency).toBe('three_four')
+    expect(TravelerSchema.safeParse({ ...traveler, exerciseFrequency: 'daily' }).success).toBe(false)
+  })
+})
+
+describe('ExerciseFrequency', () => {
+  it('네 갈래만 받는다', () => {
+    expect(ExerciseFrequencySchema.options).toEqual(['rarely', 'one_two', 'three_four', 'five_plus'])
+    expect(ExerciseFrequencySchema.safeParse('often').success).toBe(false)
+  })
+  it('한국어 이름이 모든 값에 있다', () => {
+    expect(EXERCISE_FREQUENCY_LABEL).toEqual({
+      rarely: '거의 안 해요',
+      one_two: '일주일에 1~2번',
+      three_four: '일주일에 3~4번',
+      five_plus: '일주일에 5번 이상',
+    })
+  })
 })
 
 describe('Stop', () => {
@@ -332,6 +358,9 @@ describe('AI 계약', () => {
   })
   it('InterviewSlot: 정해진 칸 통과, 없는 칸 거부', () => {
     expect(INTERVIEW_SLOTS).toContain('traveler_condition_gate')
+    expect(InterviewSlotSchema.parse('traveler_exercise')).toBe('traveler_exercise')
+    // 성별 바로 뒤에 묻는다 — 순서가 인터뷰 진행 순서다
+    expect(INTERVIEW_SLOTS.indexOf('traveler_exercise')).toBe(INTERVIEW_SLOTS.indexOf('traveler_sex') + 1)
     expect(InterviewSlotSchema.parse('travelers')).toBe('travelers')
     expect(InterviewSlotSchema.safeParse('travelers2').success).toBe(false)
   })

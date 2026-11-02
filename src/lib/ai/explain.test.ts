@@ -237,6 +237,15 @@ describe('explainChange', () => {
     expect(fixed.source).toBe('fixed')
   })
 
+  it('AI 문장에 건강 이야기("혈압")가 있으면 고정 문장', async () => {
+    const { prev, next } = pair()
+    const fixed = diffSummary(prev, next).map(formatDiffItem).join(', ') || '바뀐 점 없음'
+    for (const text of ['혈압이 걱정돼서 쉬는 곳이 늘었어요', '당뇨가 있으셔서 덜 걷게 했어요']) {
+      const out = await explainChange(prev, next, undefined, depsWithAi({ text }))
+      expect(out).toEqual({ text: fixed, source: 'fixed' })
+    }
+  })
+
   it('계단이 없다는 표현이면 고정 문장', async () => {
     const { prev, next } = pair()
     for (const text of ['계단이 없어졌어요', '계단 없이 편해졌어요']) {

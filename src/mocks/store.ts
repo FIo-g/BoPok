@@ -1,6 +1,6 @@
 // 목업 데이터 저장소. 브라우저 localStorage 에 두어 새로고침해도 그룹·일정·의견이 남는다.
 // 서버가 없는 개발·시연용이라 비밀번호도 그대로 저장한다 — 실제 로그인(Better Auth)과는 무관하다.
-import type { ChatMessage, DayFeedbackItem, Group, InterviewState, Invite, Opinion, Traveler, Trip, TripVersion } from '@/lib/contracts'
+import type { ChatMessage, DayFeedbackItem, Group, InterviewState, Invite, Opinion, Traveler, TravelerHealth, Trip, TripVersion } from '@/lib/contracts'
 import {
   seedGroups, seedInvites, seedMembers, seedOpinions, seedTrips, seedTripTravelers, seedUsers, seedVersions,
   type MockMember, type MockUser,
@@ -19,6 +19,8 @@ export type MockDb = {
   opinions: Opinion[]
   feedback: DayFeedbackItem[]
   chat: ChatMessage[]
+  // 건강 정보. (tripId, travelerId)가 키다 — 시드는 두 여행이 같은 여행자 id 를 쓰므로 tripId 없이는 섞인다
+  health: TravelerHealth[]
   interviews: Record<string, InterviewState>
 }
 
@@ -39,6 +41,7 @@ function seed(): MockDb {
     opinions: seedOpinions,
     feedback: [],
     chat: [],
+    health: [],
     interviews: {},
   })
 }
@@ -50,7 +53,9 @@ export function getDb(): MockDb {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY)
     if (raw) {
-      cache = JSON.parse(raw) as MockDb
+      // 다른 브랜치가 같은 번호로 다른 칸을 더했을 수 있어, 저장분에 없는 칸은 시드 값으로 채운다
+      // (예: 건강 정보 칸이 없는 저장분에서 db.health 를 읽다 깨지지 않게)
+      cache = { ...seed(), ...(JSON.parse(raw) as Partial<MockDb>) }
       return cache
     }
   } catch {

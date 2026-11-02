@@ -108,6 +108,13 @@ describe('dev-deps 가짜 데이터', () => {
     await expect(deps.getOpinions('v-없음')).resolves.toEqual([])
   })
 
+  it('피할 음식 태그는 기본이 빈 목록이고, seed로 여행마다 정할 수 있다', async () => {
+    await expect(createDevDeps().getAvoidFoodTags('trip-dev')).resolves.toEqual([])
+    const deps = createDevDeps({ avoidFoodTags: { 'trip-dev': ['sugary', 'salty'] } })
+    await expect(deps.getAvoidFoodTags('trip-dev')).resolves.toEqual(['sugary', 'salty'])
+    await expect(deps.getAvoidFoodTags('trip-other')).resolves.toEqual([])
+  })
+
   it('dev 버전 저장은 번호를 매긴다', async () => {
     const deps = createDevDeps()
     const first = await deps.createVersion('trip-dev', { parentId: null, stops: [], madeBy: 'ai' })

@@ -9,6 +9,8 @@ import {
   type ConditionQuestionId,
 } from '@/lib/engine/condition'
 import {
+  EXERCISE_FREQUENCY_LABEL,
+  ExerciseFrequencySchema,
   InterviewRequestSchema,
   InterviewResponseSchema,
   TimeSchema,
@@ -154,6 +156,12 @@ const SEX_CHOICES = [
   { label: '여성', sex: 'female' as const },
   { label: '남성', sex: 'male' as const },
 ]
+
+// 운동 횟수 선택지 — 문구는 계약(EXERCISE_FREQUENCY_LABEL)에서 그대로 가져온다 (화면 여행자 편집 칩과 같은 말)
+const EXERCISE_CHOICES = ExerciseFrequencySchema.options.map(value => ({
+  label: EXERCISE_FREQUENCY_LABEL[value],
+  value,
+}))
 
 const PARENT_GATE_CHOICES = ['지금 대신 답할게요', '부모님께 직접 받을게요']
 const OTHER_GATE_CHOICES = ['없어요', '있어요']
@@ -326,6 +334,13 @@ export function currentQuestion(state: InterviewState): { slot: InterviewSlot; t
     case 'traveler_sex':
       // 이름표로 정해지지 않을 때만 묻는다 — 문구는 코드가 정한다
       return { slot, text: `${label}의 성별을 알려 주세요.`, choices: [...SEX_CHOICES.map(c => c.label), UNKNOWN_CHOICE_LABEL] }
+    case 'traveler_exercise':
+      // 부모님이 아니어도 같은 문구다. 걷기·체조도 운동으로 센다고 알려 줘야 어르신이 "안 해요"로만 답하지 않는다
+      return {
+        slot,
+        text: `${label}${particle(label)} 일주일에 운동을 몇 번 하세요? (걷기·체조 포함)`,
+        choices: [...EXERCISE_CHOICES.map(c => c.label), UNKNOWN_CHOICE_LABEL],
+      }
     case 'traveler_condition_gate':
       if (traveler?.isParent) {
         return { slot, text: `${label}의 걷기 조건을 여쭤볼게요.`, choices: [...PARENT_GATE_CHOICES] }
@@ -645,11 +660,11 @@ export async function applyAnswer(
         return { state }
       }
       markFilledBySelf(traveler)
-      // 이름표로 성별이 정해졌으면 묻지 않는다
+      // 이름표로 성별이 정해졌으면 묻지 않고 운동 횟수로 간다
       const travelerIndex = state.cursor.travelerIndex
       return next(
         traveler.sex !== undefined
-          ? { slot: 'traveler_condition_gate', travelerIndex, questionIndex: 0 }
+          ? { slot: 'traveler_exercise', travelerIndex, questionIndex: 0 }
           : { slot: 'traveler_sex', travelerIndex, questionIndex: 0 },
       )
     }
@@ -657,15 +672,35 @@ export async function applyAnswer(
     case 'traveler_sex': {
       if (!traveler) return { state }
       fillSexFromLabel(traveler)
-      // 이름표로 이미 정해졌으면 묻지 않고 넘어간다
+      // 이름표로 이미 정해졌으면 묻지 않고 운동 횟수로 넘어간다
       if (traveler.sex !== undefined) {
-        return next({ slot: 'traveler_condition_gate', travelerIndex: state.cursor.travelerIndex, questionIndex: 0 })
+        return next({ slot: 'traveler_exercise', travelerIndex: state.cursor.travelerIndex, questionIndex: 0 })
       }
       const labels = [...SEX_CHOICES.map(c => c.label), UNKNOWN_CHOICE_LABEL]
       const picked = answer.choiceIndex !== undefined ? answer.choiceIndex : answer.text !== undefined ? textToChoice(answer.text, labels) : null
       if (picked === null || picked >= labels.length) return retryChoice
       if (picked < SEX_CHOICES.length) traveler.sex = SEX_CHOICES[picked]!.sex
       else delete traveler.sex
+      markFilledBySelf(traveler)
+      return next({ slot: 'traveler_exercise', travelerIndex: state.cursor.travelerIndex, questionIndex: 0 })
+    }
+
+    case 'traveler_exercise': {
+      if (!traveler) return { state }
+      // 선택지 중에서만 받는다. "주 3회"·"세 번" 같은 글은 알아듣지 않고 다시 묻는다 —
+      // 운동 답은 AI로 보내지 않는 쪽이 단순하고, 이 값은 판정 숫자가 아니라 참고용이다.
+      const labels = [...EXERCISE_CHOICES.map(c => c.label), UNKNOWN_CHOICE_LABEL]
+      const picked =
+        answer.choiceIndex !== undefined
+          ? answer.choiceIndex
+          : answer.text !== undefined
+            ? textToChoice(answer.text, labels)
+            : null
+      if (picked === null || picked >= labels.length) return retryChoice
+      const chosen = EXERCISE_CHOICES[picked]
+      // '잘 모르겠어요'는 칸을 지운다 (이미 있던 값도)
+      if (chosen) traveler.exerciseFrequency = chosen.value
+      else delete traveler.exerciseFrequency
       markFilledBySelf(traveler)
       return next({ slot: 'traveler_condition_gate', travelerIndex: state.cursor.travelerIndex, questionIndex: 0 })
     }

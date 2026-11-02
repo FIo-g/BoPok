@@ -44,6 +44,18 @@ describe('목업 늦게 불러오기', () => {
     expect((await lazyMockApi.groups.get(groupId)).members.find(m => m.name === '새 사람')?.relation).toBe('엄마')
   })
 
+  it('건강 정보 메서드도 목업까지 인자를 그대로 넘긴다', async () => {
+    vi.stubEnv('NEXT_PUBLIC_USE_MOCKS', '1')
+    const { lazyMockApi } = await import('./lazy-mock')
+    await lazyMockApi.auth.signIn({ email: DEMO_EMAIL, password: DEMO_PASSWORD })
+    expect(await lazyMockApi.health.list('t-daejeon')).toEqual([])
+    const saved = await lazyMockApi.health.put('t-daejeon', 'tr-me', { conditions: ['gout'], medicationClasses: [], visibility: 'group', consent: true })
+    expect(saved).toMatchObject({ tripId: 't-daejeon', travelerId: 'tr-me', conditions: ['gout'] })
+    expect(await lazyMockApi.health.list('t-daejeon')).toEqual([saved])
+    await lazyMockApi.health.remove('t-daejeon', 'tr-me')
+    expect(await lazyMockApi.health.list('t-daejeon')).toEqual([])
+  })
+
   it('실제 API 와 같은 이름의 메서드를 모두 가진다', async () => {
     const { lazyMockApi } = await import('./lazy-mock')
     const { realApi } = await import('./real')

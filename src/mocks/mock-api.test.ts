@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { isApiError } from '@/lib/api-client/http'
+import { HealthListResponseSchema, TravelerHealthSchema, type Traveler, type TravelerHealthInput } from '@/lib/contracts'
 import { mockApi as api } from './mock-api'
 import { DEMO_EMAIL, DEMO_INVITE_TOKEN, DEMO_PASSWORD } from './seed'
-import { resetMockDb } from './store'
+import { getDb, resetMockDb } from './store'
 
 // 서버 없이 화면이 쓰는 가짜 API 의 권한·흐름 (localStorage 가 없는 Node 에서는 메모리만 쓴다)
 async function loginDemo() {
@@ -199,5 +200,291 @@ describe('목업 API', () => {
     const again = await api.ai.interview({ tripId: trip.id, questionId: first, answer: { choiceIndex: 1 } })
     expect(again.questionId).toBe(q.questionId)
     expect(again.slot).toBe('traveler_age')
+  })
+})
+
+// 건강 정보 목업: 서버(src/lib/health, src/app/api/trips/health.test.ts)와 같은 규칙을 본다.
+// 가장 중요한 것: "본인만"이 다른 가족 목록에 없는 것, 남이 고치거나 지우지 못하는 것, 동의 없이는 저장되지 않는 것.
+describe('목업 건강 정보 API', () => {
+  beforeEach(() => resetMockDb())
+
+  const TRIP = 't-daejeon'
+  const login = (email: string) => api.auth.signIn({ email, password: DEMO_PASSWORD })
+  const loginMe = () => login(DEMO_EMAIL) // u-me, tr-me 와 연결, 그룹장
+  const loginMom = () => login('mom@bopok.test') // u-mom, tr-mom 과 연결
+  const loginDad = () => login('dad@bopok.test') // u-dad, tr-dad 와 연결
+
+  const input = (patch: Record<string, unknown> = {}): TravelerHealthInput =>
+    ({ conditions: ['diabetes'], medicationClasses: [], visibility: 'group', consent: true, ...patch }) as TravelerHealthInput
+
+  // 계정이 연결되지 않은 할머니를 여행자에 더한다 (서버 테스트의 t2 와 같은 자리)
+  async function addGranny() {
+    const detail = await api.trips.get(TRIP)
+    const granny: Traveler = { id: 'tr-gran', label: '할머니', pace: 'unknown', mobilityAid: false, isParent: true, condition: {}, filledBySelf: false }
+    await api.trips.putTravelers(TRIP, [...detail.travelers, granny])
+  }
+
+  const listedIds = async () => (await api.health.list(TRIP)).map(h => h.travelerId)
+
+  it('로그인 전에는 목록·저장·지우기 모두 401', async () => {
+    await expect(api.health.list(TRIP)).rejects.toMatchObject({ status: 401 })
+    await expect(api.health.put(TRIP, 'tr-me', input())).rejects.toMatchObject({ status: 401 })
+    await expect(api.health.remove(TRIP, 'tr-me')).rejects.toMatchObject({ status: 401 })
+  })
+
+  it('다른 그룹 사람은 목록·저장·지우기 모두 403이고 저장되지 않는다', async () => {
+    await loginMe()
+    await api.health.put(TRIP, 'tr-me', input())
+    await api.auth.signUp({ name: '남', email: 'stranger@bopok.test', password: 'secret12' })
+
+    await expect(api.health.list(TRIP)).rejects.toMatchObject({ status: 403 })
+    await expect(api.health.put(TRIP, 'tr-me', input())).rejects.toMatchObject({ status: 403 })
+    await expect(api.health.remove(TRIP, 'tr-me')).rejects.toMatchObject({ status: 403 })
+
+    await loginMe()
+    expect(await listedIds()).toEqual(['tr-me'])
+  })
+
+  it('건강 정보가 없으면 빈 목록이다', async () => {
+    await loginMe()
+    expect(await api.health.list(TRIP)).toEqual([])
+  })
+
+  it('동의(consent: true)가 없으면 서버처럼 400이고 저장되지 않는다', async () => {
+    await loginMe()
+    const { consent: _consent, ...withoutConsent } = input()
+    void _consent
+    for (const body of [withoutConsent, input({ consent: false }), input({ consent: 'true' })]) {
+      await expect(api.health.put(TRIP, 'tr-me', body as TravelerHealthInput)).rejects.toMatchObject({ status: 400, code: 'invalid_request' })
+    }
+    expect(await api.health.list(TRIP)).toEqual([])
+  })
+
+  it('목록 밖 병·약·보이는 범위도 400', async () => {
+    await loginMe()
+    await expect(api.health.put(TRIP, 'tr-me', input({ conditions: ['cold'] }))).rejects.toMatchObject({ status: 400 })
+    await expect(api.health.put(TRIP, 'tr-me', input({ medicationClasses: ['antibiotic'] }))).rejects.toMatchObject({ status: 400 })
+    await expect(api.health.put(TRIP, 'tr-me', input({ visibility: 'public' }))).rejects.toMatchObject({ status: 400 })
+  })
+
+  it('정상 저장: 계약 모양으로 돌려주고 동의 날짜와 입력자는 몸체가 아니라 목업이 정한다', async () => {
+    await loginMe()
+    const before = Date.now()
+    const saved = await api.health.put(
+      TRIP, 'tr-me',
+      { ...input({ conditions: ['diabetes', 'gout'], medicationClasses: ['warfarin'] }), enteredByUserId: 'someone-else', consentAt: '2000-01-01T00:00:00.000Z' } as TravelerHealthInput,
+    )
+    expect(TravelerHealthSchema.parse(saved)).toEqual(saved)
+    expect(saved).toMatchObject({ tripId: TRIP, travelerId: 'tr-me', conditions: ['diabetes', 'gout'], medicationClasses: ['warfarin'], visibility: 'group', enteredByUserId: 'u-me' })
+    expect(Date.parse(saved.consentAt)).toBeGreaterThanOrEqual(before)
+    expect(HealthListResponseSchema.parse({ health: await api.health.list(TRIP) }).health).toEqual([saved])
+  })
+
+  it('가족 모두로 저장한 정보는 다른 구성원도 본다', async () => {
+    await loginMom()
+    await api.health.put(TRIP, 'tr-mom', input({ visibility: 'group' }))
+    await loginDad()
+    expect(await listedIds()).toEqual(['tr-mom'])
+    await loginMe()
+    expect(await listedIds()).toEqual(['tr-mom'])
+  })
+
+  it('본인만 + 계정 있는 엄마: 다른 가족 목록에는 항목 자체가 없고 엄마 본인만 받는다', async () => {
+    await loginMom()
+    await api.health.put(TRIP, 'tr-mom', input({ conditions: ['heart_disease'], visibility: 'self' }))
+    expect(await listedIds()).toEqual(['tr-mom'])
+
+    await loginDad()
+    expect(await api.health.list(TRIP)).toEqual([])
+    await loginMe()
+    expect(await api.health.list(TRIP)).toEqual([])
+  })
+
+  it('엄마(계정 연결)의 건강 정보는 아들·그룹장이 넣거나 덮어쓰거나 지울 수 없다 (403)', async () => {
+    await loginMe()
+    await expect(api.health.put(TRIP, 'tr-mom', input())).rejects.toMatchObject({ status: 403 })
+    await expect(api.health.remove(TRIP, 'tr-mom')).rejects.toMatchObject({ status: 403 })
+
+    await loginMom()
+    await api.health.put(TRIP, 'tr-mom', input({ conditions: ['hypertension'] }))
+
+    await loginDad()
+    await expect(api.health.put(TRIP, 'tr-mom', input({ conditions: ['gout'] }))).rejects.toMatchObject({ status: 403 })
+    await expect(api.health.remove(TRIP, 'tr-mom')).rejects.toMatchObject({ status: 403 })
+    expect((await api.health.list(TRIP))[0].conditions).toEqual(['hypertension'])
+  })
+
+  it('계정 없는 할머니: 처음 넣기는 구성원 누구나, 그다음은 처음 넣은 사람만 고치고 지운다', async () => {
+    await loginMe()
+    await addGranny()
+
+    await loginDad()
+    const first = await api.health.put(TRIP, 'tr-gran', input())
+    expect(first.enteredByUserId).toBe('u-dad')
+
+    await loginMe()
+    await expect(api.health.put(TRIP, 'tr-gran', input({ conditions: ['gout'] }))).rejects.toMatchObject({ status: 403 })
+    await expect(api.health.remove(TRIP, 'tr-gran')).rejects.toMatchObject({ status: 403 })
+
+    await loginDad()
+    const again = await api.health.put(TRIP, 'tr-gran', input({ conditions: ['gout'], visibility: 'self' }))
+    expect(again).toMatchObject({ conditions: ['gout'], visibility: 'self', enteredByUserId: 'u-dad' })
+  })
+
+  it('본인만 + 계정 없는 할머니: 대신 입력한 사람만 받는다', async () => {
+    await loginMe()
+    await addGranny()
+    await loginDad()
+    await api.health.put(TRIP, 'tr-gran', input({ visibility: 'self' }))
+    expect(await listedIds()).toEqual(['tr-gran'])
+
+    await loginMe()
+    expect(await api.health.list(TRIP)).toEqual([])
+    await loginMom()
+    expect(await api.health.list(TRIP)).toEqual([])
+  })
+
+  it('목록은 여행자 순서대로 나온다', async () => {
+    await loginMe()
+    await api.health.put(TRIP, 'tr-me', input())
+    await loginMom()
+    await api.health.put(TRIP, 'tr-mom', input())
+    await loginDad()
+    expect(await listedIds()).toEqual(['tr-mom', 'tr-me'])
+  })
+
+  it('없는 여행자는 404', async () => {
+    await loginMe()
+    await expect(api.health.put(TRIP, 'nobody', input())).rejects.toMatchObject({ status: 404 })
+    await expect(api.health.remove(TRIP, 'nobody')).rejects.toMatchObject({ status: 404 })
+  })
+
+  it('지우면 바로 사라지고, 없는 기록을 지워도 조용히 끝난다. 지운 뒤에는 처음 넣기 규칙으로 돌아간다', async () => {
+    await loginMe()
+    await addGranny()
+    await loginDad()
+    await api.health.put(TRIP, 'tr-gran', input())
+    await api.health.remove(TRIP, 'tr-gran')
+    await expect(api.health.remove(TRIP, 'tr-gran')).resolves.toBeUndefined()
+    expect(await api.health.list(TRIP)).toEqual([])
+
+    await loginMe()
+    const again = await api.health.put(TRIP, 'tr-gran', input({ conditions: ['gout'] }))
+    expect(again.enteredByUserId).toBe('u-me')
+  })
+
+  it('계정 없는 분에 다른 가족이 자기 계정을 걸면 그 전 "본인만" 기록이 지워진다 (서버와 같다)', async () => {
+    await loginMe()
+    await addGranny()
+    await loginDad()
+    await api.health.put(TRIP, 'tr-gran', input({ visibility: 'self' }))
+    expect(await listedIds()).toEqual(['tr-gran'])
+
+    // 내가 할머니 칸에 내 계정을 건다 (화면의 "이 사람이 저예요"와 같은 저장)
+    await loginMe()
+    const detail = await api.trips.get(TRIP)
+    const mine = detail.travelers.find(t => t.userId === 'u-me')
+    const relinked = detail.travelers.map(t => {
+      if (t.id === 'tr-gran') return { ...t, userId: 'u-me' }
+      if (mine && t.id === mine.id) {
+        const copy = { ...t }
+        delete copy.userId
+        return copy
+      }
+      return t
+    })
+    await api.trips.putTravelers(TRIP, relinked)
+
+    expect(await api.health.list(TRIP)).toEqual([])
+    await loginDad()
+    expect(await api.health.list(TRIP)).toEqual([])
+  })
+
+  it('여행자 목록에서 빠진 사람의 건강 정보도 함께 사라진다', async () => {
+    await loginMe()
+    await addGranny()
+    await api.health.put(TRIP, 'tr-gran', input())
+    await api.health.put(TRIP, 'tr-me', input())
+    expect(await listedIds()).toEqual(['tr-me', 'tr-gran'])
+
+    const detail = await api.trips.get(TRIP)
+    await api.trips.putTravelers(TRIP, detail.travelers.filter(t => t.id !== 'tr-gran'))
+    expect(await listedIds()).toEqual(['tr-me'])
+
+    // 같은 id 로 다시 넣어도 예전 기록이 되살아나지 않는다
+    await addGranny()
+    expect(await listedIds()).toEqual(['tr-me'])
+  })
+
+  // AI 가 여행자 목록을 통째로 바꾸는 길(인터뷰 마무리·일정 만들기)도 서버의 replaceTravelers 처럼 빠진 사람의 건강 정보를 지운다.
+  // 인터뷰 상태를 직접 심어 두고 그 길을 부른다. 새 목록에는 tr-gran 이 없다.
+  async function plantInterview(slot: 'done' | 'travelers') {
+    const detail = await api.trips.get(TRIP)
+    const kept = detail.travelers.filter(t => t.id !== 'tr-gran')
+    getDb().interviews[TRIP] = {
+      filled: { mode: 'scratch', travelers: kept, styles: [], mustVisit: [], fixTargets: [] },
+      cursor: { slot, travelerIndex: 0, questionIndex: 0 },
+      history: [],
+    }
+  }
+
+  async function withGrannyHealth() {
+    await loginMe()
+    await addGranny()
+    await api.health.put(TRIP, 'tr-gran', input())
+    await api.health.put(TRIP, 'tr-me', input())
+    expect(await listedIds()).toEqual(['tr-me', 'tr-gran'])
+  }
+
+  it('인터뷰를 마쳐 여행자 목록이 바뀌면 빠진 사람의 건강 정보도 사라진다', async () => {
+    await withGrannyHealth()
+    await plantInterview('done')
+
+    expect((await api.ai.interview({ tripId: TRIP })).done).toBe(true)
+
+    expect(await listedIds()).toEqual(['tr-me'])
+    // 같은 id 로 다시 넣어도 예전 기록이 되살아나지 않는다
+    await addGranny()
+    expect(await listedIds()).toEqual(['tr-me'])
+  })
+
+  it('일정 만들기가 인터뷰의 여행자 목록으로 바꿔도 빠진 사람의 건강 정보가 사라진다', async () => {
+    await withGrannyHealth()
+    await plantInterview('travelers')
+
+    await api.ai.generate({ tripId: TRIP })
+
+    expect(await listedIds()).toEqual(['tr-me'])
+    await addGranny()
+    expect(await listedIds()).toEqual(['tr-me'])
+  })
+
+  it('여행이 달라도 같은 여행자 id 가 섞이지 않는다', async () => {
+    // 목업 시드는 두 여행이 같은 id(tr-me …)를 쓴다
+    await loginMe()
+    await api.health.put(TRIP, 'tr-me', input())
+    expect(await listedIds()).toEqual(['tr-me'])
+    expect(await api.health.list('t-fall')).toEqual([])
+  })
+
+  it('에러 문구는 서버와 같은 정해진 문장이고 병·약 이름을 담지 않는다', async () => {
+    await loginMom()
+    await api.health.put(TRIP, 'tr-mom', input({ conditions: ['kidney_disease'], medicationClasses: ['warfarin'] }))
+    await loginMe()
+
+    const forbidden = await api.health.put(TRIP, 'tr-mom', input({ conditions: ['diabetes'] })).catch((e: unknown) => e)
+    const notFound = await api.health.put(TRIP, 'nobody', input({ conditions: ['diabetes'] })).catch((e: unknown) => e)
+    const invalid = await api.health.put(TRIP, 'tr-me', input({ conditions: ['diabetes'], consent: false })).catch((e: unknown) => e)
+    expect(forbidden).toMatchObject({ status: 403, message: '이 건강 정보는 고칠 수 없어요' })
+    expect(notFound).toMatchObject({ status: 404, message: '그 여행자를 찾을 수 없어요' })
+    expect(invalid).toMatchObject({ status: 400, message: '요청 내용이 형식에 맞지 않아요' })
+  })
+
+  it('돌려준 값을 고쳐도 저장된 값은 바뀌지 않는다 (복사본이다)', async () => {
+    await loginMe()
+    const saved = await api.health.put(TRIP, 'tr-me', input({ visibility: 'self' }))
+    saved.conditions.push('gout')
+    const [stored] = await api.health.list(TRIP)
+    expect(stored.conditions).toEqual(['diabetes'])
   })
 })

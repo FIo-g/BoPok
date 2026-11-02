@@ -886,6 +886,154 @@ describe('handleRevise: 404·502', () => {
   })
 })
 
+// 건강 정보는 병·약 이름이 아니라 음식 태그의 한국어 이름으로만 프롬프트에 간다 (AGENTS 6장, 설계 4.4).
+const HEALTH_WORDS = ['당뇨', '고혈압', '와파린', '칼슘채널', 'diabetes', 'warfarin', 'hypertension']
+
+describe('handleRevise: 피할 음식·운동 참고 줄', () => {
+  const planned = (): AiPayload => ({
+    stops: [{ placeId: 'science', name: '국립중앙과학관' }],
+    appliedOpinionIds: ['o1'],
+  })
+  const opinions = (): Opinion[] => [opinion({ id: 'o1', versionId: 'v1' })]
+
+  it('음식 태그가 있으면 user 메시지에 "피할 음식" 줄이 한 번 들어가고, 병·약 이름은 어디에도 없다', async () => {
+    const { deps, versionId, calls } = await setup({
+      versionStops: [scienceStop()],
+      opinions: opinions(),
+      ai: [planned()],
+    })
+    const withTags: AiDeps = { ...deps, getAvoidFoodTags: async () => ['sugary', 'salty'] }
+
+    const response = await handleRevise(makeRequest({ tripId: 'trip-dev', versionId }), withTags)
+    expect(response.status).toBe(200)
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0]).toContain('피할 음식: 단 음식, 짠 음식 — 이런 메뉴가 많은 식당은 고르지 마라.')
+    expect(calls[0].split('피할 음식').length - 1).toBe(1)
+    for (const word of HEALTH_WORDS) expect(calls[0]).not.toContain(word)
+  })
+
+  it('태그가 없으면 "피할 음식" 줄 자체가 없다', async () => {
+    const { deps, versionId, calls } = await setup({
+      versionStops: [scienceStop()],
+      opinions: opinions(),
+      ai: [planned()],
+    })
+    expect(await deps.getAvoidFoodTags('trip-dev')).toEqual([])
+
+    const response = await handleRevise(makeRequest({ tripId: 'trip-dev', versionId }), deps)
+    expect(response.status).toBe(200)
+    expect(calls[0]).not.toContain('피할 음식')
+  })
+
+  it('태그를 못 읽어도 다시 짜기는 되고, 로그에는 tripId만 남는다 (에러 메시지·값 없음)', async () => {
+    const { deps, versionId, calls } = await setup({
+      versionStops: [scienceStop()],
+      opinions: opinions(),
+      ai: [planned()],
+    })
+    const failing: AiDeps = {
+      ...deps,
+      getAvoidFoodTags: async () => {
+        // DrizzleQueryError처럼 메시지에 쿼리 값이 들어 있는 오류
+        throw new Error('Failed query: select ... params: warfarin,diabetes')
+      },
+    }
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined)
+    try {
+      const response = await handleRevise(makeRequest({ tripId: 'trip-dev', versionId }), failing)
+      expect(response.status).toBe(200)
+      ReviseResponseSchema.parse(await response.json())
+
+      expect(calls[0]).not.toContain('피할 음식')
+      expect(warn).toHaveBeenCalledTimes(1)
+      expect(warn).toHaveBeenCalledWith('[ai] 피할 음식 태그를 못 읽었어요', { tripId: 'trip-dev' })
+      const logged = JSON.stringify([...warn.mock.calls, ...error.mock.calls, ...log.mock.calls])
+      expect(logged).not.toContain('warfarin')
+      expect(logged).not.toContain('diabetes')
+      expect(logged).not.toContain('Failed query')
+    } finally {
+      warn.mockRestore()
+      error.mockRestore()
+      log.mockRestore()
+    }
+  })
+
+  it('운동을 거의 안 하는 여행자가 있으면 쉬는 자리 줄이 들어간다', async () => {
+    const { deps, versionId, calls } = await setup({
+      versionStops: [scienceStop()],
+      opinions: opinions(),
+      ai: [planned()],
+    })
+    const context = await deps.getTripContext('trip-dev')
+    await deps.saveTravelers(
+      'trip-dev',
+      context.travelers.map(traveler => (traveler.id === 't1' ? { ...traveler, exerciseFrequency: 'rarely' } : traveler)),
+    )
+
+    const response = await handleRevise(makeRequest({ tripId: 'trip-dev', versionId }), deps)
+    expect(response.status).toBe(200)
+    expect(calls[0]).toContain('운동을 거의 안 하는 분이 함께 간다 — 쉬는 자리를 자주 넣어라.')
+  })
+
+  it('운동을 많이 하는 여행자만 있으면 운동 줄이 없다', async () => {
+    const { deps, versionId, calls } = await setup({
+      versionStops: [scienceStop()],
+      opinions: opinions(),
+      ai: [planned()],
+    })
+    const context = await deps.getTripContext('trip-dev')
+    await deps.saveTravelers(
+      'trip-dev',
+      context.travelers.map(traveler => ({ ...traveler, exerciseFrequency: 'five_plus' as const })),
+    )
+
+    const response = await handleRevise(makeRequest({ tripId: 'trip-dev', versionId }), deps)
+    expect(response.status).toBe(200)
+    expect(calls[0]).not.toContain('운동을')
+  })
+
+  it('메모에 건강 이야기("당뇨")가 있으면 저장하지 않는다', async () => {
+    for (const note of ['당뇨가 있으셔서 단 음식을 뺐어요', '혈압을 생각해 쉬는 곳을 늘렸어요']) {
+      const { deps, versionId } = await setup({
+        versionStops: [scienceStop()],
+        opinions: opinions(),
+        ai: [{ ...planned(), note }],
+      })
+      const response = await handleRevise(makeRequest({ tripId: 'trip-dev', versionId }), deps)
+      expect(response.status).toBe(200)
+      const body = ReviseResponseSchema.parse(await response.json())
+      expect(body.version.note).toBeNull()
+    }
+  })
+
+  it('보낸 피할 음식을 메모에 되풀이하면 저장하지 않는다', async () => {
+    const { deps: base, versionId } = await setup({
+      versionStops: [scienceStop()],
+      opinions: opinions(),
+      ai: [{ ...planned(), note: '단 음식을 피해서 다시 짰어요' }],
+    })
+    const deps: AiDeps = { ...base, getAvoidFoodTags: async () => ['sugary'] }
+    const response = await handleRevise(makeRequest({ tripId: 'trip-dev', versionId }), deps)
+    expect(response.status).toBe(200)
+    const body = ReviseResponseSchema.parse(await response.json())
+    expect(body.version.note).toBeNull()
+  })
+
+  it('건강 낱말이 없는 메모는 그대로 저장한다', async () => {
+    const { deps, versionId } = await setup({
+      versionStops: [scienceStop()],
+      opinions: opinions(),
+      ai: [{ ...planned(), note: '쉬는 자리를 넣었어요' }],
+    })
+    const response = await handleRevise(makeRequest({ tripId: 'trip-dev', versionId }), deps)
+    const body = ReviseResponseSchema.parse(await response.json())
+    expect(body.version.note).toBe('쉬는 자리를 넣었어요')
+  })
+})
+
 // 라우트(POST)는 실제 연결(real-deps)을 쓰므로, 같은 처리를 하는 handler에 개발용 가짜를 넣어 검사한다.
 // 라우트가 handler와 real-deps를 제대로 잇는지는 routes.test.ts가 본다.
 describe('POST /api/ai/revise 와 같은 처리 (개발용 가짜 연결)', () => {

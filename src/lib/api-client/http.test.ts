@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
-import { InviteSchema } from '@/lib/contracts'
+import { InviteSchema, type TravelerHealthInput } from '@/lib/contracts'
 import { ApiRequestError, request } from './http'
 import { realApi } from './real'
 
@@ -77,6 +77,32 @@ describe('realApi 경로', () => {
     await realApi.invites.accept('t')
     const [, noRelation] = fn.mock.calls[1] as unknown as [string, RequestInit]
     expect(JSON.parse(String(noRelation.body))).toEqual({})
+  })
+
+  it('건강 정보는 목록·저장·지우기 주소를 쓰고, 지우기는 204 라 본문 없이 끝난다', async () => {
+    const health = { tripId: 't 1', travelerId: 'tr 1', conditions: ['diabetes'], medicationClasses: [], visibility: 'self', consentAt: '2026-11-02T01:00:00.000Z', enteredByUserId: 'u' }
+    const fn = stubFetch(200, { health: [health] })
+    expect(await realApi.health.list('t 1')).toEqual([health])
+    expect(fn).toHaveBeenCalledWith('/api/trips/t%201/health', expect.objectContaining({ credentials: 'same-origin' }))
+
+    const putFn = stubFetch(200, health)
+    const body: TravelerHealthInput = { conditions: ['diabetes'], medicationClasses: [], visibility: 'self', consent: true }
+    expect(await realApi.health.put('t 1', 'tr 1', body)).toEqual(health)
+    const [putUrl, putInit] = putFn.mock.calls[0] as unknown as [string, RequestInit]
+    expect(putUrl).toBe('/api/trips/t%201/travelers/tr%201/health')
+    expect(putInit.method).toBe('PUT')
+    expect(JSON.parse(String(putInit.body))).toEqual(body)
+
+    const delFn = stubFetch(204, undefined)
+    await expect(realApi.health.remove('t 1', 'tr 1')).resolves.toBeUndefined()
+    const [delUrl, delInit] = delFn.mock.calls[0] as unknown as [string, RequestInit]
+    expect(delUrl).toBe('/api/trips/t%201/travelers/tr%201/health')
+    expect(delInit.method).toBe('DELETE')
+  })
+
+  it('건강 정보 목록 응답의 모양이 다르면 에러로 막는다', async () => {
+    stubFetch(200, [])
+    await expect(realApi.health.list('t')).rejects.toMatchObject({ code: 'internal_error' })
   })
 
   it('로그인 확인은 Better Auth 의 세션 주소를 쓰고, 로그인 안 했으면 null', async () => {

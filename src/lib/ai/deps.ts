@@ -2,7 +2,7 @@
 // 이름·인자는 역할 문서(account-trip.md, data-geo.md)에서 그대로 왔다.
 // 실제 실행은 real-deps.ts가 실제 함수로 채우고, 테스트는 같은 모양의 개발용 가짜(dev-deps.ts)를 쓴다.
 import 'server-only'
-import type { Budget, Opinion, PlaceDetail, PlaceSummary, Transport, Traveler, TripVersion, Coord } from '@/lib/contracts'
+import type { Budget, FoodTag, Opinion, PlaceDetail, PlaceSummary, Transport, Traveler, TripVersion, Coord } from '@/lib/contracts'
 import type { StartMode, InterviewState, AiFallback, ApiErrorCode } from '@/lib/contracts'
 import type { Stop, Leg, LegRequest } from '@/lib/contracts'
 import type { callJson } from './client'
@@ -46,6 +46,9 @@ export interface AiDeps {
   createVersion(tripId: string, input: CreateVersionInput): Promise<TripVersion>
   // 김경선 — 인터뷰가 채운 여행자를 저장한다
   saveTravelers(tripId: string, travelers: Traveler[]): Promise<void>
+  // 김태형 src/lib/health — 일행 전체의 병·약에서 나온 "피할 음식 태그"만 온다. 누가·왜(병·약 이름)는 오지 않는다.
+  // 실패하면 던질 수 있다: 부르는 쪽(generate·revise)이 태그 없이 계속하고, 오류 내용은 로그에 남기지 않는다.
+  getAvoidFoodTags(tripId: string): Promise<FoodTag[]>
   // 이동주 places·geo
   searchCandidates(q: CandidateQuery): Promise<PlaceSummary[]>
   matchPlaceByName(name: string): Promise<PlaceSummary | null>
