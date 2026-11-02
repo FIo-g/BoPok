@@ -36,7 +36,8 @@ const AiReviseSchema = z.object({
     z.object({
       placeId: z.string().nullable(),
       name: z.string().trim().min(1).max(100),
-      day: z.number().int().min(1).optional(), // 여러 날 일정에서 몇째 날인지
+      // 여러 날 일정에서 몇째 날인지. 이상한 값이 와도 일정 전체를 버리지 않고 원래 날에 둔다
+      day: z.number().int().min(1).optional().catch(undefined),
       startTime: TimeSchema.optional(),
       visitMin: nonNegative.optional(),
       seated: z.boolean().optional(),

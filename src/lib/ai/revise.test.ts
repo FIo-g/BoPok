@@ -137,6 +137,17 @@ describe('여러 날 일정 다시 짜기', () => {
     expect(stops.map(one => one.day ?? 1)).toEqual([1, 2])
   })
 
+  it('날에 이상한 값이 와도 일정을 버리지 않고 원래 날에 둔다', async () => {
+    const { stops } = await revised({
+      stops: [
+        { placeId: 'hanbat', name: '한밭수목원', day: 0 },
+        { placeId: 'science', name: '국립중앙과학관', day: 1.5 },
+      ],
+      appliedOpinionIds: ['o1'],
+    })
+    expect(stops.map(one => one.day ?? 1)).toEqual([1, 2])
+  })
+
   it('꼭 갈 곳·예약은 AI가 날을 옮겨도 원래 날에 둔다', async () => {
     const { stops } = await revised(
       {
