@@ -13,6 +13,13 @@ function createAuth() {
     // (AGENTS.md 8장) 기본값에 기대지 않고 적어 둔다.
     database: drizzleAdapter(getDb(), { provider: 'pg', schema, transaction: false }),
     emailAndPassword: { enabled: true },
+    // 로그인 확인을 쿠키에 담아 요청마다 세션 DB를 보지 않게 한다 (배포 DB 왕복 절약, 11/2 결정).
+    // 대가: 세션 변경이 다른 기기·복사해 둔 쿠키에는 최대 5분 늦게 닿는다(로그아웃된 세션이 통하고,
+    // 이름·비밀번호 바꾸기, 다른 세션 끊기도 그동안 예전 값 — docs/roles/account-trip.md '로그인').
+    // 로그아웃한 브라우저는 쿠키가 지워지고, 그룹 내보내기는 매 요청 group_members를 보므로 바로 막힌다.
+    session: {
+      cookieCache: { enabled: true, maxAge: 5 * 60 },
+    },
     secret: process.env.BETTER_AUTH_SECRET,
     baseURL: process.env.BETTER_AUTH_URL,
     // 서버 액션에서 로그인해도 쿠키가 심기게 한다. 플러그인 목록의 맨 끝이어야 한다.

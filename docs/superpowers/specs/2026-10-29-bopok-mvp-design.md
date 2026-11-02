@@ -433,11 +433,12 @@ TMAP의 '계단 제외' 옵션은 노션 테스트에서 일반 경로와 같은
 | 테스트 | vitest | [제안] |
 | DB | 개발은 각자 로컬 PGlite(파일로 도는 PostgreSQL), 배포는 Neon (PostgreSQL). 같은 PostgreSQL이라 코드는 그대로 | [결정] |
 | DB 도구 | Drizzle ORM + 마이그레이션 | [제안] |
-| 로그인 | Better Auth, 이메일·비밀번호 | [제안] |
+| 로그인 | Better Auth, 이메일·비밀번호. 세션은 쿠키 캐시 5분(요청마다 세션 DB 조회를 하지 않는다. 다른 기기의 로그아웃·이름 바꾸기 같은 세션 변경은 최대 5분 늦게 닿는다 — 그룹 구성원 확인은 매번 DB로 하므로 내보내기는 바로 막힌다) | [제안] + [결정: 11/2 쿠키 캐시] |
 | 지도 | MapLibre GL + OpenFreeMap (+ three.js) | [결정] |
 | AI | Upstage Solar Pro → opencode 대체 | [결정] |
 | 경로 | TMAP 보행자 경로·POI 검색 | [결정] |
 | 배포 | Vercel + Neon 연동. 개발은 각자 로컬에서 하고, 배포·Neon 연결은 마지막에 한다 | [제안] + [결정: 배포는 마지막] |
+| 배포 지역 | 함수는 Neon과 같은 싱가포르(`sin1`, `vercel.json`). 쿼리 한 번이 왕복 한 번이라 차례로 하는 쿼리를 줄이고, 서로 상관없는 쿼리는 동시에 부른다 | [결정: 11/2] |
 
 > 시안 레포의 `AGENTS.md`: 이 Next.js 버전은 이전과 API가 다를 수 있으니 코드를 쓰기 전에 `node_modules/next/dist/docs/`를 확인할 것.
 

@@ -45,6 +45,32 @@ function jsonRequest(path: string, body: unknown, cookie?: string): Request {
   })
 }
 
+// 브라우저처럼 응답의 Set-Cookie 줄을 쿠키 묶음(Cookie 헤더 모양)에 적용한다.
+// 값이 비었거나 Max-Age=0·지난 Expires인 줄은 쿠키를 지운다 — 로그아웃 응답이 그렇게 쿠키를 지운다.
+function applySetCookies(cookie: string, setCookieLines: string[]): string {
+  const jar = new Map<string, string>()
+  for (const pair of cookie.split(';')) {
+    const trimmed = pair.trim()
+    const eq = trimmed.indexOf('=')
+    if (eq > 0) jar.set(trimmed.slice(0, eq), trimmed.slice(eq + 1))
+  }
+
+  for (const line of setCookieLines) {
+    const [pair, ...attributes] = line.split(';').map(part => part.trim())
+    const eq = pair.indexOf('=')
+    const name = pair.slice(0, eq)
+    const value = pair.slice(eq + 1)
+    const expired = attributes.some(
+      attr =>
+        /^max-age=0$/i.test(attr) || (/^expires=/i.test(attr) && new Date(attr.slice('expires='.length)).getTime() <= Date.now()),
+    )
+    if (value === '' || expired) jar.delete(name)
+    else jar.set(name, value)
+  }
+
+  return [...jar].map(([name, value]) => `${name}=${value}`).join('; ')
+}
+
 describe('가입', () => {
   it('user 행이 생기고 이름·이메일이 그대로 들어간다', async () => {
     const { userId } = await signUp({ name: '김경선', email: 'gs@example.com' })
@@ -100,10 +126,58 @@ describe('로그인 → 세션 확인', () => {
     const { cookie } = await signUp({ name: '김경선', email: 'gs@example.com' })
     await expect(requireUser(requestWith(cookie))).resolves.toBeTruthy()
 
+    // 브라우저가 하는 대로, 로그아웃 응답의 Set-Cookie(지워지는 쿠키)를 적용한 뒤의 쿠키로 확인한다.
+    // session_data(쿠키 캐시)도 지워지므로 DB를 보지 않고 통과하는 일은 없다.
     const response = await getAuth().handler(jsonRequest('sign-out', {}, cookie))
     expect(response.ok).toBe(true)
+    const afterSignOut = applySetCookies(cookie, response.headers.getSetCookie())
+    // 캐시 쿠키까지 지워졌는지 먼저 확인한다 — 남아 있으면 아래 검사가 캐시로 통과해 버린다
+    expect(afterSignOut).not.toContain('better-auth.session_data=')
 
-    await expect(requireUser(requestWith(cookie))).rejects.toThrow('로그인이 필요해요')
+    await expect(requireUser(requestWith(afterSignOut))).rejects.toThrow('로그인이 필요해요')
+  })
+
+  it('[알려진 한계] 로그아웃 전에 복사해 둔 쿠키는 캐시 시간(5분) 안에서는 통한다', async () => {
+    const { cookie } = await signUp({ name: '김경선', email: 'gs@example.com' })
+    // 캐시 쿠키(session_data)가 같이 있어야 이 한계가 생긴다 — 가입 응답에 들어 있는지 먼저 본다
+    expect(cookie).toContain('better-auth.session_token=')
+    expect(cookie).toContain('better-auth.session_data=')
+
+    const copiedBeforeSignOut = cookie
+    await getAuth().handler(jsonRequest('sign-out', {}, cookie))
+
+    // 서버 세션 행은 이미 지워졌지만 쿠키 캐시가 아직 유효해서 통과한다 (cookieCache 설정의 대가)
+    await expect(requireUser(requestWith(copiedBeforeSignOut))).resolves.toBeTruthy()
+  })
+
+  it('[한계의 범위] 복사해 둔 쿠키도 캐시 시간(5분)이 지나면 막힌다', async () => {
+    const { cookie } = await signUp({ name: '김경선', email: 'gs@example.com' })
+    await getAuth().handler(jsonRequest('sign-out', {}, cookie))
+
+    // Date만 가짜로 돌린다 — 타이머까지 바꾸면 PGlite·Better Auth의 비동기 처리가 멈춘다
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      vi.setSystemTime(Date.now() + 5 * 60 * 1000 + 1000)
+      // 캐시가 만료되면 세션 DB를 다시 보고, 로그아웃으로 지워진 행이 없으니 막힌다
+      await expect(requireUser(requestWith(cookie))).rejects.toThrow('로그인이 필요해요')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('[한계의 범위] 세션 토큰만 복사했다면(session_data 없음) 로그아웃 직후 바로 막힌다', async () => {
+    const { cookie } = await signUp({ name: '김경선', email: 'gs@example.com' })
+    const tokenOnly = cookie
+      .split('; ')
+      .filter(part => part.startsWith('better-auth.session_token='))
+      .join('; ')
+    expect(tokenOnly).toContain('better-auth.session_token=')
+    expect(tokenOnly).not.toContain('better-auth.session_data=')
+
+    await getAuth().handler(jsonRequest('sign-out', {}, cookie))
+
+    // 캐시로는 못 통과하고, 서버 세션 행이 없으므로 바로 막힌다
+    await expect(requireUser(requestWith(tokenOnly))).rejects.toThrow('로그인이 필요해요')
   })
 
   it('로그인 안 한 상태의 get-session은 200 + null (401이 아니다 — 401은 requireUser의 몫)', async () => {
