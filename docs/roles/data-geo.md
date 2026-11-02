@@ -6,6 +6,17 @@
 
 대전 유명 관광지의 지점·구간·계단·쉼터 데이터를 만들어 DB에 넣고, 일정 순서에 따라 필요한 장소 사이 경로를 TMAP으로 가져와 계단을 검사해 돌려준다. **시범 장소 몇 곳을 먼저** 끝까지 넣어서 다른 역할이 진짜 데이터로 일할 수 있게 한다.
 
+## 2단계 할 일 (11/2~) — 이동주
+
+기능 하나를 끝까지 맡는다 (AGENTS 3장, 설계 `docs/superpowers/specs/2026-11-02-bopok-scope-expansion-design.md` 6장).
+
+1. **④ 장소 늘리기** (설계 2장, 4.1, 4.7)
+   - **시범 3곳 말고 대전 주요 관광지 목록** (한국관광공사 TourAPI), 출처·확인 날짜·신뢰 등급
+   - 식당·카페·숙박(`PlaceSummary.kind`), 메뉴와 음식 태그(`MenuItem.foodTags` — 태그 목록은 김태형의 주의 규칙 표와 맞춤)
+   - 장소 추천 벡터 검색: Neon pgvector + Upstage 임베딩, `searchCandidates`에 `query`(리뷰어 김태형)
+2. **⑥ 비용** (설계 4.6): 입장료·메뉴 가격·숙박비·택시 요금(TMAP) 데이터, 엔진 계산(`CostEstimate`, 한 사람 기준, 여유 20% 제안), `CostSlot`(리뷰어 김태형·오하연)
+- 장소 안 데이터(입구·볼거리·쉼터·계단 구간)는 ⑤ 오하연이 시범 장소부터 넣는다. 스키마·스크립트는 이동주가 리뷰
+
 ## 맡는 폴더
 
 `src/app/api/{places,legs}/**`, `src/lib/places`, `src/lib/geo`, `src/lib/db/schema/places.ts`, `scripts/data`, `data/`

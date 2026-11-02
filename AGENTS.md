@@ -19,9 +19,10 @@ Claude Code, Codex 등 AI 도구로 작업할 때 모두 이 규칙을 따른다
    PR 리뷰어를 지정할 때 이 GitHub 아이디를 쓴다.
 
 3. 공통 문서 `docs/roles/common.md`(0단계 준비, 공용 타입 초안)와 설계 문서 `docs/superpowers/specs/2026-10-29-bopok-mvp-design.md`에서 역할 문서가 가리키는 장을 읽는다.
+   **2단계(11/2~)**: 범위 확장 설계 `docs/superpowers/specs/2026-11-02-bopok-scope-expansion-design.md`의 4장(공용 타입)과 6장(기능별 담당·순서)도 읽는다.
 4. `git status`와 현재 브랜치를 확인한다. `main`이면 최신으로 받은 뒤(`git pull`) **그 사람의 접두어로 작업 브랜치를 만든다** (8장).
-5. 역할 문서의 "작업 순서"에서 아직 안 끝난 다음 단계를 찾아 사용자에게 알려 주고, **무엇을 어떻게 할지 짧게 계획을 보여 준 뒤 확인을 받고** 시작한다.
-6. 이 세션 동안은 그 사람의 역할로 일한다. 다른 역할의 폴더를 고쳐야 하면 먼저 사용자에게 알린다(3장).
+5. 역할 문서의 "작업 순서"(2단계부터는 범위 확장 설계 6.2의 그 사람 기능)에서 아직 안 끝난 다음 단계를 찾아 사용자에게 알려 주고, **무엇을 어떻게 할지 짧게 계획을 보여 준 뒤 확인을 받고** 시작한다.
+6. 이 세션 동안은 그 사람의 역할로 일한다. 맡은 기능에 필요하면 다른 사람 영역의 폴더도 고칠 수 있지만, 고치기 전에 사용자에게 알리고 PR 리뷰어로 그 영역 담당을 넣는다(3장).
 
 ## 1. 기준 문서
 
@@ -47,9 +48,11 @@ pnpm build        # 타입 검사 포함
 
 PR을 올리기 전에 `pnpm lint && pnpm test && pnpm build`가 모두 통과해야 한다.
 
-## 3. 담당 폴더
+## 3. 담당 폴더와 기능
 
-| 폴더 | 담당 |
+**2단계부터(11/2, 김태형 결정)는 기능 하나를 한 사람이 화면부터 DB까지 끝까지 맡는다.** 누가 어떤 기능을 맡는지는 `docs/superpowers/specs/2026-11-02-bopok-scope-expansion-design.md` 6장에 있다. 아래 표의 폴더 담당은 이제 그 영역의 **리뷰어**다.
+
+| 폴더 | 리뷰어 (영역 담당) |
 | --- | --- |
 | `src/app/**/page.tsx`, `layout.tsx`, `src/components/**`, `src/lib/api-client`, `src/mocks`, `public/**`, `scripts/map` | 오하연 |
 | `src/app/api/{auth,groups,invites,trips,versions,opinions}/**`, `src/lib/auth`, `src/lib/groups`, `src/lib/trips`, `src/lib/db/client.ts`, `src/lib/db/schema/{auth,groups,trips}.ts` | 김경선 |
@@ -57,8 +60,9 @@ PR을 올리기 전에 `pnpm lint && pnpm test && pnpm build`가 모두 통과�
 | `src/app/api/{places,legs}/**`, `src/lib/places`, `src/lib/geo`, `src/lib/db/schema/places.ts`, `scripts/data`, `data/` | 이동주 |
 | `src/lib/contracts` | **모두** — 바꾸면 PR에 프론트와 관련 백엔드 담당을 리뷰어로 넣어 알린다 |
 
-- **내 담당이 아닌 폴더는 고치지 않는다.** 꼭 필요하면 그 담당에게 말하고, PR 리뷰어로 그 사람을 넣는다.
-- 다른 역할의 기능이 아직 없으면 기다리지 말고 `src/lib/contracts`의 타입대로 가짜 구현(목업)으로 진행한다.
+- **기능 담당은 그 기능에 필요한 폴더를 고칠 수 있다.** 대신 고친 폴더의 영역 담당을 PR 리뷰어로 넣고, 가능하면 그 사람의 승인을 받는다. 기능에 필요 없는 남의 코드는 고치지 않는다.
+- 같은 파일을 여럿이 고치지 않게, 기능마다 **새 파일**로 만들고 공용 파일에는 연결하는 몇 줄만 넣는다. 일정 화면은 `src/components/trip/slots/`의 자기 기능 파일만 고친다 (설계 6.5).
+- 다른 사람의 기능이 아직 없으면 기다리지 말고 `src/lib/contracts`의 타입대로 가짜 구현(목업)으로 진행한다.
 
 ## 4. 코드 규칙
 
@@ -115,6 +119,21 @@ PR을 올리기 전에 `pnpm lint && pnpm test && pnpm build`가 모두 통과�
 - 설계 문서·역할 문서에 없는 결정이 필요하면 추측으로 구현하지 말고 사용자에게 묻는다. 정해지면 문서에 적는다.
 
 <!-- BEGIN:nextjs-agent-rules -->
+
+## 10. 지금 할 일 — 2단계 (11/2~)
+
+자세한 내용은 범위 확장 설계 `docs/superpowers/specs/2026-11-02-bopok-scope-expansion-design.md` 6장, 각자 할 일은 역할 문서의 "2단계 할 일"에 있다.
+
+| 사람 | 맡은 기능 | 지금 바로 시작할 것 |
+| --- | --- | --- |
+| 김태형 | **일정 화면 뼈대(가장 먼저)**, ② 건강 정보·식단 주의, ⑦ Claude 먼저·콜드 스타트 측정, ⑧ 피로도·체력 | 뼈대 → main. 그다음 `dietCautions`·주의 규칙 표 |
+| 김경선 | ① 여러 날 여행·일차별 만족도, ③ 그룹 채팅 → AI 전달 | 여행 끝 날짜 DB·인터뷰 기간, 채팅 DB·API |
+| 이동주 | ④ 장소 늘리기(대전 주요 관광지·식당·카페·숙박·RAG), ⑥ 비용 | TourAPI 관광지 목록, 식당·카페·숙박 데이터 모양 |
+| 오하연 | ⑤ 장소 안 3D 안내도, ⑦ 화면 일(조건 바꿔 보기·경로 이어짐·직접 고치기·토글) | 시범 장소의 장소 안 데이터 입력, 경로 이어짐 점선 |
+
+- 일정 화면은 뼈대가 main에 들어간 뒤 `src/components/trip/slots/`의 **자기 파일만** 고친다 (설계 6.5).
+- DB 마이그레이션은 main을 최신으로 받은 직후에 만들고, 머지 직전에 번호가 겹치면 지우고 다시 만든다.
+- 공용 타입(`src/lib/contracts`)은 1단계에서 정해 두었다. 바꿔야 하면 PR에 세 사람 모두 리뷰어로 넣는다.
 
 ## This is NOT the Next.js you know
 

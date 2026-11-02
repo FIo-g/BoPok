@@ -6,6 +6,19 @@
 
 가입·로그인·그룹·초대와, 여행·여행자·버전·의견·확정을 서버에 저장하고 꺼내는 일을 맡는다. 다른 백엔드 역할이 쓰는 "버전 저장" 함수의 주인이기도 하다. 0단계 레포·DB 준비를 주도한다.
 
+## 2단계 할 일 (11/2~) — 김경선
+
+기능 하나를 끝까지 맡는다 (AGENTS 3장, 설계 `docs/superpowers/specs/2026-11-02-bopok-scope-expansion-design.md` 6장).
+
+1. **① 여러 날 여행·일차별 만족도** (설계 4.2, 4.3, 6.3)
+   - DB `trips.end_date`, `createTrip`/`updateTrip`에 `endDate`. 수정(PATCH)은 저장된 값과 요청을 합쳐 `tripDatesOutOfOrder`로 검사하고, 시작 날짜 없이 남는 끝 날짜도 막는다
+   - 인터뷰가 기간(끝 날짜)을 받기 (`src/lib/ai/interview.ts`, 리뷰어 김태형)
+   - 일정 화면 뼈대(김태형)가 들어오면 날짜 탭에 날마다 판정 연결, AI 다시 짜기가 날짜를 알게 하기
+   - 일차별 만족도: DB·API, `SatisfactionSlot`
+2. **③ 그룹 채팅 → AI 전달** (설계 4.5): 채팅 DB·API(`ChatMessage`, 커서 `after`는 ISO 시각·같은 시각 포함), `ChatSlot`(10초 갱신), 다시 짜기 `includeChat`일 때 최근 채팅을 프롬프트에 넣기(리뷰어 김태형)
+3. 남은 것: 공유 글(`src/lib/trips/share-text.ts`)의 차량 시간 "약 0분" → `formatRideMin`과 같은 규칙
+- 리뷰어: 화면은 오하연, AI는 김태형
+
 ## 맡는 폴더
 
 `src/app/api/{auth,groups,invites,trips,versions,opinions}/**`, `src/lib/auth`, `src/lib/groups`, `src/lib/trips`, `src/lib/db/client.ts`, `src/lib/db/schema/{auth,groups,trips}.ts`

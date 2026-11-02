@@ -2,15 +2,23 @@
 
 // 일정 화면 (서비스의 중심): 왼쪽 일정·판정·의견·버전, 오른쪽 지도 (1:1). 좁은 화면에서는 지도를 위, 일정을 아래로 쌓는다.
 // 일정(stops)이 바뀔 때마다 브라우저에서 엔진으로 바로 다시 판정하고(useJudged) 지도와 목록이 같이 바뀐다.
+// 여러 날 여행이면 날짜 탭으로 고른 날만 판정·지도·목록에 넘긴다. 버전에는 모든 날이 들어 있으므로 고칠 때는 그날 부분만 바꿔 끼운다 (설계 2026-11-02 6.5).
+// 기능별 화면 조각은 src/components/trip/slots/ 에 있다 — 각 기능 담당은 그 파일만 고친다.
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useRequireUser } from '@/components/AuthProvider'
 import { ConditionTuner } from '@/components/trip/ConditionTuner'
+import { DayTabs } from '@/components/trip/DayTabs'
 import { JudgePanel } from '@/components/trip/JudgePanel'
 import { OpinionForm, OpinionList } from '@/components/trip/OpinionBox'
 import { PlacePicker } from '@/components/trip/PlacePicker'
 import { QuickFixPanel } from '@/components/trip/QuickFixPanel'
+import { ChatSlot } from '@/components/trip/slots/ChatSlot'
+import { CostSlot } from '@/components/trip/slots/CostSlot'
+import { HealthSlot } from '@/components/trip/slots/HealthSlot'
+import { SatisfactionSlot } from '@/components/trip/slots/SatisfactionSlot'
+import type { TripSlotProps } from '@/components/trip/slots/types'
 import { StopList, type StopEditing } from '@/components/trip/StopList'
 import { TripMap } from '@/components/trip/TripMap'
 import { preloadedVersion, showScheduleSpinner } from '@/components/trip/trip-screen-state'
@@ -20,10 +28,11 @@ import { VersionBar, VersionCompare } from '@/components/trip/VersionBar'
 import { Button, Card, ErrorNotice, Notice, PageTitle, Spinner } from '@/components/ui'
 import { api } from '@/lib/api-client'
 import { aiFailure } from '@/lib/ai-fallback'
-import type { Condition, OpinionInput, PlaceSummary, QuickFix, QuickFixChange, Stop } from '@/lib/contracts'
+import { stopsOfDay, type Condition, type OpinionInput, type PlaceSummary, type QuickFix, type QuickFixChange, type Stop } from '@/lib/contracts'
 import { fixedChangeSentence } from '@/lib/engine'
 import { formatDate } from '@/lib/format'
-import { moveStop, removeStop, replaceStopPlace, sameStops, stopFromPlace, updateStop } from '@/lib/plan/stop-edit'
+import { removeStop, replaceStopPlace, sameStops, updateStop } from '@/lib/plan/stop-edit'
+import { addStopToDay, moveStopInDay, newStopForDay, replaceDayStops, tripDayList } from '@/lib/plan/trip-days'
 import { errorMessage, useAsync } from '@/lib/use-async'
 
 const OPINION_REFRESH_MS = 15_000
@@ -58,11 +67,18 @@ export function TripScreen({ tripId }: { tripId: string }) {
   const [compare, setCompare] = useState(false)
   const [busy, setBusy] = useState<null | 'save' | 'revise' | 'confirm'>(null)
   const [message, setMessage] = useState<{ tone: 'ok' | 'warn' | 'info'; text: string } | null>(null)
+  const [pickedDay, setPickedDay] = useState(1)
 
   const travelers = detail.data?.travelers
-  const stops = draft ?? versionData?.stops
+  // 버전 전체(모든 날)와 고른 날. 고른 날이 일정에 없으면(다른 안을 골랐을 때 등) 첫날로 본다
+  const allStops = draft ?? versionData?.stops
+  const tripDates = detail.data?.trip
+  const days = useMemo(() => tripDayList({ date: tripDates?.date, endDate: tripDates?.endDate }, allStops ?? []), [tripDates?.date, tripDates?.endDate, allStops])
+  const day = days.includes(pickedDay) ? pickedDay : days[0]
+  const stops = useMemo(() => (allStops ? stopsOfDay(allStops, day) : undefined), [allStops, day])
+  const parentDayStops = useMemo(() => (parent.data ? stopsOfDay(parent.data.stops, day) : undefined), [parent.data, day])
   const judged = useJudged(stops, travelers, tuned)
-  const prevJudged = useJudged(parent.data?.stops, travelers, tuned)
+  const prevJudged = useJudged(parentDayStops, travelers, tuned)
   // 빠른 수정안으로 만든 버전의 바뀐 내용(고정 문장의 재료). 새로고침하면 사라지고, 그때는 비교 숫자로만 설명한다
   const [quickFixChanges, setQuickFixChanges] = useState<Record<string, QuickFixChange[]>>({})
   const explain = useExplain({
@@ -85,6 +101,12 @@ export function TripScreen({ tripId }: { tripId: string }) {
 
   const stopNames = useMemo(() => Object.fromEntries((stops ?? []).map(stop => [stop.key, stop.name])), [stops])
   const mapData = useMemo(() => (judged && stops ? { stops, places: judged.places, legs: judged.legs, result: judged.result } : null), [judged, stops])
+
+  function chooseDay(next: number) {
+    setSelectedId(null)
+    setShowQuickFix(false)
+    setPickedDay(next)
+  }
 
   function chooseVersion(id: string) {
     if (dirty && !window.confirm('고치던 내용이 저장되지 않았어요. 버리고 다른 안을 볼까요?')) return
@@ -121,8 +143,9 @@ export function TripScreen({ tripId }: { tripId: string }) {
   }
 
   async function applyQuickFix(fix: QuickFix) {
-    if (!activeId) return
-    const saved = await api.trips.saveVersion(tripId, { parentId: activeId, stops: fix.stops, madeBy: 'quick_fix', note: fixedChangeSentence(fix.changes) })
+    if (!activeId || !allStops) return
+    // 빠른 수정안은 그날 장소만 돌려준다 — 그날 부분만 바꿔 끼워야 다른 날 일정이 지워지지 않는다
+    const saved = await api.trips.saveVersion(tripId, { parentId: activeId, stops: replaceDayStops(allStops, day, fix.stops), madeBy: 'quick_fix', note: fixedChangeSentence(fix.changes) })
     setQuickFixChanges(cur => ({ ...cur, [saved.id]: fix.changes }))
     await afterNewVersion(saved.id, `${saved.number}번째 안으로 저장했어요: ${fixedChangeSentence(fix.changes)}`)
   }
@@ -186,7 +209,8 @@ export function TripScreen({ tripId }: { tripId: string }) {
 
   const editing: StopEditing | null = draft
     ? {
-        move: (index, delta) => setDraft(moveStop(draft, index, delta)),
+        // 목록의 순서 번호는 그날 안의 번호다
+        move: (index, delta) => setDraft(moveStopInDay(draft, day, index, delta)),
         remove: key => setDraft(removeStop(draft, key)),
         update: (key, patch) => setDraft(updateStop(draft, key, patch)),
         replace: key => setPicker({ mode: 'replace', key }),
@@ -195,7 +219,9 @@ export function TripScreen({ tripId }: { tripId: string }) {
 
   function pickPlace(place: PlaceSummary) {
     if (!draft || !picker) return
-    setDraft(picker.mode === 'add' ? [...draft, stopFromPlace(place, draft, draft[draft.length - 1]?.arriveBy ?? 'car')] : replaceStopPlace(draft, picker.key, place))
+    const dayStops = stopsOfDay(draft, day)
+    const arriveBy = dayStops[dayStops.length - 1]?.arriveBy ?? draft[draft.length - 1]?.arriveBy ?? 'car'
+    setDraft(picker.mode === 'add' ? addStopToDay(draft, day, newStopForDay(place, draft, day, arriveBy)) : replaceStopPlace(draft, picker.key, place))
     setPicker(null)
   }
 
@@ -207,12 +233,21 @@ export function TripScreen({ tripId }: { tripId: string }) {
   const unapplied = opinions.data?.filter(o => !o.appliedInVersionId).length ?? 0
   const generalOpinions = opinions.data?.filter(o => o.stopKey === null) ?? []
   const canJudge = detail.data.travelers.length > 0
+  const slotProps: TripSlotProps = {
+    tripId,
+    day,
+    stops: stops ?? [],
+    result: judged?.result ?? null,
+    travelers: detail.data.travelers,
+    versionId: activeId,
+    userId: user?.id ?? '',
+  }
 
   return (
     <div className="mx-auto w-full max-w-[96rem] px-5 py-6">
       <PageTitle
         title={trip.title}
-        sub={`${formatDate(trip.date)}${trip.confirmedVersionId ? ' · 확정된 여행' : ' · 작성 중'}`}
+        sub={`${formatDate(trip.date)}${trip.endDate && trip.endDate !== trip.date ? ` ~ ${formatDate(trip.endDate)}` : ''}${trip.confirmedVersionId ? ' · 확정된 여행' : ' · 작성 중'}`}
         actions={
           <>
             <Link href={`/groups/${trip.groupId}`} className="inline-flex min-h-12 items-center rounded-xl px-4 font-bold text-muted hover:bg-black/5">← 그룹으로</Link>
@@ -232,6 +267,8 @@ export function TripScreen({ tripId }: { tripId: string }) {
               <p className="text-muted">새 여행 만들기에서 일정을 짜 보세요.</p>
             </Card>
           )}
+
+          <DayTabs days={days} day={day} startDate={trip.date} onSelect={chooseDay} disabled={busy !== null} />
 
           {version.error && <ErrorNotice message={errorMessage(version.error)} onRetry={version.reload} />}
           {!canJudge && versions && versions.length > 0 && (
@@ -255,6 +292,8 @@ export function TripScreen({ tripId }: { tripId: string }) {
                 onRetry={judged.retry}
               />
               <ConditionTuner base={judged.result.condition} tuned={tuned} onChange={setTuned} />
+              <HealthSlot {...slotProps} />
+              <CostSlot {...slotProps} />
 
               <Card className="flex flex-wrap gap-2">
                 {draft ? (
@@ -279,6 +318,8 @@ export function TripScreen({ tripId }: { tripId: string }) {
                   </>
                 )}
               </Card>
+
+              <SatisfactionSlot {...slotProps} />
 
               {showQuickFix && !draft && (
                 <QuickFixPanel
@@ -312,6 +353,8 @@ export function TripScreen({ tripId }: { tripId: string }) {
           ) : showScheduleSpinner({ activeId, versionLoading, hasStops: !!stops, canJudge }) ? (
             <Spinner label="일정을 계산하고 있어요" />
           ) : null}
+
+          <ChatSlot {...slotProps} />
         </div>
 
         <div className="order-1 lg:sticky lg:top-24 lg:order-2">
