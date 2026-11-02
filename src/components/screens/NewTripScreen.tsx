@@ -9,7 +9,7 @@ import { Badge, Button, Card, Chip, ErrorNotice, Field, Notice, PageShell, PageT
 import { api } from '@/lib/api-client'
 import { aiFailure, type AiFailure } from '@/lib/ai-fallback'
 import type { InterviewResponse, PlaceSummary, Stop, StartMode } from '@/lib/contracts'
-import { stopFromPlace } from '@/lib/plan/stop-edit'
+import { stopsFromPlaces } from '@/lib/plan/stop-edit'
 import { STYLE_OPTIONS } from '@/lib/trip-options'
 import { errorMessage } from '@/lib/use-async'
 
@@ -74,6 +74,8 @@ function PasteStep({ tripId, onParsed }: { tripId: string; onParsed: (stops: Sto
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<AiFailure | null>(null)
   const [pick, setPick] = useState(false)
+  // 직접 고르기는 여러 곳을 모은 뒤 버튼을 눌러야 넘어간다. 창을 닫아도 고른 곳은 남는다
+  const [picked, setPicked] = useState<PlaceSummary[]>([])
 
   async function parse() {
     setBusy(true)
@@ -101,7 +103,7 @@ function PasteStep({ tripId, onParsed }: { tripId: string; onParsed: (stops: Sto
           </Button>
         )}
         <Button variant="secondary" onClick={() => setPick(true)} disabled={busy}>
-          장소 직접 고르기
+          장소 직접 고르기{picked.length > 0 && ` (${picked.length}곳 고름)`}
         </Button>
       </div>
       {pick && (
@@ -109,9 +111,13 @@ function PasteStep({ tripId, onParsed }: { tripId: string; onParsed: (stops: Sto
           title="일정에 넣을 장소 고르기"
           usedIds={[]}
           onClose={() => setPick(false)}
-          onPick={(place: PlaceSummary) => {
-            setPick(false)
-            onParsed([stopFromPlace(place, [])], [])
+          multi={{
+            picked,
+            onChange: setPicked,
+            onDone: () => {
+              setPick(false)
+              onParsed(stopsFromPlaces(picked), [])
+            },
           }}
         />
       )}
@@ -298,6 +304,9 @@ function MakingStep({ tripId, mode }: { tripId: string; mode: StartMode }) {
   const [error, setError] = useState<AiFailure | null>(null)
   const [attempt, setAttempt] = useState(0)
   const [pick, setPick] = useState(false)
+  // AI 대신 직접 고른 장소들 (고른 순서). 버튼을 눌러야 저장한다
+  const [picked, setPicked] = useState<PlaceSummary[]>([])
+  const [saving, setSaving] = useState(false)
   const ran = useRef(-1)
 
   useEffect(() => {
@@ -310,6 +319,20 @@ function MakingStep({ tripId, mode }: { tripId: string; mode: StartMode }) {
       .catch(e => setError(aiFailure(e)))
   }, [attempt, tripId, router])
 
+  async function savePicked() {
+    setSaving(true)
+    try {
+      await api.trips.saveVersion(tripId, { parentId: null, stops: stopsFromPlaces(picked), madeBy: 'user', note: '직접 고른 일정' })
+      router.replace(`/trips/${tripId}`)
+    } catch (e) {
+      // 고른 장소는 그대로 두어 "장소를 직접 고르기"로 다시 열면 이어서 고칠 수 있다
+      setPick(false)
+      setError({ message: errorMessage(e), canRetry: true, canPick: true })
+    } finally {
+      setSaving(false)
+    }
+  }
+
   if (error) {
     // 붙여넣기(A)는 정리한 일정이 이미 저장돼 있어 그 화면으로 간다 (설계 6.4)
     return (
@@ -317,22 +340,16 @@ function MakingStep({ tripId, mode }: { tripId: string; mode: StartMode }) {
         <ErrorNotice message={`일정을 짜지 못했어요. ${error.message}`} />
         <div className="flex flex-wrap gap-2">
           {error.canRetry && <Button onClick={() => { setError(null); setAttempt(a => a + 1) }}>다시 시도</Button>}
-          <Button variant={error.canRetry ? 'secondary' : 'primary'} onClick={mode === 'paste' ? () => router.replace(`/trips/${tripId}`) : () => setPick(true)}>{mode === 'paste' ? '정리한 일정 그대로 보기' : '장소를 직접 고르기'}</Button>
+          <Button variant={error.canRetry ? 'secondary' : 'primary'} onClick={mode === 'paste' ? () => router.replace(`/trips/${tripId}`) : () => setPick(true)}>
+            {mode === 'paste' ? '정리한 일정 그대로 보기' : `장소를 직접 고르기${picked.length > 0 ? ` (${picked.length}곳 고름)` : ''}`}
+          </Button>
         </div>
         {pick && (
           <PlacePicker
             title="일정에 넣을 장소 고르기"
             usedIds={[]}
-            onClose={() => setPick(false)}
-            onPick={async place => {
-              setPick(false)
-              try {
-                await api.trips.saveVersion(tripId, { parentId: null, stops: [stopFromPlace(place, [])], madeBy: 'user', note: '직접 고른 일정' })
-                router.replace(`/trips/${tripId}`)
-              } catch (e) {
-                setError({ message: errorMessage(e), canRetry: true, canPick: true })
-              }
-            }}
+            onClose={() => !saving && setPick(false)}
+            multi={{ picked, onChange: setPicked, onDone: savePicked, busy: saving }}
           />
         )}
       </div>

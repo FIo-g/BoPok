@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Transport } from '@/lib/contracts'
-import { countRideLegsWithoutTime, formatWalk, hasWalkInfoGap, isWalkInfoMissing, loginRedirectPath, stopStairsState } from './format'
+import { countRideLegsWithoutTime, formatRideMin, formatWalk, hasWalkInfoGap, isWalkInfoMissing, loginRedirectPath, requireUserRedirect, sourceName, stopStairsState } from './format'
 
 const seg = (stairsStatus: 'present' | 'confirmed_none' | 'unknown', reverse = false) => ({ stairsStatus, reverse })
 
@@ -43,6 +43,33 @@ describe('출처 이름', () => {
     expect(sourceLine('https://www.daejeon.go.kr/gar/contentsHtmlView.do?menuSeq=8026', '2026-10-31')).toBe('출처: daejeon.go.kr · 2026.10 확인')
     expect(sourceLine('현장 확인', '2026-10')).toBe('출처: 현장 확인 · 2026.10 확인')
     expect(sourceLine('', '2026-10')).toBe('출처 확인 중')
+  })
+
+  it('TMAP 은 경로 종류로 가린다: 자가용·택시 구간은 보행자 경로가 아니다', () => {
+    expect(sourceName('https://apis.openapi.sk.com/tmap/routes/pedestrian?version=1')).toBe('TMAP 보행자 경로')
+    expect(sourceName('https://apis.openapi.sk.com/tmap/routes?version=1')).toBe('TMAP 자동차 경로')
+    expect(sourceName('https://apis.openapi.sk.com/tmap/routes/?version=1')).toBe('TMAP 자동차 경로')
+    expect(sourceName('https://apis.openapi.sk.com/tmap/pois?version=1')).toBe('TMAP')
+    expect(sourceName('https://apis.openapi.sk.com')).toBe('TMAP')
+  })
+
+  it('자동차 경로 출처도 근거 줄로 보여 준다', async () => {
+    const { sourceLine } = await import('./format')
+    expect(sourceLine('https://apis.openapi.sk.com/tmap/routes?version=1', '2026-11-02')).toBe('출처: TMAP 자동차 경로 · 2026.11 확인')
+  })
+})
+
+describe('탈것 이동 시간 문장', () => {
+  it('1분이 안 되는 짧은 구간은 0분이 아니라 1분 이내', () => {
+    expect(formatRideMin(0.3)).toBe('약 1분 이내 · 추정치')
+    expect(formatRideMin(0)).toBe('약 1분 이내 · 추정치')
+    expect(formatRideMin(0.99)).toBe('약 1분 이내 · 추정치')
+  })
+
+  it('1분 이상은 반올림한 분과 추정치', () => {
+    expect(formatRideMin(1)).toBe('약 1분 · 추정치')
+    expect(formatRideMin(1.4)).toBe('약 1분 · 추정치')
+    expect(formatRideMin(12.5)).toBe('약 13분 · 추정치')
   })
 })
 
@@ -112,5 +139,23 @@ describe('로그인 후 돌아올 주소', () => {
   it('쿼리가 없으면 경로만', () => {
     expect(loginRedirectPath('/groups', '')).toBe('/login?next=%2Fgroups')
     expect(loginRedirectPath('/groups', '?')).toBe('/login?next=%2Fgroups')
+  })
+})
+
+describe('로그인이 필요한 화면에서 보낼 곳', () => {
+  const me = { id: 'u-1' }
+
+  it('확인 중이거나 로그인했으면 보내지 않는다', () => {
+    expect(requireUserRedirect(undefined, false, '/trips/t1', '')).toBeNull()
+    expect(requireUserRedirect(me, false, '/trips/t1', '')).toBeNull()
+    expect(requireUserRedirect(me, true, '/trips/t1', '')).toBeNull()
+  })
+
+  it('로그인 안 했으면 지금 화면으로 돌아오게 로그인 화면으로', () => {
+    expect(requireUserRedirect(null, false, '/trips/t1', '')).toBe('/login?next=%2Ftrips%2Ft1')
+  })
+
+  it('로그아웃 버튼으로 나갔으면 next 없이 첫 화면으로 (다음 사람이 남의 여행으로 돌아가지 않게)', () => {
+    expect(requireUserRedirect(null, true, '/trips/t1', '?x=1')).toBe('/')
   })
 })

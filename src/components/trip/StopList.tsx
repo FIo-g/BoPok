@@ -5,7 +5,7 @@
 import { useEffect, useRef } from 'react'
 import type { JudgeResult, Leg, Opinion, OpinionInput, PlaceDetail, Stop, StopResult, Transport } from '@/lib/contracts'
 import { formatRange } from '@/lib/engine'
-import { CONFIDENCE_TEXT, TRANSPORT_TEXT, sourceLine, stairsText, stopStairsState } from '@/lib/format'
+import { CONFIDENCE_TEXT, TRANSPORT_TEXT, formatRideMin, sourceLine, stairsText, stopStairsState } from '@/lib/format'
 import { legItemId, segmentItemId, stopItemId } from '@/components/map'
 import { isLegModeSupported } from '@/lib/plan/plan-cache'
 import { Badge, Button, cx } from '@/components/ui'
@@ -83,7 +83,7 @@ function LegRow({ result, leg, selectedId, onSelect, nextStop, editing }: { resu
         <span aria-hidden="true">↓ </span>
         <strong>{TRANSPORT_TEXT[result.mode]}</strong>
         {result.walkTime && <span> 걷기 {formatRange(result.walkTime)} · 추정치</span>}
-        {result.rideMin !== null && <span> 약 {Math.round(result.rideMin)}분</span>}
+        {result.rideMin !== null && <span> {formatRideMin(result.rideMin)}</span>}
         {leg?.fareKrw !== undefined && <span> · 택시 요금 약 {leg.fareKrw.toLocaleString()}원</span>}
         {result.mode === 'walk' && <span> · {stairsText(result.stairsStatus, leg?.stairsCount)}</span>}
         {result.mode === 'walk' && <span className="ml-2"><StatusBadge warn={result.status === 'warn'} info={result.stairsStatus === 'unknown'} /></span>}

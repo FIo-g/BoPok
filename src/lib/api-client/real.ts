@@ -57,7 +57,8 @@ export const realApi: Api = {
   },
   invites: {
     preview: token => request(`/api/invites/${enc(token)}`, { schema: InvitePreviewSchema }),
-    accept: token => request(`/api/invites/${enc(token)}/accept`, { method: 'POST', body: {}, schema: AcceptInviteResponseSchema }),
+    accept: (token, relation) =>
+      request(`/api/invites/${enc(token)}/accept`, { method: 'POST', body: relation === undefined ? {} : { relation }, schema: AcceptInviteResponseSchema }),
   },
   trips: {
     create: input => request('/api/trips', { method: 'POST', body: input, schema: TripSchema }),

@@ -23,9 +23,12 @@ export function GroupsScreen() {
     setError(null)
     try {
       const group = await api.groups.create({ name })
+      // 이 화면은 떠나도 상태가 남아 있다가(Activity) 뒤로 오면 다시 보인다. 이름을 비워 두면 새 폼으로 보이고 같은 그룹을 또 만들지 않는다
+      setName('')
       router.push(`/groups/${group.id}`)
     } catch (e) {
       setError(errorMessage(e))
+    } finally {
       setBusy(false)
     }
   }

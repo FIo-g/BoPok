@@ -9,7 +9,7 @@ import { useJudged } from '@/components/trip/useJudged'
 import { Badge, Button, ButtonLink, Card, ErrorNotice, Notice, PageTitle, Spinner, VerdictBadge } from '@/components/ui'
 import { api } from '@/lib/api-client'
 import { formatRange } from '@/lib/engine'
-import { TRANSPORT_TEXT, copyText, formatDate, formatWalk, isWalkInfoMissing, madeByText, shareOrCopy, versionLabel } from '@/lib/format'
+import { TRANSPORT_TEXT, copyText, formatDate, formatRideMin, formatWalk, isWalkInfoMissing, madeByText, shareOrCopy, versionLabel } from '@/lib/format'
 import { errorMessage, useAsync } from '@/lib/use-async'
 
 export function FinalScreen({ tripId }: { tripId: string }) {
@@ -95,7 +95,7 @@ export function FinalScreen({ tripId }: { tripId: string }) {
                             {rests.map(n => ` · ${n.name}${n.restType === 'indoor' ? '(실내)' : n.restType === 'outdoor' ? '(야외)' : ''}에서 쉬기`).join('')}
                           </p>
                           {place?.phone && <p className="text-sm text-muted">연락처 {place.phone}</p>}
-                          {leg && <p className="mt-1 font-semibold">↓ {TRANSPORT_TEXT[leg.mode]}{leg.rideMin !== null ? ` 약 ${Math.round(leg.rideMin)}분` : leg.walkTime ? ` 걷기 ${formatRange(leg.walkTime)} · 추정치` : ''}</p>}
+                          {leg && <p className="mt-1 font-semibold">↓ {TRANSPORT_TEXT[leg.mode]}{leg.rideMin !== null ? ` ${formatRideMin(leg.rideMin)}` : leg.walkTime ? ` 걷기 ${formatRange(leg.walkTime)} · 추정치` : ''}</p>}
                         </div>
                       </li>
                     )

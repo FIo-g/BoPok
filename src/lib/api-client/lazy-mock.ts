@@ -40,7 +40,7 @@ export const lazyMockApi: Api = {
   },
   invites: {
     preview: async token => (await mock()).invites.preview(token),
-    accept: async token => (await mock()).invites.accept(token),
+    accept: async (token, relation) => (await mock()).invites.accept(token, relation),
   },
   trips: {
     create: async input => (await mock()).trips.create(input),

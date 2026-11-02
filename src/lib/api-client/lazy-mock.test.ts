@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { DEMO_EMAIL, DEMO_PASSWORD } from '@/mocks/seed'
+import { DEMO_EMAIL, DEMO_INVITE_TOKEN, DEMO_PASSWORD } from '@/mocks/seed'
 import type { Api } from './types'
 
 // 목업은 켠 빌드에서만 불러온다 (끈 빌드의 번들에 목업 데이터·연습용 비밀번호가 들어가지 않게)
@@ -34,6 +34,14 @@ describe('목업 늦게 불러오기', () => {
     await expect(lazyMockApi.auth.getSession()).rejects.toThrow()
     vi.stubEnv('NEXT_PUBLIC_USE_MOCKS', '1')
     expect(await lazyMockApi.auth.getSession()).toBeNull()
+  })
+
+  it('선택 인자(초대 참가의 관계)도 목업까지 그대로 넘긴다', async () => {
+    vi.stubEnv('NEXT_PUBLIC_USE_MOCKS', '1')
+    const { lazyMockApi } = await import('./lazy-mock')
+    await lazyMockApi.auth.signUp({ name: '새 사람', email: 'lazy@bopok.test', password: 'secret12' })
+    const { groupId } = await lazyMockApi.invites.accept(DEMO_INVITE_TOKEN, '엄마')
+    expect((await lazyMockApi.groups.get(groupId)).members.find(m => m.name === '새 사람')?.relation).toBe('엄마')
   })
 
   it('실제 API 와 같은 이름의 메서드를 모두 가진다', async () => {

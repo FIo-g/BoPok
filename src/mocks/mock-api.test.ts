@@ -41,6 +41,38 @@ describe('목업 API', () => {
     expect((await api.groups.get(groupId)).members.map(m => m.name)).toContain('새 사람')
   })
 
+  it('참가할 때 고른 관계를 서버처럼 다듬어 구성원에 저장한다', async () => {
+    await api.auth.signUp({ name: '새 사람', email: 'new@bopok.test', password: 'secret12' })
+    const res = await api.invites.accept(DEMO_INVITE_TOKEN, '  며느리 ')
+    expect(res.alreadyMember).toBe(false)
+    const me = (await api.groups.get(res.groupId)).members.find(m => m.name === '새 사람')
+    expect(me?.relation).toBe('며느리')
+  })
+
+  it('관계를 안 보내거나 null 이면 비워 두고 참가한다', async () => {
+    await api.auth.signUp({ name: '새 사람', email: 'new@bopok.test', password: 'secret12' })
+    const { groupId } = await api.invites.accept(DEMO_INVITE_TOKEN)
+    expect((await api.groups.get(groupId)).members.find(m => m.name === '새 사람')?.relation).toBeNull()
+
+    await api.auth.signUp({ name: '또 다른 사람', email: 'other@bopok.test', password: 'secret12' })
+    await api.invites.accept(DEMO_INVITE_TOKEN, null)
+    expect((await api.groups.get(groupId)).members.find(m => m.name === '또 다른 사람')?.relation).toBeNull()
+  })
+
+  it('이미 구성원이면 관계를 덮어쓰지 않는다', async () => {
+    await api.auth.signUp({ name: '새 사람', email: 'new@bopok.test', password: 'secret12' })
+    const { groupId } = await api.invites.accept(DEMO_INVITE_TOKEN, '아들')
+    const again = await api.invites.accept(DEMO_INVITE_TOKEN, '사위')
+    expect(again.alreadyMember).toBe(true)
+    expect((await api.groups.get(groupId)).members.find(m => m.name === '새 사람')?.relation).toBe('아들')
+  })
+
+  it('관계가 비었거나 20자를 넘으면 서버처럼 400', async () => {
+    await api.auth.signUp({ name: '새 사람', email: 'new@bopok.test', password: 'secret12' })
+    await expect(api.invites.accept(DEMO_INVITE_TOKEN, '   ')).rejects.toMatchObject({ status: 400, code: 'invalid_request' })
+    await expect(api.invites.accept(DEMO_INVITE_TOKEN, '가'.repeat(21))).rejects.toMatchObject({ status: 400, code: 'invalid_request' })
+  })
+
   it('없는 초대는 404', async () => {
     await expect(api.invites.preview('nope')).rejects.toMatchObject({ status: 404 })
   })

@@ -66,6 +66,19 @@ describe('realApi 경로', () => {
     expect(JSON.parse(String(init.body))).toEqual({ requests: [] })
   })
 
+  it('초대 참가는 고른 관계를 본문에 담고, 안 골랐으면 빈 본문을 보낸다', async () => {
+    const fn = stubFetch(200, { groupId: 'g', alreadyMember: false })
+    await realApi.invites.accept('t 1', '엄마')
+    const [url, init] = fn.mock.calls[0] as unknown as [string, RequestInit]
+    expect(url).toBe('/api/invites/t%201/accept')
+    expect(init.method).toBe('POST')
+    expect(JSON.parse(String(init.body))).toEqual({ relation: '엄마' })
+
+    await realApi.invites.accept('t')
+    const [, noRelation] = fn.mock.calls[1] as unknown as [string, RequestInit]
+    expect(JSON.parse(String(noRelation.body))).toEqual({})
+  })
+
   it('로그인 확인은 Better Auth 의 세션 주소를 쓰고, 로그인 안 했으면 null', async () => {
     const fn = stubFetch(200, null)
     expect(await realApi.auth.getSession()).toBeNull()

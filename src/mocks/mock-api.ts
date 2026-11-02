@@ -2,7 +2,7 @@
 // 권한(로그인·구성원·그룹장)과 에러 코드(401·403·404·410)도 서버처럼 흉내 내서 화면의 에러 처리를 미리 확인할 수 있다.
 import type { Api, SignInInput, SignUpInput } from '@/lib/api-client/types'
 import { ApiRequestError } from '@/lib/api-client/http'
-import type { ApiErrorCode, Group, Opinion, Trip, TripListItem, TripVersion, User, VersionSummary } from '@/lib/contracts'
+import { AcceptInviteRequestSchema, type ApiErrorCode, type Group, type Opinion, type Trip, type TripListItem, type TripVersion, type User, type VersionSummary } from '@/lib/contracts'
 import { judgeWithMocks } from './judge-helper'
 import { mockLeg } from './legs'
 import { mockExplain, mockGenerate, mockInterview, mockParseSchedule, mockRevise, saveMockVersion } from './mock-ai'
@@ -155,15 +155,17 @@ export const mockApi: Api = {
       const group = db.groups.find(g => g.id === invite.groupId) ?? fail(404, 'not_found', '그룹을 찾을 수 없어요')
       return { groupName: group.name, expiresAt: invite.expiresAt }
     }),
-    accept: token => call(db => {
+    accept: (token, relation) => call(db => {
       const user = requireUser(db)
+      // 서버처럼 같은 스키마로 검사한다: 앞뒤 공백을 지우고 1~20자, 안 보내거나 null 이면 비워 둔다
+      const body = AcceptInviteRequestSchema.safeParse(relation === undefined ? {} : { relation })
+      if (!body.success) return fail(400, 'invalid_request', '관계는 1~20자로 적어 주세요')
       const invite = db.invites.find(i => i.token === token) ?? fail(404, 'not_found', '초대 링크를 찾을 수 없어요')
       if (new Date(invite.expiresAt).getTime() < Date.now()) fail(410, 'expired', '초대 링크가 만료됐어요')
-      // 이미 구성원이면 그대로 성공
-      if (!db.members.some(m => m.groupId === invite.groupId && m.userId === user.id)) {
-        db.members.push({ groupId: invite.groupId, userId: user.id, name: user.name, role: 'member', relation: null, joinedAt: now() })
-      }
-      return { groupId: invite.groupId }
+      // 이미 구성원이면 그대로 성공하고 역할·관계를 덮어쓰지 않는다 (서버와 같다)
+      if (db.members.some(m => m.groupId === invite.groupId && m.userId === user.id)) return { groupId: invite.groupId, alreadyMember: true }
+      db.members.push({ groupId: invite.groupId, userId: user.id, name: user.name, role: 'member', relation: body.data.relation ?? null, joinedAt: now() })
+      return { groupId: invite.groupId, alreadyMember: false }
     }),
   },
 

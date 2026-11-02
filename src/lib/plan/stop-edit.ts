@@ -41,6 +41,12 @@ export function stopFromPlace(place: PlaceSummary, stops: Stop[], arriveBy: Tran
   }
 }
 
+// 여러 장소를 고른 순서대로 일정으로. 앞에서 만든 장소를 넘겨 가며 만들어야 같은 곳을 또 넣어도 키가 겹치지 않고
+// 시작 시각도 앞 장소 뒤로 이어진다 (앞 장소에 시각이 없으면 지어내지 않고 "시간 미정"으로 둔다)
+export function stopsFromPlaces(places: PlaceSummary[], arriveBy: Transport = 'car'): Stop[] {
+  return places.reduce<Stop[]>((stops, place) => [...stops, stopFromPlace(place, stops, arriveBy)], [])
+}
+
 export function moveStop(stops: Stop[], index: number, delta: -1 | 1): Stop[] {
   const target = index + delta
   if (index < 0 || index >= stops.length || target < 0 || target >= stops.length) return stops

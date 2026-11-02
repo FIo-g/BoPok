@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { PlaceSummary, Stop } from '@/lib/contracts'
-import { addMinutes, moveStop, newStopKey, nextStartTime, removeStop, replaceStopPlace, sameStops, stopFromPlace, updateStop } from './stop-edit'
+import { addMinutes, moveStop, newStopKey, nextStartTime, removeStop, replaceStopPlace, sameStops, stopFromPlace, stopsFromPlaces, updateStop } from './stop-edit'
 
 const stop = (key: string, extra: Partial<Stop> = {}): Stop => ({
   key, placeId: key, name: key, mustVisit: false, arriveBy: 'car', skipSegmentIds: [], detourMap: {}, restNodeIds: [], ...extra,
@@ -33,6 +33,17 @@ describe('장소 더하기·바꾸기·빼기', () => {
     expect(first.arriveBy).toBe('taxi')
     expect(first.visitMin).toBe(90)
     expect(newStopKey([first, second], 'science')).toBe('s-science-3')
+  })
+
+  it('여러 곳을 고른 순서대로 일정으로 만들고, 같은 곳을 또 넣어도 키가 겹치지 않는다', () => {
+    const lunch: PlaceSummary = { ...place, id: 'lunch', name: '점심', visitMin: 60 }
+    const stops = stopsFromPlaces([place, lunch, place], 'taxi')
+    expect(stops.map(s => s.key)).toEqual(['s-science-1', 's-lunch-1', 's-science-2'])
+    expect(stops.map(s => s.name)).toEqual(['국립중앙과학관', '점심', '국립중앙과학관'])
+    expect(stops.every(s => s.arriveBy === 'taxi')).toBe(true)
+    // 첫 장소에 시각이 없으니 이어지는 장소도 시각을 지어내지 않는다
+    expect(stops.map(s => s.startTime)).toEqual([undefined, undefined, undefined])
+    expect(stopsFromPlaces([])).toEqual([])
   })
 
   it('순서를 바꾸고 처음·끝에서는 그대로 둔다', () => {

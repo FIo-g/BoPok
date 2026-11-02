@@ -1,5 +1,5 @@
 // 화면에 보이는 문장을 만드는 작은 함수들. 판정·걷는 시간 숫자는 만들지 않고 엔진 결과를 글로만 바꾼다.
-import type { Confidence, JudgeResult, LegResult, Minutes, Reaction, SegmentResult, StairsStatus, Transport, Verdict, VersionSummary } from '@/lib/contracts'
+import type { Confidence, JudgeResult, LegResult, Minutes, Reaction, SegmentResult, StairsStatus, Transport, User, Verdict, VersionSummary } from '@/lib/contracts'
 import { formatRange } from '@/lib/engine'
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토']
@@ -18,12 +18,22 @@ function checkedMonth(checkedAt?: string | null): string | null {
   return m ? `${m[1]}.${m[2]}` : null
 }
 
-// 출처가 주소(URL)면 읽기 쉬운 이름으로: TMAP 은 "TMAP 보행자 경로", 그 밖은 사이트 이름(도메인)
+// TMAP 주소의 경로로 어떤 경로 안내인지 가린다. 자가용·택시 구간도 같은 호스트(자동차 경로)라서
+// 호스트만 보고 "보행자 경로"라고 쓰면 차 구간의 근거가 틀린다 (서버 출처: src/lib/geo/validation.ts)
+function tmapSourceName(pathname: string): string {
+  const path = pathname.toLowerCase().replace(/\/+$/, '')
+  if (path === '/tmap/routes/pedestrian') return 'TMAP 보행자 경로'
+  if (path === '/tmap/routes') return 'TMAP 자동차 경로'
+  return 'TMAP'
+}
+
+// 출처가 주소(URL)면 읽기 쉬운 이름으로: TMAP 은 경로 종류(보행자·자동차)까지, 그 밖은 사이트 이름(도메인)
 export function sourceName(source: string): string {
   if (!source.toLowerCase().startsWith('http://') && !source.toLowerCase().startsWith('https://')) return source
   try {
-    const host = new URL(source).hostname.replace(/^www\./, '')
-    return host === 'apis.openapi.sk.com' ? 'TMAP 보행자 경로' : host
+    const url = new URL(source)
+    const host = url.hostname.replace(/^www\./, '')
+    return host === 'apis.openapi.sk.com' ? tmapSourceName(url.pathname) : host
   } catch {
     return source
   }
@@ -98,6 +108,14 @@ export function formatWalk(minutes: Minutes, verdict: Verdict): string {
   return isWalkInfoMissing(minutes, verdict) ? '정보 없음' : formatRange(minutes)
 }
 
+// 차·택시·버스 이동 시간 문장. TMAP 은 아주 가까운 구간을 0.3분처럼 주는데, 반올림해 "약 0분"이라고 하면
+// 이동이 없다는 뜻으로 읽히므로 1분이 안 되면 "약 1분 이내"로 쓴다. 숫자는 엔진 결과를 글로만 바꾸고,
+// 다른 시간처럼 추정치라고 붙인다 (AGENTS.md 6장)
+export function formatRideMin(rideMin: number): string {
+  const text = rideMin < 1 ? '약 1분 이내' : `약 ${Math.round(rideMin)}분`
+  return `${text} · 추정치`
+}
+
 // 차·택시·버스 구간 중 이동 시간을 모르는 것의 수. 엔진은 탈것 구간을 missingLegs 에 넣지 않으므로(걷는 시간이 0으로 확실)
 // 결과의 legs 에서 rideMin 이 null 인 것으로 센다. 시간을 지어내지 않는다
 export function countRideLegsWithoutTime(legs: Pick<LegResult, 'mode' | 'rideMin'>[]): number {
@@ -159,4 +177,12 @@ export function conditionValueText(field: keyof typeof CONDITION_LABEL, value: n
 export function loginRedirectPath(pathname: string, search: string): string {
   const query = search.length > 1 && search.startsWith('?') ? search : ''
   return `/login?next=${encodeURIComponent(`${pathname}${query}`)}`
+}
+
+// 로그인이 필요한 화면에서 어디로 보낼지. 아직 확인 중(undefined)이거나 로그인했으면 null (보내지 않는다).
+// 로그아웃 버튼으로 나간 경우(signedOut)에는 next 없이 첫 화면으로 보낸다 — 지금 화면을 next 에 담으면
+// 다음에 다른 계정으로 로그인한 사람이 앞 사람의 여행 화면으로 돌아가 "구성원이 아니에요"(403)를 본다
+export function requireUserRedirect(user: Pick<User, 'id'> | null | undefined, signedOut: boolean, pathname: string, search: string): string | null {
+  if (user !== null) return null
+  return signedOut ? '/' : loginRedirectPath(pathname, search)
 }

@@ -29,9 +29,15 @@ export function AuthScreen({ mode }: { mode: 'login' | 'signup' }) {
       const creds = override ?? { email: email.trim(), password }
       if (signup && !override) await signUp({ name: name.trim(), ...creds })
       else await signIn(creds)
+      // 이 화면은 떠나도 상태가 남아 있다가(Activity) 로그아웃 뒤 다시 보인다. 앞 사람의 이메일·비밀번호가 채워진 채로 남지 않게 비운다
+      setName('')
+      setEmail('')
+      setPassword('')
       router.replace(next)
     } catch (e) {
       setError(errorMessage(e))
+    } finally {
+      // 성공해서 넘어가도 풀어 둔다 — 안 풀면 다시 왔을 때 버튼이 "잠시만요…"로 막혀 있다
       setBusy(false)
     }
   }

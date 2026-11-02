@@ -104,6 +104,8 @@ export function TripScreen({ tripId }: { tripId: string }) {
     setMessage({ tone: 'ok', text })
   }
 
+  // busy 는 성공·실패·다른 화면으로 넘어감과 상관없이 꼭 finally 에서 푼다. 이 화면은 다른 화면으로 가도
+  // 상태가 그대로 남아 있다가(Next 16 cacheComponents 의 Activity) 돌아오면 다시 보이므로, 하나라도 남으면 모든 버튼이 계속 막힌다
   async function saveDraft() {
     if (!draft || !activeId) return
     setBusy('save')
@@ -113,8 +115,9 @@ export function TripScreen({ tripId }: { tripId: string }) {
       await afterNewVersion(saved.id, `${saved.number}번째 안으로 저장했어요`)
     } catch (e) {
       setMessage({ tone: 'warn', text: errorMessage(e) })
+    } finally {
+      setBusy(null)
     }
-    setBusy(null)
   }
 
   async function applyQuickFix(fix: QuickFix) {
@@ -135,8 +138,9 @@ export function TripScreen({ tripId }: { tripId: string }) {
       // AI 가 안 될 때는 다시 시도하거나 직접 고치도록 안내한다 (설계 6.4)
       const failure = aiFailure(e)
       setMessage({ tone: 'warn', text: failure.canPick ? `AI가 지금 일정을 못 짰어요. ${failure.canRetry ? '잠시 뒤에 다시 시도하거나 ' : ''}“직접 고치기”로 바꿔 주세요.` : failure.message })
+    } finally {
+      setBusy(null)
     }
-    setBusy(null)
   }
 
   async function confirmVersion() {
@@ -148,6 +152,8 @@ export function TripScreen({ tripId }: { tripId: string }) {
       router.push(`/trips/${tripId}/final`)
     } catch (e) {
       setMessage({ tone: 'warn', text: errorMessage(e) })
+    } finally {
+      // 확정 화면으로 넘어가도 풀어 둔다 — 안 풀면 뒤로 돌아왔을 때 버튼이 모두 막힌 채로 남는다
       setBusy(null)
     }
   }
@@ -163,8 +169,9 @@ export function TripScreen({ tripId }: { tripId: string }) {
       setMessage({ tone: 'info', text: '확정을 풀었어요. 다시 고칠 수 있어요' })
     } catch (e) {
       setMessage({ tone: 'warn', text: errorMessage(e) })
+    } finally {
+      setBusy(null)
     }
-    setBusy(null)
   }
 
   const addOpinion = async (input: OpinionInput) => {

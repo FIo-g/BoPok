@@ -60,7 +60,8 @@ export interface Api {
   }
   invites: {
     preview(token: string): Promise<InvitePreview>
-    accept(token: string): Promise<AcceptInviteResponse>
+    // relation(엄마·아빠·딸 …)은 선택. 안 주면 본문을 비워 보내고, 서버가 앞뒤 공백을 지워 1~20자만 받는다
+    accept(token: string, relation?: string | null): Promise<AcceptInviteResponse>
   }
   trips: {
     create(input: CreateTripRequest): Promise<Trip>
