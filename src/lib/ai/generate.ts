@@ -16,6 +16,7 @@ import { groupProfile } from '@/lib/engine'
 import { AiCallError } from './client'
 import type { AiDeps } from './deps'
 import { HttpError, handle, readJson } from './http'
+import { partyNoteLines, readAvoidFoodTags } from './party-notes'
 import { planJudgeSave, type PlanAttempt } from './plan-and-save'
 import {
   dropTimesOutsideWindow,
@@ -25,7 +26,7 @@ import {
   samePlaceName,
   type DraftStop,
 } from './stops'
-import { hasNumberOrStairsClaim, sanitizePromptText } from './text-guard'
+import { hasDietTalk, hasNumberOrStairsClaim, sanitizePromptText } from './text-guard'
 
 // AI가 돌려줄 모양. 걷는 시간·거리·계단 칸은 두지 않는다 (엔진이 계산한다).
 const AiStopsSchema = z.object({
@@ -44,7 +45,7 @@ const AiStopsSchema = z.object({
 const SYSTEM_PROMPT =
   '대전 하루 여행 일정을 짠다. 이 목록의 id로만 골라라. 식사 자리는 placeId null + 이름으로 넣는다. ' +
   '출발·귀가 시간 안에 3~5곳을 고른다. 꼭 갈 곳은 반드시 넣고 예약 시간 그대로 둔다. ' +
-  '걷는 시간·거리·계단 수는 쓰지 마라. ' +
+  '걷는 시간·거리·계단 수는 쓰지 마라. 메모와 식사 자리 이름에 건강·식단 이야기를 쓰지 마라. ' +
   '반드시 JSON으로만 답하라. 모양: {"stops":[{"placeId":"장소 id 또는 null","name":"장소 이름","startTime":"HH:mm","visitMin":60,"seated":false}],"note":"한 줄 메모"}'
 
 function candidateLine(place: PlaceSummary): string {
@@ -89,6 +90,8 @@ function filterDrafts(
   candidates: PlaceSummary[],
   allowedIds?: Set<string>,
   baseStops?: Stop[],
+  // AI가 새로 지은 식사 자리 이름을 버릴지. 건강·식단 이야기("저염 식당")가 가족 화면에 나오지 않게 한다
+  rejectName: (name: string) => boolean = () => false,
 ): DraftStop[] {
   const byId = new Map(candidates.map(candidate => [candidate.id, candidate] as const))
   const allowed = allowedIds ?? new Set(candidates.map(candidate => candidate.id))
@@ -136,7 +139,7 @@ function filterDrafts(
         continue
       }
       if (stop.seated !== true) continue
-      if (hasNumberOrStairsClaim(stop.name)) continue
+      if (hasNumberOrStairsClaim(stop.name) || rejectName(stop.name)) continue
       drafts.push({
         placeId: null,
         name: stop.name,
@@ -268,6 +271,12 @@ export async function handleGenerate(
         ? `꼭 갈 곳: ${filled.mustVisit.map(must => (must.reservedAt ? `${must.name} (예약 ${must.reservedAt})` : must.name)).join(', ')}`
         : '꼭 갈 곳 없음'
 
+    // 피할 음식(병·약에서 나온 태그만)과 운동 참고 줄. 병·약 이름은 어디에도 가지 않는다 (AGENTS 6장).
+    const avoidTags = await readAvoidFoodTags(deps, input.tripId)
+    const partyBlock = partyNoteLines(avoidTags, ctx.travelers)
+      .map(line => `${line}\n`)
+      .join('')
+
     // AI가 돌려준 한 줄 메모는 저장된 시도의 것으로 쓴다 — planJudgeSave가 고른 시도의 메타를 읽는다.
     const args: {
       tripId: string
@@ -291,6 +300,7 @@ export async function handleGenerate(
           `후보 장소 목록:\n${candidates.map(candidateLine).join('\n')}\n` +
           baseBlock +
           `${timeWish} 일정을 짜라.\n${mustWish}\n` +
+          partyBlock +
           (feedback === null
             ? ''
             : `앞 일정은 이런 이유로 부모님 조건을 넘었다:\n${feedback}\n덜 걷게 다시 골라라.`)
@@ -306,12 +316,15 @@ export async function handleGenerate(
           { deadlineMs: deadlineMs() },
         )
         // 메모에 숫자·계단 약속이 있으면 버린다 — 숫자는 엔진에서만 나온다 (설계 6.4).
+        // 건강 상태를 짐작한 말("당뇨가 있으셔서…")도 버린다 — 프롬프트에 병 이름을 안 넣어도 AI가 짐작해 쓸 수 있다.
         const note =
-          parsed.note !== undefined && !hasNumberOrStairsClaim(parsed.note) ? parsed.note : undefined
+          parsed.note !== undefined && !hasNumberOrStairsClaim(parsed.note) && !hasDietTalk(parsed.note, avoidTags)
+            ? parsed.note
+            : undefined
         // AI가 정한 시간이 출발~귀가 밖이면 지운다 (데모 버그 11/2: 성심당 00:00).
         // 붙여넣기 바탕에 사람이 적어 둔 같은 장소·같은 시간은 시간대 밖이어도 남긴다.
         const filtered = dropTimesOutsideWindow(
-          filterDrafts(parsed.stops, candidates, allowedIds, isPaste ? baseStops : undefined),
+          filterDrafts(parsed.stops, candidates, allowedIds, isPaste ? baseStops : undefined, name => hasDietTalk(name, avoidTags)),
           filled,
           draft => baseStops.some(base => base.startTime === draft.startTime && samePlaceName(base.name, draft.name)),
         )

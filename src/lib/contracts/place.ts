@@ -71,6 +71,16 @@ export type PlaceModel = z.infer<typeof PlaceModelSchema>
 export const FoodTagSchema = z.enum(['sugary', 'salty', 'fatty', 'alcohol', 'grapefruit', 'leafy_greens'])
 export type FoodTag = z.infer<typeof FoodTagSchema>
 
+// 화면·주의 문구에 쓰는 이름
+export const FOOD_TAG_LABEL: Record<FoodTag, string> = {
+  sugary: '단 음식',
+  salty: '짠 음식',
+  fatty: '기름진 음식',
+  alcohol: '술',
+  grapefruit: '자몽',
+  leafy_greens: '녹색 잎채소',
+}
+
 export const MenuItemSchema = SourceInfoSchema.extend({
   name: z.string().min(1),
   priceKrw: z.number().int().min(0).optional(),

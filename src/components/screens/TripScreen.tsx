@@ -239,6 +239,7 @@ export function TripScreen({ tripId }: { tripId: string }) {
     stops: stops ?? [],
     result: judged?.result ?? null,
     travelers: detail.data.travelers,
+    places: judged?.places ?? {},
     versionId: activeId,
     userId: user?.id ?? '',
   }

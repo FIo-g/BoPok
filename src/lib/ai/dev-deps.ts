@@ -4,6 +4,7 @@
 import 'server-only'
 import type {
   Coord,
+  FoodTag,
   InterviewState,
   Leg,
   LegRequest,
@@ -320,7 +321,8 @@ function estimateLegs(requests: LegRequest[]): Leg[] {
   })
 }
 
-export function createDevDeps(seed?: { opinions?: Opinion[] }): AiDeps {
+// seed.avoidFoodTags: 여행 id별 "피할 음식 태그" — 기본은 빈 목록(건강 정보 없음)이다
+export function createDevDeps(seed?: { opinions?: Opinion[]; avoidFoodTags?: Record<string, FoodTag[]> }): AiDeps {
   // 한 번 더 막는다: 가짜 로그인(x-dev-user)이 배포 환경에 올라가면 누구나 들어올 수 있다.
   if (process.env.NODE_ENV === 'production') {
     throw new Error('개발용 가짜 연결(dev-deps)은 production에서 쓸 수 없어요')
@@ -388,6 +390,9 @@ export function createDevDeps(seed?: { opinions?: Opinion[] }): AiDeps {
       const devTrip = trips.get(tripId)
       if (!devTrip) throw new HttpError(404, 'not_found', '여행을 찾을 수 없어요')
       devTrip.travelers = travelers.map(t => ({ ...t }))
+    },
+    async getAvoidFoodTags(tripId) {
+      return [...(seed?.avoidFoodTags?.[tripId] ?? [])]
     },
     async searchCandidates(q: CandidateQuery) {
       // 개발용은 스타일·예산 조건을 걸러 보지 않는다 — 실제 searchCandidates가 붙으면 바뀐다.

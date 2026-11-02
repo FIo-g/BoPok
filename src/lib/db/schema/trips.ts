@@ -54,6 +54,9 @@ export const tripTravelers = pgTable(
     sex: text('sex', { enum: ['female', 'male'] }),
     pace: text('pace', { enum: ['slow', 'normal', 'unknown'] }).notNull(),
     mobilityAid: boolean('mobility_aid').notNull().default(false),
+    // 일주일 운동 횟수 칩. 판정 숫자에는 쓰지 않고 AI가 참고만 한다 (계약 Traveler.exerciseFrequency).
+    // 비어 있으면(null) 예전에 저장된 여행자이거나 '잘 모르겠어요'다.
+    exerciseFrequency: text('exercise_frequency', { enum: ['rarely', 'one_two', 'three_four', 'five_plus'] }),
     isParent: boolean('is_parent').notNull().default(false), // 부모님. 걷기 조건에 80% 비중 (설계 7.1.1)
     // 걷기 조건 답. 비어 있으면 엔진이 기본값을 쓴다
     condition: jsonb('condition').$type<Partial<Condition>>().notNull().default({}),

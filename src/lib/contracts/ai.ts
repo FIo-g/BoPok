@@ -39,6 +39,7 @@ export const INTERVIEW_SLOTS = [
   'traveler_age',
   'traveler_height',
   'traveler_sex',
+  'traveler_exercise',
   'traveler_condition_gate',
   'traveler_condition',
   'date',

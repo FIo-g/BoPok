@@ -18,6 +18,7 @@ import { groupProfile } from '@/lib/engine'
 import { AiCallError } from './client'
 import type { AiDeps } from './deps'
 import { HttpError, handle, readJson, requireVersionInTrip } from './http'
+import { partyNoteLines, readAvoidFoodTags } from './party-notes'
 import { planJudgeSave, type PlanAttempt, type PlanAttemptResult } from './plan-and-save'
 import {
   arrangeDraftsByDay,
@@ -28,7 +29,7 @@ import {
   samePlaceName,
   type DraftStop,
 } from './stops'
-import { hasNumberOrStairsClaim, sanitizePromptText } from './text-guard'
+import { hasDietTalk, hasNumberOrStairsClaim, sanitizePromptText } from './text-guard'
 
 // AI가 돌려줄 모양. 걷는 시간·거리·계단 칸은 두지 않고 (엔진이 계산한다),
 // 꼭 갈 곳·예약 표시도 받지 않는다 — 원래 버전에서만 가져온다 (설계 6.4).
@@ -51,7 +52,7 @@ const AiReviseSchema = z.object({
 const SYSTEM_PROMPT =
   '가족 여행 일정을 의견에 맞게 다시 짠다. 후보 목록의 id로만 골라라. 식사 자리는 placeId null + 이름으로 넣는다. ' +
   '꼭 갈 곳·예약된 장소는 손대지 마라(이미 정해진 표시를 그대로 쓴다). 의견이 서로 부딪히면 [부모님] 의견을 따르라(부모님을 위한 서비스). ' +
-  '반영한 의견 id를 appliedOpinionIds에 넣어라. 걷는 시간·거리·계단 수는 쓰지 마라. ' +
+  '반영한 의견 id를 appliedOpinionIds에 넣어라. 걷는 시간·거리·계단 수는 쓰지 마라. 메모와 식사 자리 이름에 건강·식단 이야기를 쓰지 마라. ' +
   '반드시 JSON으로만 답하라. 모양: {"stops":[{"placeId":"장소 id 또는 null","name":"장소 이름","startTime":"HH:mm","visitMin":60,"seated":false}],"appliedOpinionIds":["의견 id"],"note":"한 줄 메모"}'
 
 // 여러 날 일정일 때만 덧붙인다. 하루짜리 여행의 프롬프트는 그대로다
@@ -184,7 +185,8 @@ function applyNamesAndCarry(drafts: DraftStop[], original: Stop[], candidates: P
 
 // null 자리 걸러내기 — 원래 일정의 null 자리와 이름이 같으면 살리고,
 // 그 밖은 앉는 자리이고 숫자·계단 약속이 없을 때만 둔다 (설계 6.4).
-function filterNullDrafts(drafts: DraftStop[], original: Stop[]): DraftStop[] {
+// rejectName: AI가 새로 지은 식사 자리 이름을 버릴지 (건강·식단 이야기가 가족 화면에 나오지 않게)
+function filterNullDrafts(drafts: DraftStop[], original: Stop[], rejectName: (name: string) => boolean = () => false): DraftStop[] {
   const remainingNull = original.filter(stop => stop.placeId === null)
   const out: DraftStop[] = []
   for (const draft of drafts) {
@@ -199,7 +201,7 @@ function filterNullDrafts(drafts: DraftStop[], original: Stop[]): DraftStop[] {
       out.push(draft)
       continue
     }
-    if (draft.seated === true && !hasNumberOrStairsClaim(draft.name)) {
+    if (draft.seated === true && !hasNumberOrStairsClaim(draft.name) && !rejectName(draft.name)) {
       out.push(draft)
     }
   }
@@ -298,6 +300,12 @@ export async function handleRevise(
         }
       }
 
+      // 피할 음식(병·약에서 나온 태그만)과 운동 참고 줄. 병·약 이름은 어디에도 가지 않는다 (AGENTS 6장).
+      const avoidTags = await readAvoidFoodTags(deps, input.tripId)
+      const partyBlock = partyNoteLines(avoidTags, ctx.travelers)
+        .map(line => `${line}\n`)
+        .join('')
+
       const lastDay = Math.max(1, ...tripDays(version.stops))
       const multiDay = lastDay > 1
       const systemPrompt = multiDay ? `${SYSTEM_PROMPT} ${MULTI_DAY_PROMPT}` : SYSTEM_PROMPT
@@ -318,6 +326,7 @@ export async function handleRevise(
         `현재 일정:\n${scheduleText}\n\n` +
         `가족 의견:\n${opinionLines.join('\n')}\n\n` +
         `후보 장소 목록:\n${candidates.map(candidateLine).join('\n')}\n` +
+        partyBlock +
         '위 의견을 반영해 일정을 다시 짜라.'
 
       // AI가 돌려준 한 줄 메모·반영 id는 저장된 시도의 것으로 쓴다 — planJudgeSave가 고른 시도의 메타를 돌려준다.
@@ -355,8 +364,11 @@ export async function handleRevise(
               { deadlineMs: deadlineMs() },
             )
             // 메모에 숫자·계단 약속이 있으면 버린다 — 숫자는 엔진에서만 나온다 (설계 6.4).
+            // 건강 상태를 짐작한 말("당뇨가 있으셔서…")도 버린다 — 프롬프트에 병 이름을 안 넣어도 AI가 짐작해 쓸 수 있다.
             const note =
-              parsed.note !== undefined && !hasNumberOrStairsClaim(parsed.note) ? parsed.note : undefined
+              parsed.note !== undefined && !hasNumberOrStairsClaim(parsed.note) && !hasDietTalk(parsed.note, avoidTags)
+                ? parsed.note
+                : undefined
             // 목록에 없는 의견 id는 버리고 중복을 없앤다.
             const appliedOpinionIds = [...new Set(parsed.appliedOpinionIds.filter(id => validIds.has(id)))]
             const idFiltered = filterDrafts(parsed.stops, candidates)
@@ -364,7 +376,7 @@ export async function handleRevise(
             if (idFiltered.length === 0) {
               throw new AiCallError('invalid_output', 'AI가 고른 장소가 없어요')
             }
-            const nullFiltered = filterNullDrafts(idFiltered, version.stops)
+            const nullFiltered = filterNullDrafts(idFiltered, version.stops, name => hasDietTalk(name, avoidTags))
             if (nullFiltered.length === 0) {
               throw new AiCallError('invalid_output', 'AI가 고른 장소가 없어요')
             }

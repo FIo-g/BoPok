@@ -1,5 +1,5 @@
 // 처음부터 일정 짜기 검사. AI·외부 API는 가짜 연결 지점으로만 부른다.
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 import {
   AiErrorSchema,
@@ -631,6 +631,162 @@ describe('handleGenerate', () => {
     expect(response.status).toBe(200)
     const evilLines = calls[0].split('\n').filter(line => line.includes('가짜'))
     expect(evilLines.every(line => !line.includes('[부모님]'))).toBe(true)
+  })
+})
+
+// 건강 정보는 병·약 이름이 아니라 음식 태그의 한국어 이름으로만 프롬프트에 간다 (AGENTS 6장, 설계 4.4).
+const HEALTH_WORDS = ['당뇨', '고혈압', '와파린', '칼슘채널', 'diabetes', 'warfarin', 'hypertension']
+
+describe('handleGenerate: 피할 음식·운동 참고 줄', () => {
+  const planBody = { stops: [{ placeId: 'science', name: '국립중앙과학관' }] }
+
+  it('음식 태그가 있으면 user 메시지에 "피할 음식" 줄이 한 번 들어가고, 병·약 이름은 어디에도 없다', async () => {
+    const { deps, calls } = depsWithAi([planBody])
+    await deps.interviews.save('trip-dev', doneState({ transport: 'car' }))
+    const withTags: AiDeps = { ...deps, getAvoidFoodTags: async () => ['sugary', 'salty'] }
+
+    const response = await handleGenerate(makeRequest({ tripId: 'trip-dev' }), withTags)
+    expect(response.status).toBe(200)
+
+    expect(calls).toHaveLength(1)
+    expect(calls[0]).toContain('피할 음식: 단 음식, 짠 음식 — 이런 메뉴가 많은 식당은 고르지 마라.')
+    expect(calls[0].split('피할 음식').length - 1).toBe(1)
+    for (const word of HEALTH_WORDS) expect(calls[0]).not.toContain(word)
+  })
+
+  it('두 번째 시도(조정 요청)에도 같은 줄이 들어간다', async () => {
+    const { deps, calls } = depsWithAi([
+      { stops: [{ placeId: 'hanbat', name: '한밭수목원' }] },
+      planBody,
+    ])
+    await deps.interviews.save('trip-dev', doneState({ transport: 'car' }))
+    const withTags: AiDeps = { ...deps, getAvoidFoodTags: async () => ['alcohol'] }
+
+    const response = await handleGenerate(makeRequest({ tripId: 'trip-dev' }), withTags)
+    expect(response.status).toBe(200)
+    expect(calls).toHaveLength(2)
+    for (const call of calls) expect(call).toContain('피할 음식: 술 —')
+  })
+
+  it('태그가 없으면 "피할 음식" 줄 자체가 없다 (개발용 기본값도 빈 목록)', async () => {
+    const { deps, calls } = depsWithAi([planBody])
+    await deps.interviews.save('trip-dev', doneState({ transport: 'car' }))
+    expect(await deps.getAvoidFoodTags('trip-dev')).toEqual([])
+
+    const response = await handleGenerate(makeRequest({ tripId: 'trip-dev' }), deps)
+    expect(response.status).toBe(200)
+    expect(calls[0]).not.toContain('피할 음식')
+  })
+
+  it('태그를 못 읽어도 일정은 만들어지고, 로그에는 tripId만 남는다 (에러 메시지·값 없음)', async () => {
+    const { deps, calls } = depsWithAi([planBody])
+    await deps.interviews.save('trip-dev', doneState({ transport: 'car' }))
+    const failing: AiDeps = {
+      ...deps,
+      getAvoidFoodTags: async () => {
+        // DrizzleQueryError처럼 메시지에 쿼리 값이 들어 있는 오류
+        throw new Error('Failed query: select ... params: warfarin,diabetes')
+      },
+    }
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const log = vi.spyOn(console, 'log').mockImplementation(() => undefined)
+    try {
+      const response = await handleGenerate(makeRequest({ tripId: 'trip-dev' }), failing)
+      expect(response.status).toBe(200)
+      PlanResponseSchema.parse(await response.json())
+
+      expect(calls[0]).not.toContain('피할 음식')
+      expect(warn).toHaveBeenCalledTimes(1)
+      expect(warn).toHaveBeenCalledWith('[ai] 피할 음식 태그를 못 읽었어요', { tripId: 'trip-dev' })
+      const logged = JSON.stringify([...warn.mock.calls, ...error.mock.calls, ...log.mock.calls])
+      expect(logged).not.toContain('warfarin')
+      expect(logged).not.toContain('diabetes')
+      expect(logged).not.toContain('Failed query')
+    } finally {
+      warn.mockRestore()
+      error.mockRestore()
+      log.mockRestore()
+    }
+  })
+
+  it('운동을 거의 안 하는 여행자가 있으면 쉬는 자리 줄이 들어간다 (이름표는 없다)', async () => {
+    const { deps, calls } = depsWithAi([planBody])
+    await deps.interviews.save('trip-dev', doneState({ transport: 'car' }))
+    const context = await deps.getTripContext('trip-dev')
+    await deps.saveTravelers(
+      'trip-dev',
+      context.travelers.map(traveler => (traveler.id === 't1' ? { ...traveler, exerciseFrequency: 'rarely' } : traveler)),
+    )
+
+    const response = await handleGenerate(makeRequest({ tripId: 'trip-dev' }), deps)
+    expect(response.status).toBe(200)
+    expect(calls[0]).toContain('운동을 거의 안 하는 분이 함께 간다 — 쉬는 자리를 자주 넣어라.')
+    // 음식 태그가 없으니 음식 줄은 없다
+    expect(calls[0]).not.toContain('피할 음식')
+  })
+
+  it('운동을 많이 하는 여행자만 있으면 운동 줄이 없다 (더 걷게 하는 쪽으로는 쓰지 않는다)', async () => {
+    const { deps, calls } = depsWithAi([planBody])
+    await deps.interviews.save('trip-dev', doneState({ transport: 'car' }))
+    const context = await deps.getTripContext('trip-dev')
+    await deps.saveTravelers(
+      'trip-dev',
+      context.travelers.map(traveler => ({ ...traveler, exerciseFrequency: 'five_plus' as const })),
+    )
+
+    const response = await handleGenerate(makeRequest({ tripId: 'trip-dev' }), deps)
+    expect(response.status).toBe(200)
+    expect(calls[0]).not.toContain('운동을')
+    expect(calls[0]).not.toContain('쉬는 자리를 자주')
+  })
+
+  it('메모에 건강 이야기("당뇨")가 있으면 저장하지 않는다', async () => {
+    for (const note of ['당뇨가 있으셔서 단 음식을 뺐어요', '혈압을 생각해 쉬는 곳을 늘렸어요']) {
+      const { deps } = depsWithAi([{ ...planBody, note }])
+      await deps.interviews.save('trip-dev', doneState({ transport: 'car' }))
+      const response = await handleGenerate(makeRequest({ tripId: 'trip-dev' }), deps)
+      expect(response.status).toBe(200)
+      const body = PlanResponseSchema.parse(await response.json())
+      expect(body.version.note).toBeNull()
+    }
+  })
+
+  it('보낸 피할 음식을 메모·식사 자리 이름에 되풀이하면 쓰지 않는다 ("본인만" 분의 식단 이유가 가족에게 드러나지 않게)', async () => {
+    const body = {
+      stops: [
+        { placeId: 'science', name: '국립중앙과학관' },
+        { placeId: null, name: '덜 짠 한식집', startTime: '12:00', seated: true },
+        { placeId: null, name: '점심 식사', startTime: '13:00', seated: true },
+      ],
+      note: '짠 음식이 적은 곳으로 골랐어요',
+    }
+    const { deps: base } = depsWithAi([body])
+    const deps: AiDeps = { ...base, getAvoidFoodTags: async () => ['salty'] }
+    await deps.interviews.save('trip-dev', doneState({ transport: 'car' }))
+    const response = await handleGenerate(makeRequest({ tripId: 'trip-dev' }), deps)
+    expect(response.status).toBe(200)
+    const parsed = PlanResponseSchema.parse(await response.json())
+    expect(parsed.version.note).toBeNull()
+    const names = parsed.version.stops.map(stop => stop.name)
+    expect(names).not.toContain('덜 짠 한식집')
+    expect(names).toContain('점심 식사')
+  })
+
+  it('보내지 않은 태그 이야기는 메모에 남는다 (누구의 건강과도 이어지지 않는다)', async () => {
+    const { deps } = depsWithAi([{ ...planBody, note: '짠 음식이 적은 곳으로 골랐어요' }])
+    await deps.interviews.save('trip-dev', doneState({ transport: 'car' }))
+    const response = await handleGenerate(makeRequest({ tripId: 'trip-dev' }), deps)
+    const parsed = PlanResponseSchema.parse(await response.json())
+    expect(parsed.version.note).toBe('짠 음식이 적은 곳으로 골랐어요')
+  })
+
+  it('건강 낱말이 없는 메모는 그대로 저장한다', async () => {
+    const { deps } = depsWithAi([{ ...planBody, note: '쉬는 자리를 넣었어요' }])
+    await deps.interviews.save('trip-dev', doneState({ transport: 'car' }))
+    const response = await handleGenerate(makeRequest({ tripId: 'trip-dev' }), deps)
+    const body = PlanResponseSchema.parse(await response.json())
+    expect(body.version.note).toBe('쉬는 자리를 넣었어요')
   })
 })
 

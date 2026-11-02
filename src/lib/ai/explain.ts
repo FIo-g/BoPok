@@ -12,7 +12,7 @@ import { diffSummary, fixedChangeSentence, formatDiffItem } from '@/lib/engine'
 import { AiCallError } from './client'
 import type { AiDeps } from './deps'
 import { HttpError, handle, readJson } from './http'
-import { hasKoreanNumberClaim, hasStairsClaim, normalizeAiText, numberPhrases } from './text-guard'
+import { hasHealthClaim, hasKoreanNumberClaim, hasStairsClaim, normalizeAiText, numberPhrases } from './text-guard'
 
 // AI가 돌려줄 모양. 걷는 시간 계산 칸은 두지 않는다 (숫자는 엔진 결과에만 있다).
 const AiTextSchema = z.object({ text: z.string() })
@@ -70,6 +70,8 @@ export async function explainChange(
   // 한글 수사·계단 표현이 있으면 고정 문장으로 돌린다 — 숫자 자체는 구절 비교로 허용한다.
   if (hasKoreanNumberClaim(aiText)) return { text: fixed, source: 'fixed' }
   if (hasStairsClaim(aiText)) return { text: fixed, source: 'fixed' }
+  // 건강 상태를 짐작한 말("혈압이 걱정돼서…")도 고정 문장으로 돌린다 — 건강 이야기는 주의 규칙 표의 근거 문장만 한다
+  if (hasHealthClaim(aiText)) return { text: fixed, source: 'fixed' }
   const phrases = numberPhrases(aiText)
   // 숫자 구절은 입력 문장들에 통째로 있는 것만 쓸 수 있다 — 범위를 한 점으로 줄여도 안 된다.
   if (!phrases.every(phrase => inputSet.has(phrase))) return { text: fixed, source: 'fixed' }

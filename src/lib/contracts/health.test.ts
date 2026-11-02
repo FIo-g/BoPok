@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
-  canSeeHealth, DietCautionSchema, DietRuleSchema, HealthConditionSchema, MedicationClassSchema,
+  canEditHealth, canSeeHealth, DietCautionSchema, DietRuleSchema, FoodTagSchema, FOOD_TAG_LABEL,
+  HEALTH_CONDITION_LABEL, HealthConditionSchema, HealthListResponseSchema, MEDICATION_CLASS_LABEL, MedicationClassSchema,
   TravelerHealthInputSchema, TravelerHealthSchema, type DietRule,
 } from './index'
 
@@ -31,6 +32,65 @@ describe('canSeeHealth — 건강 정보가 보이는 범위', () => {
   })
 })
 
+describe('canEditHealth — 건강 정보를 고칠 수 있는 사람', () => {
+  const existing = { enteredByUserId: 'u-son' }
+
+  it('계정 있는 여행자는 본인만 고친다 (대신 입력한 사람도 못 고친다)', () => {
+    expect(canEditHealth(existing, 'u-mom', 'u-mom')).toBe(true)
+    expect(canEditHealth(existing, 'u-son', 'u-mom')).toBe(false)
+  })
+
+  it('계정 있는 여행자의 첫 입력도 본인만 한다 (남이 대신 처음 넣지 못한다)', () => {
+    expect(canEditHealth(null, 'u-mom', 'u-mom')).toBe(true)
+    expect(canEditHealth(null, 'u-son', 'u-mom')).toBe(false)
+  })
+
+  it('계정 없는 여행자(할머니)는 처음 입력한 사람만 고친다', () => {
+    expect(canEditHealth(existing, 'u-son', null)).toBe(true)
+    expect(canEditHealth(existing, 'u-daughter', null)).toBe(false)
+  })
+
+  it('처음 입력은 계정 없는 여행자라면 그룹 구성원 누구나 한다 (구성원 검사는 API가 먼저 한다)', () => {
+    expect(canEditHealth(null, 'u-daughter', null)).toBe(true)
+  })
+
+  it('세 번째 인자를 빠뜨리면 컴파일 오류 (계정 없음은 null로 분명히 적는다)', () => {
+    // @ts-expect-error travelerUserId는 필수다 — undefined와 "계정 없음"을 헷갈리지 않게 하려는 것이다
+    canEditHealth(existing, 'u-son')
+  })
+})
+
+describe('한국어 이름 표 — 화면·주의 문구', () => {
+  it('모든 병·약 종류·음식 태그에 이름이 있다', () => {
+    for (const c of HealthConditionSchema.options) expect(HEALTH_CONDITION_LABEL[c].length).toBeGreaterThan(0)
+    for (const m of MedicationClassSchema.options) expect(MEDICATION_CLASS_LABEL[m].length).toBeGreaterThan(0)
+    for (const f of FoodTagSchema.options) expect(FOOD_TAG_LABEL[f].length).toBeGreaterThan(0)
+  })
+
+  it('이름 값이 설계대로다', () => {
+    expect(HEALTH_CONDITION_LABEL).toEqual({
+      diabetes: '당뇨',
+      hypertension: '고혈압',
+      dyslipidemia: '고지혈증',
+      kidney_disease: '신장 질환',
+      gout: '통풍',
+      heart_disease: '심장 질환',
+    })
+    expect(MEDICATION_CLASS_LABEL).toEqual({
+      warfarin: '와파린(항응고제)',
+      calcium_channel_blocker: '일부 혈압약(칼슘채널차단제 계열)',
+    })
+    expect(FOOD_TAG_LABEL).toEqual({
+      sugary: '단 음식',
+      salty: '짠 음식',
+      fatty: '기름진 음식',
+      alcohol: '술',
+      grapefruit: '자몽',
+      leafy_greens: '녹색 잎채소',
+    })
+  })
+})
+
 describe('건강 정보 입력', () => {
   const body = { conditions: ['diabetes'], medicationClasses: [], visibility: 'self' }
 
@@ -56,7 +116,7 @@ describe('TravelerHealth — 저장 모양', () => {
     tripId: 'trip1',
     travelerId: 't-mom',
     conditions: ['diabetes', 'hypertension'],
-    medicationClasses: ['anticoagulant'],
+    medicationClasses: ['warfarin'],
     visibility: 'self',
     consentAt: '2026-11-02T01:23:45.000Z',
     enteredByUserId: 'u-son',
@@ -79,6 +139,28 @@ describe('TravelerHealth — 저장 모양', () => {
     expect(Object.keys(parsed).sort()).toEqual(
       ['conditions', 'consentAt', 'enteredByUserId', 'medicationClasses', 'travelerId', 'tripId', 'visibility'],
     )
+  })
+})
+
+describe('건강 정보 목록 응답 (GET /api/trips/:id/health)', () => {
+  const health = {
+    tripId: 'trip1',
+    travelerId: 't-mom',
+    conditions: ['diabetes'],
+    medicationClasses: [],
+    visibility: 'group',
+    consentAt: '2026-11-02T01:23:45.000Z',
+    enteredByUserId: 'u-son',
+  }
+
+  it('health 배열에 담아 내려준다. 비어 있어도 된다', () => {
+    expect(HealthListResponseSchema.safeParse({ health: [health] }).success).toBe(true)
+    expect(HealthListResponseSchema.safeParse({ health: [] }).success).toBe(true)
+  })
+
+  it('배열이 아니거나 항목 모양이 다르면 거부', () => {
+    expect(HealthListResponseSchema.safeParse([health]).success).toBe(false)
+    expect(HealthListResponseSchema.safeParse({ health: [{ ...health, consentAt: undefined }] }).success).toBe(false)
   })
 })
 
@@ -106,9 +188,9 @@ describe('식단 주의 규칙·결과', () => {
     const medicationRule = {
       id: 'r2',
       reasonKind: 'medication',
-      medicationClass: 'anticoagulant',
+      medicationClass: 'warfarin',
       foodTag: 'leafy_greens',
-      sentence: '비타민 K가 많은 채소는 항응고제 효과에 영향을 줄 수 있습니다',
+      sentence: '비타민 K가 많은 채소는 와파린 효과에 영향을 줄 수 있습니다',
       source: '식품의약품안전처',
       checkedAt: '2026-11',
       confidence: 'A',

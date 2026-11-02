@@ -4,6 +4,7 @@ import type { Api, SignInInput, SignUpInput } from '@/lib/api-client/types'
 import { ApiRequestError } from '@/lib/api-client/http'
 import { AcceptInviteRequestSchema, type ApiErrorCode, type Group, type Opinion, type Trip, type TripListItem, type TripVersion, type User, type VersionSummary } from '@/lib/contracts'
 import { judgeWithMocks } from './judge-helper'
+import { deleteMockHealth, listMockHealth, pruneMockHealth, putMockHealth } from './health'
 import { mockLeg } from './legs'
 import { mockExplain, mockGenerate, mockInterview, mockParseSchedule, mockRevise, saveMockVersion } from './mock-ai'
 import { mockPlaceDetails, mockPlaces, toSummary } from './places'
@@ -196,8 +197,11 @@ export const mockApi: Api = {
     putTravelers: (tripId, travelers) => call(db => {
       const { user } = requireTrip(db, tripId)
       // 서버(src/lib/trips/travelers.ts)와 같은 규칙: 내 계정만 연결·해제하고, filledBySelf 는 화면이 보낸 값이 아니라 직접 계산한다
-      const saved = replaceMockTravelers({ before: db.travelers[tripId] ?? [], incoming: travelers, actorUserId: user.id })
+      const before = db.travelers[tripId] ?? []
+      const saved = replaceMockTravelers({ before, incoming: travelers, actorUserId: user.id })
       db.travelers[tripId] = saved
+      // 목록에서 빠진 사람, 계정 연결이 바뀐 사람의 건강 정보도 함께 지운다 (서버의 replaceTravelers 가 하는 일)
+      pruneMockHealth(db, tripId, before)
       refreshSummaries(db, tripId)
       return saved
     }),
@@ -237,6 +241,21 @@ export const mockApi: Api = {
       const { trip } = requireTrip(db, tripId)
       const version = db.versions.find(v => v.id === trip.confirmedVersionId) ?? fail(404, 'not_found', '확정된 일정이 아직 없어요')
       return { text: buildShareText(trip, version, db.travelers[tripId] ?? []) }
+    }),
+  },
+
+  health: {
+    list: tripId => call(db => {
+      const { user } = requireTrip(db, tripId)
+      return listMockHealth(db, tripId, user.id)
+    }),
+    put: (tripId, travelerId, input) => call(db => {
+      const { user } = requireTrip(db, tripId)
+      return putMockHealth(db, { tripId, travelerId, actorUserId: user.id, body: input })
+    }),
+    remove: (tripId, travelerId) => call(db => {
+      const { user } = requireTrip(db, tripId)
+      deleteMockHealth(db, { tripId, travelerId, actorUserId: user.id })
     }),
   },
 
@@ -285,7 +304,11 @@ export const mockApi: Api = {
       const res = mockInterview(trip, input)
       // 인터뷰가 끝나면 서버가 여행자와 여행 정보를 저장한다
       if (res.done) {
-        if (res.filled.travelers.length > 0) db.travelers[trip.id] = res.filled.travelers
+        if (res.filled.travelers.length > 0) {
+          const before = db.travelers[trip.id] ?? []
+          db.travelers[trip.id] = res.filled.travelers
+          pruneMockHealth(db, trip.id, before) // 빠진 사람·연결이 바뀐 사람의 건강 정보도 지운다 (서버의 replaceTravelers 와 같다)
+        }
         trip.styles = res.filled.styles.length ? res.filled.styles : trip.styles
         trip.budget = res.filled.budget ?? trip.budget
         trip.date = res.filled.date ?? trip.date
@@ -301,7 +324,11 @@ export const mockApi: Api = {
     generate: input => call(db => {
       const { trip } = requireTrip(db, input.tripId)
       const interview = db.interviews[trip.id]?.filled
-      if (interview?.travelers.length) db.travelers[trip.id] = interview.travelers
+      if (interview?.travelers.length) {
+        const before = db.travelers[trip.id] ?? []
+        db.travelers[trip.id] = interview.travelers
+        pruneMockHealth(db, trip.id, before)
+      }
       if (interview) {
         trip.styles = interview.styles.length ? interview.styles : trip.styles
         trip.budget = interview.budget ?? trip.budget

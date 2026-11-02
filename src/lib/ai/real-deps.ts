@@ -3,6 +3,7 @@
 // (가짜 로그인 헤더로 로그인 없이 들어오는 길이 실제 실행에 남지 않게 하려는 것이다. routes.test.ts가 지킨다.)
 import 'server-only'
 import { getLegsPartial } from '@/lib/geo/legs'
+import { avoidFoodTagsForTrip } from '@/lib/health'
 import {
   createVersion,
   getOpinions,
@@ -25,6 +26,8 @@ export function createRealDeps(overrides: Partial<AiDeps> = {}): AiDeps {
     getOpinions: versionId => getOpinions(versionId),
     createVersion: (tripId, input) => createVersion(tripId, input),
     saveTravelers: (tripId, travelers) => saveTravelers(tripId, travelers),
+    // 김태형 health: 일행 전체의 병·약에서 음식 태그만 모은다 (db 인자가 새어 들어가지 않게 감싼다)
+    getAvoidFoodTags: tripId => avoidFoodTagsForTrip(tripId),
     interviews: {
       get: tripId => interviews.get(tripId),
       save: (tripId, state) => interviews.save(tripId, state),

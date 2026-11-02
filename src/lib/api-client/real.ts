@@ -6,6 +6,7 @@ import {
   GroupDetailSchema,
   GroupSchema,
   GroupSummarySchema,
+  HealthListResponseSchema,
   InterviewResponseSchema,
   InvitePreviewSchema,
   InviteSchema,
@@ -17,6 +18,7 @@ import {
   PlanResponseSchema,
   ReviseResponseSchema,
   ShareTextResponseSchema,
+  TravelerHealthSchema,
   TravelerSchema,
   TripDetailSchema,
   TripListItemSchema,
@@ -73,6 +75,15 @@ export const realApi: Api = {
     confirm: (tripId, versionId) => request(`/api/trips/${enc(tripId)}/confirm`, { method: 'POST', body: { versionId }, schema: TripSchema }),
     unconfirm: tripId => request(`/api/trips/${enc(tripId)}/confirm`, { method: 'DELETE', schema: TripSchema }),
     shareText: tripId => request(`/api/trips/${enc(tripId)}/share-text`, { schema: ShareTextResponseSchema }),
+  },
+  health: {
+    list: async tripId => (await request(`/api/trips/${enc(tripId)}/health`, { schema: HealthListResponseSchema })).health,
+    put: (tripId, travelerId, input) =>
+      request(`/api/trips/${enc(tripId)}/travelers/${enc(travelerId)}/health`, { method: 'PUT', body: input, schema: TravelerHealthSchema }),
+    // 204 라 본문이 없다 — 스키마를 주지 않는다
+    remove: async (tripId, travelerId) => {
+      await request(`/api/trips/${enc(tripId)}/travelers/${enc(travelerId)}/health`, { method: 'DELETE' })
+    },
   },
   opinions: {
     list: versionId => request(`/api/versions/${enc(versionId)}/opinions`, { schema: z.array(OpinionSchema) }),

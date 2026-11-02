@@ -29,6 +29,8 @@ import type {
   SaveVersionRequest,
   ShareTextResponse,
   Traveler,
+  TravelerHealth,
+  TravelerHealthInput,
   Trip,
   TripDetail,
   TripListItem,
@@ -74,6 +76,15 @@ export interface Api {
     confirm(tripId: string, versionId: string): Promise<Trip>
     unconfirm(tripId: string): Promise<Trip>
     shareText(tripId: string): Promise<ShareTextResponse>
+  }
+  // 건강 정보(병·약 종류, 보이는 범위, 동의). 서버가 보는 사람에 맞춰 걸러서 내려주고, 고칠 수 있는 사람도 서버가 검사한다
+  health: {
+    // 내가 볼 수 있는 항목만 온다. "본인만"으로 둔 다른 가족의 항목은 배열에 아예 없다
+    list(tripId: string): Promise<TravelerHealth[]>
+    // 동의(consent: true)가 없으면 400. 계정이 연결된 여행자는 본인만, 계정 없는 여행자는 처음 입력한 사람만 고칠 수 있다 (아니면 403)
+    put(tripId: string, travelerId: string, input: TravelerHealthInput): Promise<TravelerHealth>
+    // 지우기 = 동의 철회. 바로 삭제하고 본문 없이 끝난다 (204). 고칠 수 있는 사람만 (아니면 403)
+    remove(tripId: string, travelerId: string): Promise<void>
   }
   opinions: {
     list(versionId: string): Promise<Opinion[]>
