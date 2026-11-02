@@ -81,12 +81,14 @@ export const TripListItemSchema = z.object({
 })
 export type TripListItem = z.infer<typeof TripListItemSchema>
 
-// YYYY-MM-DD 문자열은 글자 순서가 날짜 순서와 같아 그대로 비교한다.
-// 둘 다 있을 때만 비교한다 — 한쪽만 온 수정 요청을 저장된 여행과 맞춰 보는 것은 서버 몫이다.
-function endsBeforeStart(trip: { date?: string | null; endDate?: string | null }): boolean {
-  return Boolean(trip.date && trip.endDate && trip.endDate < trip.date)
+// 끝 날짜가 시작 날짜보다 빠른지. YYYY-MM-DD 문자열은 글자 순서가 날짜 순서와 같아 그대로 비교한다.
+// 둘 다 있을 때만 true다. 아래 요청 검사는 요청에 담긴 값만 보므로, 한쪽만 온 수정 요청(PATCH)은
+// 서버가 저장된 값과 합친 뒤 이 함수를 불러야 한다 — 같은 규칙을 두 곳에서 따로 쓰지 않으려고 내보낸다.
+export function tripDatesOutOfOrder(date: string | null | undefined, endDate: string | null | undefined): boolean {
+  return Boolean(date && endDate && endDate < date)
 }
 const endBeforeStartIssue = { message: '끝 날짜가 시작 날짜보다 빨라요', path: ['endDate'] }
+const endWithoutStartIssue = { message: '시작 날짜를 먼저 정해 주세요', path: ['endDate'] }
 
 // POST /api/trips
 export const CreateTripRequestSchema = z
@@ -97,7 +99,9 @@ export const CreateTripRequestSchema = z
     endDate: DateSchema.nullish(),
     mode: StartModeSchema,
   })
-  .refine(trip => !endsBeforeStart(trip), endBeforeStartIssue)
+  .refine(trip => !tripDatesOutOfOrder(trip.date, trip.endDate), endBeforeStartIssue)
+  // 새 여행에는 합칠 저장값이 없다. 시작 없이 끝만 있는 여행은 처음부터 만들지 않는다
+  .refine(trip => !(trip.endDate && !trip.date), endWithoutStartIssue)
 export type CreateTripRequest = z.infer<typeof CreateTripRequestSchema>
 
 // PATCH /api/trips/:id — 바꿀 칸만 보낸다
@@ -111,7 +115,7 @@ export const UpdateTripRequestSchema = z
     budget: BudgetSchema.nullable(),
   })
   .partial()
-  .refine(patch => !endsBeforeStart(patch), endBeforeStartIssue)
+  .refine(patch => !tripDatesOutOfOrder(patch.date, patch.endDate), endBeforeStartIssue)
 export type UpdateTripRequest = z.infer<typeof UpdateTripRequestSchema>
 
 // PUT /api/trips/:id/travelers — 여행자 목록 통째로

@@ -22,8 +22,13 @@ export const ChatPostRequestSchema = z.object({
 })
 export type ChatPostRequest = z.infer<typeof ChatPostRequestSchema>
 
-// GET /api/trips/:id/chat 쿼리. after = 이 시각 뒤의 글만 (주기적 갱신용, 주기는 [2단계])
-export const ChatListQuerySchema = z.object({
-  after: z.string().optional(),
-})
+// GET /api/trips/:id/chat 쿼리. after = 이 시각 이후의 글만 (주기적 갱신용, 주기는 [2단계]).
+// 이 시각 이후는 같은 시각을 포함(>=)한다 — 같은 시각에 쓴 글을 놓치지 않으려는 것이고,
+// 그래서 이미 받은 글이 한 번 더 올 수 있으니 화면이 id로 중복을 거른다.
+// strict: 오타 난 키(aftr)가 조용히 무시되어 전체 목록이 내려가는 일을 막는다.
+export const ChatListQuerySchema = z.object({ after: z.iso.datetime().optional() }).strict()
 export type ChatListQuery = z.infer<typeof ChatListQuerySchema>
+
+// GET /api/trips/:id/chat 응답. POST는 새로 저장된 글 하나(ChatMessage)를 그대로 돌려준다
+export const ChatListResponseSchema = z.object({ messages: z.array(ChatMessageSchema) })
+export type ChatListResponse = z.infer<typeof ChatListResponseSchema>

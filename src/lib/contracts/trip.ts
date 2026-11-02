@@ -27,12 +27,13 @@ export function stopDay(stop: Pick<Stop, 'day'>): number {
   return stop.day ?? 1
 }
 
-// 그날 장소만, 일정에 저장된 순서 그대로
-export function stopsOfDay(stops: Stop[], day: number): Stop[] {
+// 그날 장소만, 일정에 저장된 순서 그대로. 화면용으로 칸을 더한 장소(Stop을 넓힌 모양)도 그 타입 그대로 돌려준다
+export function stopsOfDay<T extends Pick<Stop, 'day'>>(stops: T[], day: number): T[] {
   return stops.filter(stop => stopDay(stop) === day)
 }
 
 // 일정에 나오는 날짜 번호를 오름차순·중복 없이. 빈 일정이면 []
+// 장소가 있는 날만 돌려준다 — 장소가 하나도 없는 날은 빠지므로, 날짜 탭 수는 Trip.date~endDate로 센다.
 export function tripDays(stops: Pick<Stop, 'day'>[]): number[] {
   return [...new Set(stops.map(stopDay))].sort((a, b) => a - b)
 }

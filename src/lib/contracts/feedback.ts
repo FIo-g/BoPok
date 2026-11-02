@@ -8,7 +8,7 @@ export const DayFeedbackSchema = z.object({
   day: z.number().int().min(1), // 여행 몇째 날 (Stop.day와 같은 기준)
   userId: z.string().min(1),
   score: z.number().int().min(1).max(5),
-  comment: z.string().trim().max(100).optional(), // 의견(OpinionBaseSchema.comment)과 같은 길이
+  comment: z.string().trim().max(100).nullish(), // 의견(OpinionBaseSchema.comment)과 같은 길이. DB의 NULL 행도 읽어야 해서 null을 받는다
   createdAt: z.string(),
 })
 export type DayFeedback = z.infer<typeof DayFeedbackSchema>

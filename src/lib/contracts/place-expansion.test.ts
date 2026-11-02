@@ -57,9 +57,15 @@ describe('장소 안 안내도', () => {
     expect(PlaceNodeSchema.safeParse({ ...node, guideNo: 0 }).success).toBe(false)
   })
   it('구역은 꼭짓점 3개 이상', () => {
-    const zone = { id: 'z1', name: '1층 전시실', floor: 1, polygon: [[127.38, 36.35], [127.381, 36.35], [127.381, 36.351]] }
+    const zone = { id: 'z1', name: '1층 전시실', floor: 1, polygon: [[127.38, 36.35], [127.381, 36.35], [127.381, 36.351]], confidence: 'B' }
     expect(PlaceZoneSchema.safeParse(zone).success).toBe(true)
     expect(PlaceZoneSchema.safeParse({ ...zone, polygon: zone.polygon.slice(0, 2) }).success).toBe(false)
+  })
+  it('구역에도 신뢰 등급이 필요하고, 출처·확인 날짜는 함께 담긴다', () => {
+    const zone = { id: 'z1', name: '1층 전시실', floor: 1, polygon: [[127.38, 36.35], [127.381, 36.35], [127.381, 36.351]] }
+    expect(PlaceZoneSchema.safeParse(zone).success).toBe(false)
+    const parsed = PlaceZoneSchema.parse({ ...zone, confidence: 'A', source: '현장 안내도', checkedAt: '2026-11' })
+    expect(parsed).toMatchObject({ confidence: 'A', source: '현장 안내도', checkedAt: '2026-11' })
   })
   it('모형 크기는 0보다 커야 한다', () => {
     const model = { url: '/models/aq.glb', anchor: [127.38, 36.35], rotationDeg: 90, scale: 1, altitudeM: 0 }

@@ -34,6 +34,13 @@ describe('일차별 만족도', () => {
     expect(DayFeedbackSchema.safeParse(base).success).toBe(true)
   })
 
+  it('DB에 NULL로 저장된 한 줄(null)도 읽는다 (의견의 comment와 같다)', () => {
+    const parsed = DayFeedbackSchema.safeParse({ ...base, comment: null })
+    expect(parsed.success).toBe(true)
+    if (parsed.success) expect(parsed.data.comment).toBeNull()
+    expect(DayFeedbackInputSchema.safeParse({ day: 1, score: 4, comment: null }).success).toBe(true)
+  })
+
   it('요청 본문은 일차·점수·한 줄만 받는다', () => {
     const input = DayFeedbackInputSchema.parse({ day: 1, score: 5, comment: '걷기 편했어요' })
     expect(input).toEqual({ day: 1, score: 5, comment: '걷기 편했어요' })

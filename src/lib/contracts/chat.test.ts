@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   CHAT_TEXT_MAX,
   ChatListQuerySchema,
+  ChatListResponseSchema,
   ChatMessageSchema,
   ChatPostRequestSchema,
   ReviseRequestSchema,
@@ -46,6 +47,32 @@ describe('그룹 채팅', () => {
     expect(ChatListQuerySchema.parse({ after: '2026-11-02T09:00:00.000Z' })).toEqual({
       after: '2026-11-02T09:00:00.000Z',
     })
+  })
+
+  it('after가 날짜·시각이 아니면 거부 (잘못된 값이 DB 비교까지 가지 않게)', () => {
+    expect(ChatListQuerySchema.safeParse({ after: 'yesterday' }).success).toBe(false)
+    expect(ChatListQuerySchema.safeParse({ after: '2026-11-02' }).success).toBe(false)
+    expect(ChatListQuerySchema.safeParse({ after: '' }).success).toBe(false)
+  })
+
+  it('모르는 쿼리 키는 거부 (오타 난 after가 조용히 전체 목록이 되지 않게)', () => {
+    expect(ChatListQuerySchema.safeParse({ aftr: '2026-11-02T09:00:00.000Z' }).success).toBe(false)
+    expect(ChatListQuerySchema.safeParse({ after: '2026-11-02T09:00:00.000Z', limit: '10' }).success).toBe(false)
+  })
+
+  it('목록 응답은 { messages } 모양, 빈 목록도 통과', () => {
+    const message = {
+      id: 'c1',
+      tripId: 'trip1',
+      userId: 'u-son',
+      userName: '아들',
+      text: '둘째 날은 좀 쉬어가요',
+      createdAt: '2026-11-02T09:00:00.000Z',
+    }
+    expect(ChatListResponseSchema.parse({ messages: [] })).toEqual({ messages: [] })
+    expect(ChatListResponseSchema.parse({ messages: [message] })).toEqual({ messages: [message] })
+    expect(ChatListResponseSchema.safeParse([message]).success).toBe(false)
+    expect(ChatListResponseSchema.safeParse({ messages: [{ ...message, text: '' }] }).success).toBe(false)
   })
 })
 

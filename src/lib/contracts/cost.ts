@@ -7,13 +7,19 @@ export const CostItemKindSchema = z.enum(['admission', 'meal', 'taxi', 'lodging'
 export type CostItemKind = z.infer<typeof CostItemKindSchema>
 
 export const CostItemSchema = z.object({
-  stopKey: z.string().nullable(), // null = 일정 전체 비용(숙박 등). 택시는 도착 장소의 stopKey
+  // null = 일정 전체에 드는 비용(예: KTX 왕복표, kind 'other'). 숙박은 그날 마지막 Stop(숙박 장소)의 stopKey에 붙고,
+  // 택시는 도착 장소의 stopKey에 붙는다
+  stopKey: z.string().nullable(),
   kind: CostItemKindSchema,
+  // 한 사람 기준 금액이다. 택시·숙박처럼 함께 내는 돈은 일행 수로 나눈 값을 적는다
+  // (합계가 perPersonKrw와 같은 단위여야 하기 때문이다)
   krw: z.number().int().min(0),
 })
 export type CostItem = z.infer<typeof CostItemSchema>
 
 // 한 사람이 쓰는 돈의 범위. 시간처럼 하나의 값이 아니라 범위로 보여 준다 (서비스 원칙 6장)
+// low = 항목 krw의 합계, high = round(low × (1 + bufferRate)). 스키마가 이 계산을 검사하지는 않는다 —
+// 계산하는 쪽이 지킬 약속이다 [제안, 2단계에서 확정]
 export const CostEstimateSchema = z
   .object({
     perPersonKrw: z.object({

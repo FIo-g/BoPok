@@ -46,8 +46,8 @@ export const PlaceCourseSchema = SourceInfoSchema.extend({
 })
 export type PlaceCourse = z.infer<typeof PlaceCourseSchema>
 
-// 층별 구역. 꼭짓점이 3개 미만이면 면이 되지 않아 거부한다.
-export const PlaceZoneSchema = z.object({
+// 층별 구역. 꼭짓점이 3개 미만이면 면이 되지 않아 거부한다. 장소 데이터라 출처·확인 날짜·신뢰 등급을 붙인다 (AGENTS 6장).
+export const PlaceZoneSchema = SourceInfoSchema.extend({
   id: z.string(),
   name: z.string().min(1),
   floor: z.number().int(),
@@ -56,6 +56,7 @@ export const PlaceZoneSchema = z.object({
 export type PlaceZone = z.infer<typeof PlaceZoneSchema>
 
 // 지도 위에 올리는 3D 건물 모형. scale이 0이면 보이지 않으므로 0보다 커야 한다.
+// 보기 전용 자산이라 판정·엔진이 읽지 않아 출처 칸을 두지 않는다.
 export const PlaceModelSchema = z.object({
   url: z.string().min(1),
   anchor: CoordSchema,

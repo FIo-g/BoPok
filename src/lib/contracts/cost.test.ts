@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import { CostEstimateSchema, CostItemKindSchema, CostItemSchema } from './index'
 
+// 한 사람 기준. low = 항목 합계(50000), high = round(low × (1 + bufferRate)) = 60000
 const estimate = {
-  perPersonKrw: { low: 45000, high: 60000 },
+  perPersonKrw: { low: 50000, high: 60000 },
   items: [
     { stopKey: 's1', kind: 'admission', krw: 5000 },
     { stopKey: 's2', kind: 'meal', krw: 12000 },
-    { stopKey: 's3', kind: 'taxi', krw: 8000 },
-    { stopKey: null, kind: 'lodging', krw: 30000 },
+    { stopKey: 's3', kind: 'taxi', krw: 3000 },
+    { stopKey: 's4', kind: 'lodging', krw: 15000 }, // 숙박은 그날 마지막 Stop(숙박 장소)에 붙는다
+    { stopKey: null, kind: 'other', krw: 15000 }, // 일정 전체 비용 (KTX 왕복표)
   ],
   bufferRate: 0.2,
 }
@@ -48,7 +50,7 @@ describe('비용 추정', () => {
   })
 
   it('stopKey는 null이어도 되지만 빠지면 거부 (일정 전체 비용은 null로 적는다)', () => {
-    expect(CostItemSchema.safeParse({ stopKey: null, kind: 'lodging', krw: 30000 }).success).toBe(true)
-    expect(CostItemSchema.safeParse({ kind: 'lodging', krw: 30000 }).success).toBe(false)
+    expect(CostItemSchema.safeParse({ stopKey: null, kind: 'other', krw: 30000 }).success).toBe(true) // KTX 왕복표
+    expect(CostItemSchema.safeParse({ kind: 'other', krw: 30000 }).success).toBe(false)
   })
 })
