@@ -47,47 +47,49 @@
 
 ## 4. 1단계 — 공용 타입 초안
 
-모든 새 칸은 **선택(optional) 또는 기본값**으로 넣어 지금 저장된 데이터와 화면이 그대로 돈다 **[제안]**. 칸 이름과 세부 값 목록은 [빌더]지만, 아래 모양과 규칙은 이 문서를 따른다.
+모든 새 칸은 **선택(optional)** 으로 넣어 지금 저장된 데이터와 화면이 그대로 돈다 **[제안]**. 스키마에 `.default()`는 쓰지 않는다 — zod 4에서는 default가 출력 타입을 필수로 바꿔, `Stop`·`PlaceSummary`를 만드는 기존 코드가 모두 타입 오류가 나기 때문이다. "칸이 없으면 이 값"은 도우미 함수(`stopDay`, `placeKindOf`)가 정한다. 칸 이름과 세부 값 목록은 [빌더]지만, 아래 모양과 규칙은 이 문서를 따른다. (구현된 이름은 `src/lib/contracts`가 기준이다.)
 
 ### 4.1 장소 종류와 장소 안 안내도 (`place.ts`, 주인 이동주)
 
-- `PlaceSummary.kind`: `attraction | restaurant | cafe | lodging` (기본 `attraction`). 기존 `category` 글자는 그대로 둔다
-- `PlaceNodeKindSchema`에 `smoking`(흡연장) 추가
-- 지점(`PlaceNode`)에 `floor?`(층)와 `guideNo?`(안내도의 볼거리 번호 ①②③) 추가
-- `courses?`: 공식 관람 코스 목록 `{ id, name, recommended, source, checkedAt }`. 구간(`PlaceSegment`)에 `courseId?`. 코스가 여러 개면(예: 한밭수목원 동원·서원) 고를 수 있게 한다
-- `zones?`: 실내 3D를 세울 구역 도형 `{ id, name, floor, polygon: Coord[] }` (5장)
-- `model?`: 손으로 만든 3D 모형 `{ url, anchor: Coord, rotationDeg, scale, altitudeM }` (5장)
-- `menus?`: `{ name, priceKrw?, foodTags: FoodTag[] }`. `FoodTag`는 음식 종류 태그(단 음식, 짠 음식, 기름진 음식, 술, 자몽, 녹색 채소 등). 목록은 4.4의 주의 규칙 표와 함께 정한다 [빌더]
+- `PlaceSummary.kind?`: `attraction | restaurant | cafe | lodging`. 칸이 없으면 관광지로 본다 — 읽는 쪽은 `placeKindOf(place)`를 쓴다. 기존 `category` 글자는 그대로 둔다
+- `PlaceNodeKindSchema`에 `smoking`(흡연장) 추가. **DB 반영 필요**: DB enum `place_node_kind`(`src/lib/db/schema/places.ts`)가 `PlaceNodeKindSchema`에서 만들어지므로, `smoking`을 저장하려면 이동주가 마이그레이션(`drizzle/`)을 만들어야 한다 (타입만 먼저 들어가 있고 DB는 아직 모른다)
+- 지점(`PlaceNode`)에 `floor?`(층, 1=1층·-1=지하 1층)와 `guideNo?`(안내도의 볼거리 번호 ①②③, 1 이상 정수) 추가
+- `PlaceDetail.courses?`: 공식 관람 코스 목록 `{ id, name, recommended }`에 출처·확인 날짜·신뢰 등급이 붙은 `PlaceCourse`. 구간(`PlaceSegment`)에 `courseId?`. 코스가 여러 개면(예: 한밭수목원 동원·서원) 고를 수 있게 한다
+- `PlaceDetail.zones?`: 실내 3D를 세울 구역 도형 `{ id, name, floor, polygon: Coord[] }`(`PlaceZone`). 꼭짓점이 3개 미만이면 거부 (5장)
+- `PlaceDetail.model?`: 손으로 만든 3D 모형 `{ url, anchor: Coord, rotationDeg, scale, altitudeM }`(`PlaceModel`). `scale`은 0보다 커야 한다 (5장)
+- `PlaceDetail.menus?`: `{ name, priceKrw?, foodTags: FoodTag[] }`에 출처·확인 날짜·신뢰 등급이 붙은 `MenuItem`. `FoodTag`는 음식 종류 태그로 지금은 `sugary`(단 음식), `salty`(짠 음식), `fatty`(기름진 음식), `alcohol`(술), `grapefruit`(자몽), `leafy_greens`(녹색 채소) 여섯 가지다. 목록은 4.4의 주의 규칙 표와 함께 늘린다 [빌더]
+- `courses`·`zones`·`model`·`menus`는 **상세(`PlaceDetail`)에만** 둔다. 목록 응답(`PlaceSummary`)이 커지지 않게 하기 위해서다
 - 모든 새 데이터에 출처·확인 날짜·신뢰 등급을 붙인다 (AGENTS 6장)
 
 ### 4.2 여러 날 여행 (`trip.ts`, `trip-api.ts`, 주인 김경선)
 
-- `Stop.day`: 몇째 날 (정수, 기본값 1) **[제안]**. 지금 저장된 하루 일정은 그대로 1일차가 된다
-- `Trip.date`는 시작일로 두고 `Trip.endDate?`를 더한다
+- `Stop.day?`: 몇째 날 (1 이상 정수) **[제안]**. 칸이 없으면 1일차 — 읽는 쪽은 `stopDay(stop)`을 쓰고, 지금 저장된 하루 일정은 그대로 1일차가 된다. 날짜별 도우미 `stopsOfDay(stops, day)`, `tripDays(stops)`(나오는 일차 번호를 오름차순·중복 없이)도 `trip.ts`에 있다. `day`를 `.default(1)`이 아니라 선택 칸으로 둔 까닭은 위 4장 머리말과 같다
+- `Trip.date`는 시작일로 두고 `Trip.endDate?`(끝나는 날, 없으면 당일 여행)를 더한다. `CreateTripRequest`·`UpdateTripRequest`와 인터뷰 결과(`InterviewFilled.endDate`)에도 같은 칸이 있다
+- **끝 날짜가 시작 날짜보다 앞서면 거부**한다(400). 계약의 검사는 시작·끝이 **둘 다 들어온 요청**만 본다. 수정 요청(PATCH)에 `endDate`만 오면 계약만으로는 못 잡으므로, 서버가 저장된 시작일과 맞춰 봐야 한다 [2단계]
 - 숙박은 그날 마지막 `Stop`(`kind: lodging` 장소)으로 둔다
 - 엔진은 **날마다 따로** 판정한다(`day`로 묶어 `judge`를 날마다 부름). 걷기 조건(연속·하루 총)은 하루 기준 그대로다
 - 인터뷰의 날짜 칸이 기간을 받는다. 출발·귀가 시간은 날마다 같다고 본다 **[제안]**
 - 날짜별 화면, 버전·의견·빠른 수정안을 날마다 어떻게 보여 줄지는 [2단계]
 
-### 4.3 일차별 만족도 (`trip-api.ts`, 주인 김경선)
+### 4.3 일차별 만족도 (`feedback.ts`, 주인 김경선)
 
-- `DayFeedback`: `{ tripId, day, userId, score(1~5), comment? }`. 묻는 항목은 [2단계]
+- `DayFeedback`: `{ tripId, day, userId, score(1~5 정수), comment?(100자까지, 의견과 같음), createdAt }`. 요청 본문 `DayFeedbackInput`은 `{ day, score, comment? }`만 받고 나머지는 서버가 정한다. 묻는 항목은 [2단계]
 
-### 4.4 건강 정보와 식단 주의 (`traveler.ts`, `judge.ts`, 주인 김경선·김태형)
+### 4.4 건강 정보와 식단 주의 (`health.ts`, 주인 김경선·김태형)
 
 **받는 것** **[결정]**
 
-- 병: 정해진 목록에서 고른다 (당뇨, 고혈압, 고지혈증, 신장 질환, 통풍, 심장 질환 등 고령층에 흔한 병. 최종 목록은 주의 규칙 표와 함께 [빌더])
-- 약: 이름을 적거나 약봉투 사진에서 읽어 **약 종류**로 저장한다(예: 항응고제, 일부 혈압약). 사진에서 읽은 결과는 사람이 확인한 뒤 저장한다
+- 병(`HealthCondition`): 정해진 목록에서 고른다. 지금은 `diabetes`(당뇨), `hypertension`(고혈압), `dyslipidemia`(고지혈증), `kidney_disease`(신장 질환), `gout`(통풍), `heart_disease`(심장 질환) 여섯 가지다. 최종 목록은 주의 규칙 표와 함께 [빌더]
+- 약(`MedicationClass`): 이름을 적거나 약봉투 사진에서 읽어 **약 종류**로 저장한다. 지금은 `anticoagulant`(항응고제), `calcium_channel_blocker`(칼슘채널차단제 계열 혈압약) 두 가지다. 최종 목록은 [빌더]. 사진에서 읽은 결과는 사람이 확인한 뒤 저장한다
 - **약봉투 사진은 읽고 바로 버린다.** 서버·DB·로그에 남기지 않는다
-- 건강 정보를 넣기 전에 **별도 동의**를 받는다(개인정보보호법 제23조 민감정보). 동의 날짜를 저장한다
+- 건강 정보를 넣기 전에 **별도 동의**를 받는다(개인정보보호법 제23조 민감정보). 저장 요청(`TravelerHealthInput`)은 `consent: true`가 없으면 계약에서 거부하고, 동의 날짜(`consentAt`)는 서버가 찍어 저장한다
 - 화면에 "의학적 조언이 아니에요. 의사·약사와 상의해 주세요"를 늘 보인다
 
 **모양** **[제안]**
 
-- `TravelerHealth`: `{ travelerId, conditions: HealthCondition[], medicationClasses: MedicationClass[], visibility: 'group' | 'self', consentAt, enteredByUserId }`
+- `TravelerHealth`: `{ travelerId, conditions: HealthCondition[], medicationClasses: MedicationClass[], visibility: 'group' | 'self', consentAt, enteredByUserId }`. 저장 요청 `TravelerHealthInput`은 `{ conditions, medicationClasses, visibility, consent: true }`
 - 여행자 정보와 **다른 테이블**에 둔다. 따로 지우고, 따로 권한을 검사하고, 여행자 목록 API로 새어 나가지 않게 하기 위해서다
-- "본인"은 계정이 연결된 여행자면 그 사람, 아니면 대신 입력한 사람(`enteredByUserId`)이다
+- "본인"은 계정이 연결된 여행자면 그 사람, 아니면 대신 입력한 사람(`enteredByUserId`)이다. 이 규칙은 `canSeeHealth(health, viewerUserId, travelerUserId?)`가 정한다 — `travelerUserId`는 여행자에 연결된 계정이고, "본인만"일 때 계정이 있으면 대신 입력한 사람도 못 본다
 
 **보이는 범위** **[결정]**
 
@@ -99,21 +101,22 @@
 **주의 판정** **[결정]**
 
 - 주의할지는 **사람이 만든 주의 규칙 표**가 정한다: `병 또는 약 종류 → 주의할 음식 태그 → 근거 구절·출처(질병관리청·식약처 등)·확인 날짜`
-- 엔진에 순수 함수 `dietCautions(travelers, health, stops, places, rules)`를 둔다. 결과 `DietCaution`: `{ stopKey, menuName?, foodTag, travelerId, reasonKind, sentence, source, checkedAt }`
+- 규칙 한 줄 `DietRule`은 `{ id, foodTag, sentence, source, checkedAt }`에 `reasonKind`가 `condition`이면 `condition`, `medication`이면 `medicationClass`가 붙는다. `source`·`checkedAt`은 **필수**다(근거 없는 "괜찮아요" 금지, 7장)
+- 엔진에 순수 함수 `dietCautions(travelers, health, stops, places, rules)`를 둔다(1단계에는 타입만 있고 함수는 [2단계]). 결과 `DietCaution`: `{ stopKey, menuName?, foodTag, travelerId, reasonKind, reason, sentence, source, checkedAt }`. `reason`은 화면에 보일 이유(예: 당뇨)로, 보는 사람이 볼 수 있을 때만 서버가 내려준다
 - 주의는 **띄우되 막지 않는다.** 그 식당을 넣거나 확정하는 것은 사용자가 정한다
 - AI(일정 짜기·다시 짜기)는 서버에서 전체 정보로 주의를 반영한다. 다만 **가족 모두가 보는 문장(메모, 바뀐 점 한 줄, 다시 짜기 이유)에는 병·약·식단 이유를 쓰지 않는다.** `text-guard`가 검사한다
 - AI 문장은 규칙 표의 근거 구절만 쓴다. AI가 의학 정보를 새로 만들지 않는다 (MVP 설계 2.3과 같은 원칙)
 
-### 4.5 그룹 채팅 (`trip-api.ts` 또는 새 `chat.ts`, 주인 김경선)
+### 4.5 그룹 채팅 (`chat.ts`, 주인 김경선)
 
-- `ChatMessage`: `{ id, tripId, userId, text, createdAt }`
-- `GET /api/trips/[id]/chat?after=`, `POST /api/trips/[id]/chat` (여행 구성원만)
-- "AI에게 전달하기": 다시 짜기(`POST /api/ai/revise`)가 의견과 함께 최근 채팅을 받는다. **RAG를 쓰지 않고** 대화를 그대로 넘기고, 길면 요약한다 **[결정]**
+- `ChatMessage`: `{ id, tripId, userId, userName, text(1~`CHAT_TEXT_MAX`자), createdAt }`. 한 글의 한도 `CHAT_TEXT_MAX`는 500이다(의견 한 줄 100자보다 길게)
+- `GET /api/trips/[id]/chat?after=`(`ChatListQuery`), `POST /api/trips/[id]/chat`(`ChatPostRequest`: `{ text }`, 앞뒤 공백을 자른 뒤 길이를 재서 공백뿐인 글은 거부) (여행 구성원만)
+- "AI에게 전달하기": 다시 짜기(`POST /api/ai/revise`)가 의견과 함께 최근 채팅을 받는다. 요청 본문 `ReviseRequest`에 `includeChat?: boolean`을 더했다(없으면 `false`). **RAG를 쓰지 않고** 대화를 그대로 넘기고, 길면 요약한다 **[결정]**
 - 채팅 글은 다른 사람이 쓴 글이라 의견과 같은 프롬프트 방어(`sanitizePromptText`)를 거친다
 
-### 4.6 비용 (주인 [2단계])
+### 4.6 비용 (`cost.ts`, 주인 [2단계])
 
-- `CostEstimate`: `{ perPersonKrw: { low, high }, items: { stopKey, kind, krw }[], bufferRate }`. 입장료·메뉴 가격·택시 요금에서 계산하고 "넉넉히" 여유를 더한다. 여유 비율과 담당 폴더는 [2단계]
+- `CostEstimate`: `{ perPersonKrw: { low, high }, items: { stopKey, kind, krw }[], bufferRate }`. `kind`(`CostItemKind`)는 `admission`(입장료), `meal`(식사), `taxi`(택시), `lodging`(숙박), `other`(기타)다. 숙박처럼 일정 전체에 드는 돈은 `stopKey: null`이다. 돈은 모두 원 단위 정수이고, `low`가 `high`보다 크면 거부한다. 입장료·메뉴 가격·택시 요금에서 계산하고 "넉넉히" 여유를 더한다. 여유 비율과 담당 폴더는 [2단계]
 
 ### 4.7 AI와 RAG (`src/lib/ai`, 주인 김태형)
 
