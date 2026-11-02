@@ -1,14 +1,16 @@
 // 일정 초안 → 엔진 판정 → (조정 필요면) 한 번 다시 → 버전 저장. generate·revise가 같이 쓴다.
 // AI는 장소·순서·시간만 고르고, 걷는 시간·계단 수·판정은 엔진 결과만 쓴다 (설계 6.4).
 import 'server-only'
-import type {
-  JudgeResult,
-  JudgeSummary,
-  Leg,
-  PlaceDetail,
-  Stop,
-  Traveler,
-  TripVersion,
+import {
+  stopsOfDay,
+  tripDays,
+  type JudgeResult,
+  type JudgeSummary,
+  type Leg,
+  type PlaceDetail,
+  type Stop,
+  type Traveler,
+  type TripVersion,
 } from '@/lib/contracts'
 import { formatRange, judge, requiredLegs } from '@/lib/engine'
 import { AiCallError } from './client'
@@ -64,15 +66,26 @@ async function runAttempt(drafts: DraftStop[], args: JudgeArgs, deps: AiDeps): P
   }
   const places = placeRecords(details)
   const stops = preserveArriveBy(draftsToStops(drafts, args.transport, places), args.originalStops)
+  // 걷기 조건은 하루 기준이라 날마다 따로 판정한다. 날을 넘어가는 경로도 묻지 않는다 (설계 2026-11-02 4.2)
+  const days = tripDays(stops)
+  const dayStops = days.length > 1 ? days.map(day => stopsOfDay(stops, day)) : [stops]
   let legs: Leg[] = []
   try {
-    legs = await deps.getLegs(requiredLegs(stops, places))
+    legs = await deps.getLegs(dayStops.flatMap(oneDay => requiredLegs(oneDay, places)))
   } catch (error) {
     console.error('[ai]', '장소·경로 조회 실패', error instanceof Error ? error.name : typeof error)
     legs = []
   }
-  const result = judge({ travelers: args.travelers, stops, places, legs: legRecords(legs) })
-  return { stops, result }
+  const results = dayStops.map(oneDay => judge({ travelers: args.travelers, stops: oneDay, places, legs: legRecords(legs) }))
+  return { stops, result: worstDay(results) }
+}
+
+// 다시 물을지, 어느 시도를 고를지는 가장 나쁜 날을 기준으로 정한다
+function worstDay(results: JudgeResult[]): JudgeResult {
+  return results.reduce((picked, result) => {
+    const rank = verdictRank(result.verdict) - verdictRank(picked.verdict)
+    return rank > 0 || (rank === 0 && result.violations.length > picked.violations.length) ? result : picked
+  })
 }
 
 // 다시 짜기 이동수단 지키기 — 새 i번째가 원래 j번째와 짝이고

@@ -7,7 +7,9 @@ import {
   nonNegative,
   ReviseRequestSchema,
   ReviseResponseSchema,
+  stopDay,
   TimeSchema,
+  tripDays,
   type PlaceSummary,
   type Reaction,
   type Stop,
@@ -18,6 +20,7 @@ import type { AiDeps } from './deps'
 import { HttpError, handle, readJson, requireVersionInTrip } from './http'
 import { planJudgeSave, type PlanAttempt, type PlanAttemptResult } from './plan-and-save'
 import {
+  arrangeDraftsByDay,
   dropTimesOutsideWindow,
   enforceMustStops,
   restoreMustStops,
@@ -33,6 +36,7 @@ const AiReviseSchema = z.object({
     z.object({
       placeId: z.string().nullable(),
       name: z.string().trim().min(1).max(100),
+      day: z.number().int().min(1).optional(), // 여러 날 일정에서 몇째 날인지
       startTime: TimeSchema.optional(),
       visitMin: nonNegative.optional(),
       seated: z.boolean().optional(),
@@ -47,6 +51,11 @@ const SYSTEM_PROMPT =
   '꼭 갈 곳·예약된 장소는 손대지 마라(이미 정해진 표시를 그대로 쓴다). 의견이 서로 부딪히면 [부모님] 의견을 따르라(부모님을 위한 서비스). ' +
   '반영한 의견 id를 appliedOpinionIds에 넣어라. 걷는 시간·거리·계단 수는 쓰지 마라. ' +
   '반드시 JSON으로만 답하라. 모양: {"stops":[{"placeId":"장소 id 또는 null","name":"장소 이름","startTime":"HH:mm","visitMin":60,"seated":false}],"appliedOpinionIds":["의견 id"],"note":"한 줄 메모"}'
+
+// 여러 날 일정일 때만 덧붙인다. 하루짜리 여행의 프롬프트는 그대로다
+const MULTI_DAY_PROMPT =
+  '현재 일정은 여러 날이다. stops의 항목마다 몇째 날인지 "day"(1부터)를 넣어라. 일정에 없는 날은 만들지 마라. ' +
+  '의견과 상관없는 날의 일정은 바꾸지 마라. 시간과 순서는 날마다 따로 정한다.'
 
 // 반응 버튼 문구 (프론트 표시와 같은 말로 AI에게 보여준다)
 const REACTION_LABEL: Record<Reaction, string> = {
@@ -66,8 +75,9 @@ function candidateLine(place: PlaceSummary): string {
   return `- ${parts.join(', ')}`
 }
 
-function scheduleLine(stop: Stop): string {
+function scheduleLine(stop: Stop, multiDay: boolean): string {
   const parts = [`이름: ${sanitizePromptText(stop.name)}`, `id: ${stop.placeId ?? '없음'}`]
+  if (multiDay) parts.unshift(`${stopDay(stop)}일차`)
   if (stop.startTime !== undefined) parts.push(`시간 ${stop.startTime}`)
   if (stop.mustVisit) parts.push('꼭 갈 곳')
   if (stop.reservedAt !== undefined) parts.push(`예약 ${stop.reservedAt}`)
@@ -86,6 +96,7 @@ function filterDrafts(
     drafts.push({
       placeId: stop.placeId,
       name: stop.name,
+      ...(stop.day !== undefined ? { day: stop.day } : {}),
       ...(stop.startTime !== undefined ? { startTime: stop.startTime } : {}),
       ...(stop.visitMin !== undefined ? { visitMin: stop.visitMin } : {}),
       ...(stop.seated !== undefined ? { seated: stop.seated } : {}),
@@ -101,6 +112,7 @@ function mustDraftsOf(versionStops: Stop[]): DraftStop[] {
     .map(stop => ({
       placeId: stop.placeId,
       name: stop.name,
+      day: stopDay(stop),
       mustVisit: stop.mustVisit,
       ...(stop.startTime !== undefined ? { startTime: stop.startTime } : {}),
       ...(stop.reservedAt !== undefined ? { reservedAt: stop.reservedAt } : {}),
@@ -153,6 +165,8 @@ function applyNamesAndCarry(drafts: DraftStop[], original: Stop[], candidates: P
     const carriedVisit = found.visitMin ?? candidateVisit ?? out.visitMin
     return {
       ...out,
+      // AI가 날을 안 주면 원래 날에 둔다
+      day: out.day ?? stopDay(found),
       ...(found.coord !== undefined ? { coord: found.coord } : {}),
       ...(carriedVisit !== undefined ? { visitMin: carriedVisit } : {}),
       ...(found.seated !== undefined ? { seated: found.seated } : {}),
@@ -279,7 +293,12 @@ export async function handleRevise(
         }
       }
 
-      const scheduleText = version.stops.map(scheduleLine).join('\n')
+      const lastDay = Math.max(1, ...tripDays(version.stops))
+      const multiDay = lastDay > 1
+      const systemPrompt = multiDay ? `${SYSTEM_PROMPT} ${MULTI_DAY_PROMPT}` : SYSTEM_PROMPT
+      // 하루짜리 일정은 초안을 건드리지 않는다
+      const arranged = (drafts: DraftStop[]): DraftStop[] => (multiDay ? arrangeDraftsByDay(drafts, lastDay) : drafts)
+      const scheduleText = version.stops.map(stop => scheduleLine(stop, multiDay)).join('\n')
       const baseUser =
         `현재 일정:\n${scheduleText}\n\n` +
         `가족 의견:\n${opinionLines.join('\n')}\n\n` +
@@ -313,7 +332,7 @@ export async function handleRevise(
             const parsed = await deps.callJson(
               {
                 messages: [
-                  { role: 'system', content: SYSTEM_PROMPT },
+                  { role: 'system', content: systemPrompt },
                   { role: 'user', content: user },
                 ],
                 schema: AiReviseSchema,
@@ -351,7 +370,7 @@ export async function handleRevise(
           const first = await callOnce(null)
           if (first.missing.length === 0) {
             return {
-              drafts: first.drafts,
+              drafts: arranged(first.drafts),
               ...(first.note !== undefined ? { note: first.note } : {}),
               appliedOpinionIds: first.appliedOpinionIds,
             }
@@ -363,7 +382,7 @@ export async function handleRevise(
           const restored = restoreMustStops(second.drafts, second.missing, originalOrder)
           const note = second.note ?? first.note
           return {
-            drafts: restored,
+            drafts: arranged(restored),
             ...(note !== undefined ? { note } : {}),
             appliedOpinionIds: second.appliedOpinionIds,
           }

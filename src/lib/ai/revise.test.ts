@@ -50,7 +50,7 @@ function opinion(overrides: Partial<Opinion> & { id: string; versionId: string }
 
 // AI가 돌려줄 모양 그대로 — 가짜 callJson은 스키마로 검사해 돌려준다.
 type AiPayload = {
-  stops: { placeId: string | null; name: string; startTime?: string; reservedAt?: string; seated?: boolean }[]
+  stops: { placeId: string | null; name: string; day?: number; startTime?: string; reservedAt?: string; seated?: boolean }[]
   appliedOpinionIds: string[]
   note?: string
 }
@@ -91,6 +91,103 @@ async function setup(opts: {
 const hanbatMust = () =>
   stop({ key: 'k1', placeId: 'hanbat', name: '한밭수목원', mustVisit: true, reservedAt: '14:00' })
 const scienceStop = () => stop({ key: 'k2', placeId: 'science', name: '국립중앙과학관' })
+
+describe('여러 날 일정 다시 짜기', () => {
+  const twoDayStops = () => [
+    stop({ key: 'k1', placeId: 'hanbat', name: '한밭수목원' }),
+    stop({ key: 'k2', placeId: 'science', name: '국립중앙과학관', day: 2 }),
+  ]
+  const opinions = [opinion({ id: 'o1', versionId: 'v1' })]
+
+  async function revised(ai: AiPayload, versionStops = twoDayStops()) {
+    const { deps, versionId, calls } = await setup({ versionStops, opinions, ai: [ai] })
+    const response = await handleRevise(makeRequest({ tripId: 'trip-dev', versionId }), deps)
+    expect(response.status).toBe(200)
+    const body = ReviseResponseSchema.parse(await response.json())
+    return { stops: body.version.stops, prompt: calls[0]! }
+  }
+
+  it('AI가 날을 안 줘도 원래 날에 남는다 (1일차로 합쳐지지 않는다)', async () => {
+    const { stops } = await revised({
+      stops: [{ placeId: 'hanbat', name: '한밭수목원' }, { placeId: 'science', name: '국립중앙과학관' }],
+      appliedOpinionIds: ['o1'],
+    })
+    expect(stops.map(one => one.day ?? 1)).toEqual([1, 2])
+  })
+
+  it('AI가 날을 옮기면 따르고, 날짜 순서로 놓는다', async () => {
+    const { stops } = await revised({
+      stops: [
+        { placeId: 'science', name: '국립중앙과학관', day: 1 },
+        { placeId: 'hanbat', name: '한밭수목원', day: 2 },
+      ],
+      appliedOpinionIds: ['o1'],
+    })
+    expect(stops.map(one => [one.name, one.day ?? 1])).toEqual([['국립중앙과학관', 1], ['한밭수목원', 2]])
+  })
+
+  it('일정에 없는 날을 주면 마지막 날로 둔다', async () => {
+    const { stops } = await revised({
+      stops: [
+        { placeId: 'hanbat', name: '한밭수목원', day: 1 },
+        { placeId: 'science', name: '국립중앙과학관', day: 9 },
+      ],
+      appliedOpinionIds: ['o1'],
+    })
+    expect(stops.map(one => one.day ?? 1)).toEqual([1, 2])
+  })
+
+  it('꼭 갈 곳·예약은 AI가 날을 옮겨도 원래 날에 둔다', async () => {
+    const { stops } = await revised(
+      {
+        stops: [
+          { placeId: 'hanbat', name: '한밭수목원', day: 2 },
+          { placeId: 'science', name: '국립중앙과학관', day: 2 },
+        ],
+        appliedOpinionIds: ['o1'],
+      },
+      [
+        stop({ key: 'k1', placeId: 'hanbat', name: '한밭수목원', mustVisit: true, reservedAt: '14:00' }),
+        stop({ key: 'k2', placeId: 'science', name: '국립중앙과학관', day: 2 }),
+      ],
+    )
+    expect(stops.find(one => one.name === '한밭수목원')?.day ?? 1).toBe(1)
+  })
+
+  it('프롬프트에 일차가 나오고 day를 넣으라고 알려 준다', async () => {
+    const { prompt } = await revised({
+      stops: [{ placeId: 'hanbat', name: '한밭수목원' }, { placeId: 'science', name: '국립중앙과학관' }],
+      appliedOpinionIds: ['o1'],
+    })
+    expect(prompt).toContain('2일차, 이름: 국립중앙과학관')
+    expect(prompt).toContain('"day"')
+  })
+
+  it('하루짜리 일정은 프롬프트와 저장 모양이 그대로다', async () => {
+    const { stops, prompt } = await revised(
+      { stops: [{ placeId: 'hanbat', name: '한밭수목원' }], appliedOpinionIds: ['o1'] },
+      [stop({ key: 'k1', placeId: 'hanbat', name: '한밭수목원' })],
+    )
+    expect(prompt).not.toContain('일차')
+    expect(stops[0]).not.toHaveProperty('day')
+  })
+
+  it('날을 넘어가는 경로를 묻지 않는다', async () => {
+    const { deps, versionId } = await setup({
+      versionStops: twoDayStops(),
+      opinions,
+      ai: [{ stops: [{ placeId: 'hanbat', name: '한밭수목원' }, { placeId: 'science', name: '국립중앙과학관' }], appliedOpinionIds: ['o1'] }],
+    })
+    const asked: string[] = []
+    const getLegs: AiDeps['getLegs'] = async requests => {
+      asked.push(...requests.map(request => `${request.from.placeId}>${request.to.placeId}`))
+      return deps.getLegs(requests)
+    }
+
+    await handleRevise(makeRequest({ tripId: 'trip-dev', versionId }), { ...deps, getLegs })
+    expect(asked).not.toContain('hanbat>science')
+  })
+})
 
 describe('handleRevise', () => {
   it('꼭 갈 곳·예약은 유지(AI가 빼도 되돌림)', async () => {

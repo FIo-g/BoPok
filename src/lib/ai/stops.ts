@@ -6,6 +6,7 @@ import type { Coord, PlaceSummary, Stop, Transport } from '@/lib/contracts'
 export type DraftStop = {
   placeId: string | null
   name: string
+  day?: number // 몇째 날. 여러 날 일정을 다시 짤 때만 쓴다 (없으면 1일차)
   startTime?: string
   visitMin?: number
   seated?: boolean
@@ -102,8 +103,10 @@ export function draftsToStops(
 
   return drafts.map((draft, index) => {
     const coord = coords[index]
+    // 그날 첫 장소는 앞 장소에서 이어지는 길이 없다 — 전날 마지막 장소와의 거리로 고르지 않는다
+    const startsDay = index === 0 || (draft.day ?? 1) !== (drafts[index - 1]!.day ?? 1)
     const arriveBy =
-      index === 0
+      startsDay
         ? transport === 'transit'
           ? 'bus'
           : transport
@@ -113,6 +116,8 @@ export function draftsToStops(
       key: `s${index + 1}`,
       placeId: draft.placeId,
       name: draft.name,
+      // 1일차는 칸을 두지 않는다 — 지금까지 저장된 하루 일정과 모양이 같아야 한다
+      ...(draft.day !== undefined && draft.day !== 1 ? { day: draft.day } : {}),
       ...(coord !== undefined ? { coord } : {}),
       ...(draft.startTime !== undefined ? { startTime: draft.startTime } : {}),
       ...(draft.visitMin !== undefined ? { visitMin: draft.visitMin } : {}),
@@ -127,6 +132,20 @@ export function draftsToStops(
       restNodeIds: draft.restNodeIds ?? [],
     } satisfies Stop
   })
+}
+
+// 여러 날 일정의 초안을 날짜 순서로 놓는다. AI가 날을 안 주면 앞 장소와 같은 날로,
+// 없는 날을 주면 마지막 날로 둔다 (날을 새로 만들지 않는다). 같은 날 안의 순서는 그대로다.
+export function arrangeDraftsByDay(drafts: DraftStop[], lastDay: number): DraftStop[] {
+  let current = 1
+  const placed = drafts.map(draft => {
+    current = Math.min(draft.day ?? current, lastDay)
+    return { ...draft, day: current }
+  })
+  return placed
+    .map((draft, index) => ({ draft, index }))
+    .sort((a, b) => a.draft.day - b.draft.day || a.index - b.index)
+    .map(({ draft }) => draft)
 }
 
 // 초안과 원래 꼭 갈 곳·예약이 같은 곳인지 본다.
@@ -162,6 +181,8 @@ export function enforceMustStops(
     used[index] = true
     const draft = out[index]!
     draft.mustVisit = must.mustVisit ?? true
+    // 꼭 갈 곳·예약은 날도 그대로 둔다 (예약은 그날에만 유효하다)
+    if (must.day !== undefined) draft.day = must.day
     if (must.reservedAt !== undefined) {
       draft.reservedAt = must.reservedAt
       draft.startTime = must.reservedAt
