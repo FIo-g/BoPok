@@ -13,6 +13,7 @@ import { PlacePicker } from '@/components/trip/PlacePicker'
 import { QuickFixPanel } from '@/components/trip/QuickFixPanel'
 import { StopList, type StopEditing } from '@/components/trip/StopList'
 import { TripMap } from '@/components/trip/TripMap'
+import { showScheduleSpinner } from '@/components/trip/trip-screen-state'
 import { useExplain } from '@/components/trip/useExplain'
 import { useJudged } from '@/components/trip/useJudged'
 import { VersionBar, VersionCompare } from '@/components/trip/VersionBar'
@@ -294,7 +295,7 @@ export function TripScreen({ tripId }: { tripId: string }) {
                 <OpinionForm stopKey={null} onSubmit={addOpinion} label="전체 의견 남기기" />
               </Card>
             </>
-          ) : version.loading || (stops && canJudge) ? (
+          ) : showScheduleSpinner({ activeId, versionLoading: version.loading, hasStops: !!stops, canJudge }) ? (
             <Spinner label="일정을 계산하고 있어요" />
           ) : null}
         </div>
