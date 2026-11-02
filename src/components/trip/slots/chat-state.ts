@@ -10,9 +10,10 @@ export function mergeMessages(current: ChatMessage[], incoming: ChatMessage[]): 
   return [...current, ...fresh].sort((a, b) => a.createdAt.localeCompare(b.createdAt))
 }
 
-// 다음에 물을 커서. 가장 늦은 글의 시각이다
-export function chatCursor(messages: ChatMessage[]): string | undefined {
-  return messages.at(-1)?.createdAt
+// 다음에 물을 커서. 서버에서 받은 글로만 옮긴다.
+// 내가 방금 보낸 글로 옮기면, 그 사이 다른 가족이 먼저 쓴 글(시각이 더 앞선 글)을 영영 받지 못한다.
+export function advanceCursor(cursor: string | undefined, received: ChatMessage[]): string | undefined {
+  return received.at(-1)?.createdAt ?? cursor
 }
 
 // '2026-11-03T05:07:00.000Z' → 기기 시간대의 '14:07'
