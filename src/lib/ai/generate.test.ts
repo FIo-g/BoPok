@@ -109,6 +109,53 @@ describe('handleGenerate', () => {
     expect(hanbat).toMatchObject({ mustVisit: true, reservedAt: '14:00' })
   })
 
+  // 데모 버그 11/2: AI가 성심당에 00:00을 넣어 일정 맨 앞에 자정 시간이 보였다.
+  it('여행 시간대 밖 시간(00:00)은 버리고 장소는 남김', async () => {
+    const { deps } = depsWithAi([
+      {
+        stops: [
+          { placeId: null, name: '성심당', startTime: '00:00', seated: true },
+          { placeId: 'science', name: '국립중앙과학관', startTime: '10:00' },
+        ],
+      },
+    ])
+    await deps.interviews.save(
+      'trip-dev',
+      doneState({ transport: 'car', startTime: '09:00', endTime: '18:00' }),
+    )
+
+    const response = await handleGenerate(makeRequest({ tripId: 'trip-dev' }), deps)
+    expect(response.status).toBe(200)
+    const body = PlanResponseSchema.parse(await response.json())
+
+    const bakery = body.version.stops.find(stop => stop.name === '성심당')
+    expect(bakery).toBeDefined()
+    expect(bakery?.startTime).toBeUndefined()
+    expect(body.version.stops.find(stop => stop.placeId === 'science')?.startTime).toBe('10:00')
+  })
+
+  it('이미 저장된 인터뷰의 꼭 갈 곳 예약 00:00도 쓰지 않음', async () => {
+    const { deps } = depsWithAi([{ stops: [{ placeId: 'science', name: '국립중앙과학관', startTime: '10:00' }] }])
+    await deps.interviews.save(
+      'trip-dev',
+      doneState({
+        transport: 'car',
+        startTime: '09:00',
+        endTime: '18:00',
+        mustVisit: [{ name: '한밭수목원', reservedAt: '00:00' }],
+      }),
+    )
+
+    const response = await handleGenerate(makeRequest({ tripId: 'trip-dev' }), deps)
+    expect(response.status).toBe(200)
+    const body = PlanResponseSchema.parse(await response.json())
+
+    const hanbat = body.version.stops.find(stop => stop.placeId === 'hanbat')
+    expect(hanbat).toMatchObject({ mustVisit: true })
+    expect(hanbat?.reservedAt).toBeUndefined()
+    expect(hanbat?.startTime).toBeUndefined()
+  })
+
   it('조정 필요면 한 번 더 묻고 저장', async () => {
     const { deps, calls } = depsWithAi([
       { stops: [{ placeId: 'hanbat', name: '한밭수목원' }] },

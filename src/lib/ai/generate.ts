@@ -17,7 +17,14 @@ import { AiCallError } from './client'
 import type { AiDeps } from './deps'
 import { HttpError, handle, readJson } from './http'
 import { planJudgeSave, type PlanAttempt } from './plan-and-save'
-import { enforceMustStops, restoreMustStops, samePlaceName, type DraftStop } from './stops'
+import {
+  dropTimesOutsideWindow,
+  enforceMustStops,
+  mustVisitWithinWindow,
+  restoreMustStops,
+  samePlaceName,
+  type DraftStop,
+} from './stops'
 import { hasNumberOrStairsClaim, sanitizePromptText } from './text-guard'
 
 // AI가 돌려줄 모양. 걷는 시간·거리·계단 칸은 두지 않는다 (엔진이 계산한다).
@@ -202,7 +209,8 @@ export async function handleGenerate(
     // 꼭 갈 곳은 후보에 없으면 목록에 더해 AI가 고를 수 있게 한다.
     // 후보 id를 함께 기억해 나중에 같은 곳인지 가린다.
     const musts: MustNeed[] = []
-    for (const must of filled.mustVisit) {
+    // 이미 저장된 인터뷰에 AI가 채운 00:00 예약이 남아 있을 수 있어 여기서도 시간대 밖 예약 시간을 버린다.
+    for (const must of mustVisitWithinWindow(filled.mustVisit, filled)) {
       const found = await deps.matchPlaceByName(must.name)
       if (found && !candidates.some(candidate => candidate.id === found.id)) {
         candidates.push(found)
@@ -300,7 +308,13 @@ export async function handleGenerate(
         // 메모에 숫자·계단 약속이 있으면 버린다 — 숫자는 엔진에서만 나온다 (설계 6.4).
         const note =
           parsed.note !== undefined && !hasNumberOrStairsClaim(parsed.note) ? parsed.note : undefined
-        const filtered = filterDrafts(parsed.stops, candidates, allowedIds, isPaste ? baseStops : undefined)
+        // AI가 정한 시간이 출발~귀가 밖이면 지운다 (데모 버그 11/2: 성심당 00:00).
+        // 붙여넣기 바탕에 사람이 적어 둔 같은 장소·같은 시간은 시간대 밖이어도 남긴다.
+        const filtered = dropTimesOutsideWindow(
+          filterDrafts(parsed.stops, candidates, allowedIds, isPaste ? baseStops : undefined),
+          filled,
+          draft => baseStops.some(base => base.startTime === draft.startTime && samePlaceName(base.name, draft.name)),
+        )
         // 고른 장소가 하나도 남지 않으면 AI 실패로 본다 (설계 6.4).
         if (filtered.length === 0) {
           throw new AiCallError('invalid_output', 'AI가 고른 장소가 없어요')

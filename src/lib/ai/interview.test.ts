@@ -749,6 +749,35 @@ describe('날짜·시간·장소', () => {
     expect(must.state.filled.mustVisit).toEqual([{ name: '한밭수목원' }])
   })
 
+  // 데모 버그 11/2: 예약 시간을 말하지 않았는데 AI가 reservedAt에 00:00을 채워 넣었다.
+  it('꼭 갈 곳의 예약 시간이 출발~귀가 밖이면 예약 시간을 버림', async () => {
+    const planted = InterviewStateSchema.parse({
+      filled: {
+        mode: 'scratch',
+        travelers: [parentTraveler()],
+        styles: [STYLE_FALLBACK],
+        startTime: '09:00',
+        endTime: '18:00',
+        mustVisit: [],
+        fixTargets: [],
+      },
+      cursor: { slot: 'must_visit', travelerIndex: 0, questionIndex: 0 },
+      history: [],
+    })
+    const out = await applyAnswer(planted, { text: '성심당이랑 한밭수목원 2시 예약' }, {
+      callJson: stubCallJson({
+        mustVisit: [
+          { name: '성심당', reservedAt: '00:00' },
+          { name: '한밭수목원', reservedAt: '14:00' },
+        ],
+      }),
+    })
+    expect(out.state.filled.mustVisit).toEqual([
+      { name: '성심당' },
+      { name: '한밭수목원', reservedAt: '14:00' },
+    ])
+  })
+
   it('13:00~09:00처럼 시작이 끝보다 늦으면 다시 묻기', async () => {
     const deps = { callJson: stubCallJson({ startTime: '13:00', endTime: '09:00' }) }
     const planted = InterviewStateSchema.parse({

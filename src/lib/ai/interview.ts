@@ -24,6 +24,7 @@ import type { ChatMessage } from './client'
 import { AiCallError } from './client'
 import type { AiDeps } from './deps'
 import { handle, readJson } from './http'
+import { mustVisitWithinWindow } from './stops'
 
 type CallJsonOnly = Pick<AiDeps, 'callJson'>
 type Cursor = InterviewState['cursor']
@@ -222,7 +223,8 @@ const AGE_SYSTEM =
 const TIME_SYSTEM =
   '출발·귀가 시간을 HH:mm으로 바꿔라. 반드시 JSON으로만 답하라. 모양: {"startTime":"09:00","endTime":"18:00"}'
 const MUST_VISIT_SYSTEM =
-  '꼭 가고 싶은 곳과 예약 시간을 뽑아라. 없으면 빈 배열. 반드시 JSON으로만 답하라. 모양: {"mustVisit":[{"name":"장소","reservedAt":"HH:mm"}]}'
+  '꼭 가고 싶은 곳과 예약 시간을 뽑아라. 없으면 빈 배열. 예약 시간을 말하지 않은 곳은 reservedAt을 아예 넣지 마라(00:00으로 채우지 마라). ' +
+  '반드시 JSON으로만 답하라. 모양: {"mustVisit":[{"name":"예약 없는 장소"},{"name":"예약한 장소","reservedAt":"HH:mm"}]}'
 
 // 서울 기준 오늘 YYYY-MM-DD — Intl로 서울 날짜를 구한다
 function seoulYmd(now: Date): string {
@@ -826,7 +828,8 @@ export async function applyAnswer(
             MustVisitAiSchema,
           )
           if (!parsed || parsed.mustVisit.length === 0) return retry
-          filled.mustVisit = parsed.mustVisit
+          // 출발~귀가 밖 예약 시간은 AI가 빈자리를 채운 값으로 보고 버린다 (데모 버그 11/2: 00:00)
+          filled.mustVisit = mustVisitWithinWindow(parsed.mustVisit, filled)
         }
       } else {
         return { state }

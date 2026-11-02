@@ -26,6 +26,43 @@ export function samePlaceName(a: string, b: string): boolean {
   return na.includes(nb) || nb.includes(na)
 }
 
+// 여행 출발~귀가 시간대. 인터뷰에서 정한 값이고, 모르면 비워 둔다.
+export type TimeWindow = { startTime?: string; endTime?: string }
+
+// HH:mm은 글자 순서가 시간 순서와 같아 문자열로 비교한다. 경계는 포함, 모르는 쪽은 보지 않는다.
+export function isWithinWindow(time: string, window: TimeWindow): boolean {
+  if (window.startTime !== undefined && time < window.startTime) return false
+  if (window.endTime !== undefined && time > window.endTime) return false
+  return true
+}
+
+// AI가 시간을 모를 때 00:00 같은 빈자리 값을 채우는 일이 있다 (데모 버그 11/2: 성심당 00:00).
+// 시간대 밖 시간은 지우고 장소는 남긴다 — 화면에는 '시간 미정'으로 보인다.
+// 예약 자리(reservedAt)와 keep이 참인 자리(사람이 정해 둔 시간)는 건드리지 않는다.
+export function dropTimesOutsideWindow(
+  drafts: DraftStop[],
+  window: TimeWindow,
+  keep?: (draft: DraftStop) => boolean,
+): DraftStop[] {
+  return drafts.map(draft => {
+    if (draft.startTime === undefined || draft.reservedAt !== undefined) return draft
+    if (isWithinWindow(draft.startTime, window) || keep?.(draft)) return draft
+    const out = { ...draft }
+    delete out.startTime
+    return out
+  })
+}
+
+// 인터뷰에서 AI가 뽑은 꼭 갈 곳의 예약 시간도 같은 이유로 시간대 밖이면 버린다 (장소는 남긴다).
+export function mustVisitWithinWindow<T extends { reservedAt?: string }>(musts: T[], window: TimeWindow): T[] {
+  return musts.map(must => {
+    if (must.reservedAt === undefined || isWithinWindow(must.reservedAt, window)) return must
+    const out = { ...must }
+    delete out.reservedAt
+    return out
+  })
+}
+
 // 직선거리. 대중교통일 때 700 m 이하면 걸어갈 수 있는 거리로 본다 (설계 7.3.1).
 const WALKABLE_TRANSIT_M = 700
 const EARTH_RADIUS_M = 6371000

@@ -1,7 +1,16 @@
 // AI가 고른 자리 → Stop[] 바꾸기 검사. 순수 함수라 외부 호출이 없다.
 import { describe, expect, it } from 'vitest'
 import { StopSchema, type Coord, type PlaceSummary } from '@/lib/contracts'
-import { arriveByFor, draftsToStops, enforceMustStops, restoreMustStops, samePlaceName } from './stops'
+import {
+  arriveByFor,
+  draftsToStops,
+  dropTimesOutsideWindow,
+  enforceMustStops,
+  isWithinWindow,
+  mustVisitWithinWindow,
+  restoreMustStops,
+  samePlaceName,
+} from './stops'
 import type { DraftStop } from './stops'
 
 // 위도 1도는 약 111,195 m — 경계(700 m) 검사를 위해 같은 경도에서 위도만 바꾼다.
@@ -219,5 +228,60 @@ describe('restoreMustStops', () => {
     const restored = restoreMustStops(drafts, missing)
     expect(restored.filter(d => d.placeId === 'hanbat')).toHaveLength(1)
     expect(restored.find(d => d.placeId === 'hanbat')).toMatchObject({ reservedAt: '14:00', startTime: '14:00' })
+  })
+})
+
+// AI가 시간을 모르면 00:00 같은 빈자리 값을 채우는 일이 있어 여행 시간대 밖 시간은 버린다 (데모 버그 11/2: 성심당 00:00).
+describe('여행 시간대 밖 시간 버리기', () => {
+  const window = { startTime: '09:00', endTime: '18:00' }
+
+  it('시간대 안이면 받고 밖이면 버림 (경계 포함)', () => {
+    expect(isWithinWindow('09:00', window)).toBe(true)
+    expect(isWithinWindow('18:00', window)).toBe(true)
+    expect(isWithinWindow('12:30', window)).toBe(true)
+    expect(isWithinWindow('00:00', window)).toBe(false)
+    expect(isWithinWindow('08:59', window)).toBe(false)
+    expect(isWithinWindow('18:01', window)).toBe(false)
+  })
+
+  it('시간대를 모르면 거르지 않음, 한쪽만 알면 그쪽만 봄', () => {
+    expect(isWithinWindow('00:00', {})).toBe(true)
+    expect(isWithinWindow('07:00', { startTime: '09:00' })).toBe(false)
+    expect(isWithinWindow('20:00', { startTime: '09:00' })).toBe(true)
+    expect(isWithinWindow('20:00', { endTime: '18:00' })).toBe(false)
+  })
+
+  it('AI가 정한 시간만 지우고 장소는 남김, 예약 자리는 건드리지 않음', () => {
+    const drafts: DraftStop[] = [
+      { placeId: null, name: '성심당', startTime: '00:00', seated: true },
+      { placeId: 'hanbat', name: '한밭수목원', startTime: '10:00' },
+      { placeId: 'science', name: '국립중앙과학관', startTime: '19:30', reservedAt: '19:30' },
+    ]
+    const out = dropTimesOutsideWindow(drafts, window)
+    expect(out.map(d => d.name)).toEqual(['성심당', '한밭수목원', '국립중앙과학관'])
+    expect(out[0]).not.toHaveProperty('startTime')
+    expect(out[1]?.startTime).toBe('10:00')
+    expect(out[2]).toMatchObject({ startTime: '19:30', reservedAt: '19:30' })
+    // 원래 초안은 바꾸지 않는다
+    expect(drafts[0]?.startTime).toBe('00:00')
+  })
+
+  it('keep이 참이면 시간대 밖이어도 남김 (사람이 정해 둔 시간)', () => {
+    const drafts: DraftStop[] = [{ placeId: 'hanbat', name: '한밭수목원', startTime: '20:00' }]
+    const out = dropTimesOutsideWindow(drafts, window, draft => draft.startTime === '20:00')
+    expect(out[0]?.startTime).toBe('20:00')
+  })
+
+  it('꼭 갈 곳의 예약 시간이 시간대 밖이면 예약 시간만 버림', () => {
+    const musts = [
+      { name: '성심당', reservedAt: '00:00' },
+      { name: '한밭수목원', reservedAt: '14:00' },
+      { name: '국립중앙과학관' },
+    ]
+    expect(mustVisitWithinWindow(musts, window)).toEqual([
+      { name: '성심당' },
+      { name: '한밭수목원', reservedAt: '14:00' },
+      { name: '국립중앙과학관' },
+    ])
   })
 })

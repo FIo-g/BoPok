@@ -17,7 +17,13 @@ import { AiCallError } from './client'
 import type { AiDeps } from './deps'
 import { HttpError, handle, readJson, requireVersionInTrip } from './http'
 import { planJudgeSave, type PlanAttempt, type PlanAttemptResult } from './plan-and-save'
-import { enforceMustStops, restoreMustStops, samePlaceName, type DraftStop } from './stops'
+import {
+  dropTimesOutsideWindow,
+  enforceMustStops,
+  restoreMustStops,
+  samePlaceName,
+  type DraftStop,
+} from './stops'
 import { hasNumberOrStairsClaim, sanitizePromptText } from './text-guard'
 
 // AI가 돌려줄 모양. 걷는 시간·거리·계단 칸은 두지 않고 (엔진이 계산한다),
@@ -332,7 +338,14 @@ export async function handleRevise(
             if (named.length === 0) {
               throw new AiCallError('invalid_output', 'AI가 고른 장소가 없어요')
             }
-            const { drafts, missing } = enforceMustStops(named, musts)
+            // AI가 정한 시간이 출발~귀가 밖이면 지운다 (데모 버그 11/2: 00:00).
+            // 원래 버전에 같은 장소·같은 시간이 있으면 사람이 정해 둔 시간이라 남긴다.
+            const timed = dropTimesOutsideWindow(named, interview?.filled ?? {}, draft =>
+              version.stops.some(
+                original => original.startTime === draft.startTime && samePlaceName(original.name, draft.name),
+              ),
+            )
+            const { drafts, missing } = enforceMustStops(timed, musts)
             return { drafts, missing, ...(note !== undefined ? { note } : {}), appliedOpinionIds }
           }
           const first = await callOnce(null)

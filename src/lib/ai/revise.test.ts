@@ -483,6 +483,38 @@ describe('handleRevise: 의견 한 줄 정리', () => {
   })
 })
 
+// 데모 버그 11/2: AI가 시간을 모르는 자리에 00:00을 넣었다. 다시 짜기에서도 시간대 밖 AI 시간은 버린다.
+describe('handleRevise: 여행 시간대 밖 시간', () => {
+  it('AI가 넣은 00:00은 지우고, 사람이 원래 정해 둔 시간은 시간대 밖이어도 남긴다', async () => {
+    const opinions = [opinion({ id: 'o1', versionId: 'v1' })]
+    const { deps, versionId } = await setup({
+      versionStops: [scienceStop(), stop({ key: 'k3', placeId: 'hanbat', name: '한밭수목원', startTime: '19:00' })],
+      opinions,
+      ai: [
+        {
+          stops: [
+            { placeId: 'science', name: '국립중앙과학관', startTime: '00:00' },
+            { placeId: 'hanbat', name: '한밭수목원', startTime: '19:00' },
+          ],
+          appliedOpinionIds: ['o1'],
+        },
+      ],
+    })
+    await deps.interviews.save('trip-dev', {
+      filled: { mode: 'scratch', travelers: [], styles: [], mustVisit: [], fixTargets: [], startTime: '09:00', endTime: '18:00' },
+      cursor: { slot: 'done', travelerIndex: 0, questionIndex: 0 },
+      history: [],
+    })
+
+    const response = await handleRevise(makeRequest({ tripId: 'trip-dev', versionId }), deps)
+    expect(response.status).toBe(200)
+    const body = ReviseResponseSchema.parse(await response.json())
+
+    expect(body.version.stops.find(s => s.placeId === 'science')?.startTime).toBeUndefined()
+    expect(body.version.stops.find(s => s.placeId === 'hanbat')?.startTime).toBe('19:00')
+  })
+})
+
 describe('handleRevise: 404·502', () => {
   it('다른 여행의 버전 id면 404이고 getOpinions·callJson이 안 불린다', async () => {
     const base = createDevDeps()
