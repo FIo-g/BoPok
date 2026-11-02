@@ -174,6 +174,7 @@ export type PlanResponse = z.infer<typeof PlanResponseSchema>
 export const ReviseRequestSchema = z.object({
   tripId: z.string().min(1),
   versionId: z.string().min(1),
+  includeChat: z.boolean().optional(), // 없으면 false. 그룹 채팅을 AI에게 전달하기 (설계 4.5)
 })
 export type ReviseRequest = z.infer<typeof ReviseRequestSchema>
 
