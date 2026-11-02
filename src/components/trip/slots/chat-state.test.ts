@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ChatMessage } from '@/lib/contracts'
-import { chatCursor, chatTime, mergeMessages } from './chat-state'
+import { advanceCursor, chatTime, mergeMessages } from './chat-state'
 
 const message = (id: string, createdAt: string): ChatMessage => ({ id, tripId: 't', userId: 'u', userName: '엄마', text: '안녕', createdAt })
 
@@ -26,10 +26,30 @@ describe('mergeMessages', () => {
   })
 })
 
-describe('chatCursor', () => {
-  it('마지막 글의 시각이고, 글이 없으면 undefined', () => {
-    expect(chatCursor([])).toBeUndefined()
-    expect(chatCursor([message('a', '2026-11-03T01:00:00.000Z')])).toBe('2026-11-03T01:00:00.000Z')
+describe('advanceCursor', () => {
+  it('받은 글의 마지막 시각으로 옮긴다', () => {
+    const received = [message('a', '2026-11-03T01:00:00.000Z'), message('b', '2026-11-03T01:00:10.000Z')]
+    expect(advanceCursor(undefined, received)).toBe('2026-11-03T01:00:10.000Z')
+  })
+
+  it('받은 글이 없으면 그대로 둔다', () => {
+    expect(advanceCursor('2026-11-03T01:00:00.000Z', [])).toBe('2026-11-03T01:00:00.000Z')
+  })
+
+  it('내가 글을 보내도 커서가 그대로라, 그 사이 다른 가족이 쓴 글을 다음 갱신에서 받는다', () => {
+    const lastPolled = message('a', '2026-11-03T01:00:00.000Z')
+    const theirs = message('theirs', '2026-11-03T01:00:03.000Z')
+    const mine = message('mine', '2026-11-03T01:00:05.000Z')
+
+    // 받은 글로만 옮기므로 내 글(01:00:05)은 커서가 되지 않는다
+    const cursor = advanceCursor(undefined, [lastPolled])
+    let shown = mergeMessages([lastPolled], [mine])
+
+    const onServer = [lastPolled, theirs, mine]
+    const received = onServer.filter(one => one.createdAt >= cursor!)
+    shown = mergeMessages(shown, received)
+
+    expect(shown.map(one => one.id)).toEqual(['a', 'theirs', 'mine'])
   })
 })
 

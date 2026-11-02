@@ -8,7 +8,7 @@ import { aiFailure } from '@/lib/ai-fallback'
 import { api } from '@/lib/api-client'
 import { CHAT_TEXT_MAX, type ChatMessage } from '@/lib/contracts'
 import { errorMessage } from '@/lib/use-async'
-import { chatCursor, chatTime, mergeMessages } from './chat-state'
+import { advanceCursor, chatTime, mergeMessages } from './chat-state'
 import type { TripSlotProps } from './types'
 
 const CHAT_REFRESH_MS = 10_000
@@ -20,28 +20,25 @@ export function ChatSlot({ tripId, userId, versionId }: TripSlotProps) {
   const [asking, setAsking] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const listRef = useRef<HTMLOListElement>(null)
-  // 타이머 안에서 최신 글 목록을 보려고 ref에도 둔다
-  const messagesRef = useRef<ChatMessage[]>([])
-  useEffect(() => {
-    messagesRef.current = messages ?? []
-  }, [messages])
-
   useEffect(() => {
     if (!userId) return
     let cancelled = false
+    let cursor: string | undefined
 
     const refresh = (after?: string) =>
       api.chat
         .list(tripId, after)
         .then(res => {
-          if (!cancelled) setMessages(current => mergeMessages(current ?? [], res.messages))
+          if (cancelled) return
+          cursor = advanceCursor(cursor, res.messages)
+          setMessages(current => mergeMessages(current ?? [], res.messages))
         })
         .catch((e: unknown) => {
           // 처음 불러오기만 알린다. 주기적 갱신은 다음 차례에 다시 시도하면 된다
           if (!cancelled && after === undefined) setError(errorMessage(e))
         })
     const refreshIfVisible = () => {
-      if (document.visibilityState === 'visible') void refresh(chatCursor(messagesRef.current))
+      if (document.visibilityState === 'visible') void refresh(cursor)
     }
 
     void refresh()
