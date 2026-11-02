@@ -59,6 +59,10 @@ export const lazyMockApi: Api = {
     add: async (versionId, input) => (await mock()).opinions.add(versionId, input),
     remove: async opinionId => (await mock()).opinions.remove(opinionId),
   },
+  feedback: {
+    list: async tripId => (await mock()).feedback.list(tripId),
+    save: async (tripId, input) => (await mock()).feedback.save(tripId, input),
+  },
   places: {
     list: async query => (await mock()).places.list(query),
     get: async placeId => (await mock()).places.get(placeId),

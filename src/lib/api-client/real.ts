@@ -2,6 +2,8 @@
 import { z } from 'zod'
 import {
   AcceptInviteResponseSchema,
+  DayFeedbackItemSchema,
+  DayFeedbackListResponseSchema,
   ExplainResponseSchema,
   GroupDetailSchema,
   GroupSchema,
@@ -80,6 +82,10 @@ export const realApi: Api = {
     remove: async opinionId => {
       await request(`/api/opinions/${enc(opinionId)}`, { method: 'DELETE' })
     },
+  },
+  feedback: {
+    list: tripId => request(`/api/trips/${enc(tripId)}/feedback`, { schema: DayFeedbackListResponseSchema }),
+    save: (tripId, input) => request(`/api/trips/${enc(tripId)}/feedback`, { method: 'PUT', body: input, schema: DayFeedbackItemSchema }),
   },
   places: {
     list: (query = {}) => {

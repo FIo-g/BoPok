@@ -5,6 +5,9 @@ import type {
   Budget,
   CreateGroupRequest,
   CreateTripRequest,
+  DayFeedbackInput,
+  DayFeedbackItem,
+  DayFeedbackListResponse,
   ExplainRequest,
   ExplainResponse,
   GenerateRequest,
@@ -79,6 +82,11 @@ export interface Api {
     list(versionId: string): Promise<Opinion[]>
     add(versionId: string, input: OpinionInput): Promise<Opinion>
     remove(opinionId: string): Promise<void>
+  }
+  feedback: {
+    list(tripId: string): Promise<DayFeedbackListResponse>
+    // 한 사람이 그날에 하나만 남긴다. 다시 보내면 덮어쓴다
+    save(tripId: string, input: DayFeedbackInput): Promise<DayFeedbackItem>
   }
   places: {
     list(query?: PlaceQuery): Promise<PlaceSummary[]>

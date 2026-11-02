@@ -21,6 +21,15 @@ describe('목업 API', () => {
     expect(groups[1].role).toBe('member')
   })
 
+  it('만족도는 한 사람이 그날에 하나만 남고 다시 쓰면 덮어쓴다', async () => {
+    await loginDemo()
+    await api.feedback.save('t-daejeon', { day: 1, score: 3 })
+    const saved = await api.feedback.save('t-daejeon', { day: 1, score: 5, comment: '좋았어요' })
+
+    expect(saved).toMatchObject({ score: 5, comment: '좋았어요', userName: '오하연' })
+    expect((await api.feedback.list('t-daejeon')).feedback).toHaveLength(1)
+  })
+
   it('틀린 비밀번호는 401', async () => {
     const error = await api.auth.signIn({ email: DEMO_EMAIL, password: 'wrong' }).catch((e: unknown) => e)
     expect(isApiError(error) && error.status).toBe(401)
