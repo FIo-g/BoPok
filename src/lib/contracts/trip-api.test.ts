@@ -3,7 +3,7 @@ import { LegsInputSchema } from '@/lib/geo/validation'
 import { BoundedPlaceDetailsRequestSchema } from '@/lib/places/validation'
 import {
   CreateTripRequestSchema, LEGS_REQUEST_MAX, LegsRequestSchema, LegsResponseSchema, PLACE_DETAILS_IDS_MAX, PlaceDetailsRequestSchema,
-  PlaceDetailsResponseSchema, PutTravelersRequestSchema, TRAVELERS_MAX, TripSchema, UpdateTripRequestSchema,
+  PlaceDetailsResponseSchema, PutTravelersRequestSchema, TRAVELERS_MAX, TripDetailSchema, TripSchema, UpdateTripRequestSchema,
   type LegRequest, type LegsResponse, type PlaceDetailsResponse, type Traveler,
 } from './index'
 
@@ -39,6 +39,20 @@ describe('여행 날짜는 달력에 있는 날짜만', () => {
     expect(CreateTripRequestSchema.safeParse({ groupId: 'g', title: '여행', mode: 'scratch', date: '2026-02-30' }).success).toBe(false)
     expect(UpdateTripRequestSchema.safeParse({ date: '2026-02-30' }).success).toBe(false)
     expect(UpdateTripRequestSchema.safeParse({ date: '2026-11-14' }).success).toBe(true)
+  })
+})
+
+describe('여행 상세의 처음 여는 안(initialVersion)', () => {
+  const stop = { key: 's1', placeId: 'hanbat', name: '한밭수목원', mustVisit: true, arriveBy: 'car', skipSegmentIds: [], detourMap: {}, restNodeIds: [] }
+  const version = { id: 'v1', tripId: 't', number: 1, parentId: null, madeBy: 'user', stops: [stop], createdAt: '2026-10-30T00:00:00Z' }
+
+  it('버전이 없는 여행은 null, 있는 여행은 stops 를 포함한 전체 버전을 받는다', () => {
+    expect(TripDetailSchema.safeParse({ trip, travelers: [], versions: [], initialVersion: null }).success).toBe(true)
+    expect(TripDetailSchema.safeParse({ trip, travelers: [], versions: [], initialVersion: version }).success).toBe(true)
+  })
+
+  it('initialVersion 칸이 없는 응답은 거부한다 (화면이 버전을 기다리지 않도록 항상 와야 한다)', () => {
+    expect(TripDetailSchema.safeParse({ trip, travelers: [], versions: [] }).success).toBe(false)
   })
 })
 

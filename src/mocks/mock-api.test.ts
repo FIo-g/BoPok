@@ -63,6 +63,32 @@ describe('목업 API', () => {
     expect(saved.madeByUserId).toBe('u-me')
   })
 
+  it('여행 정보에 처음 여는 안이 전체(stops 포함)로 붙는다: 확정안이 있으면 확정안', async () => {
+    await loginDemo()
+    // 확정안이 최신안(v-daejeon-2)보다 오래된 안이어야 "최신"과 구분된다
+    await api.trips.confirm('t-daejeon', 'v-daejeon-1')
+    const detail = await api.trips.get('t-daejeon')
+    expect(detail.initialVersion?.id).toBe('v-daejeon-1')
+    expect(detail.initialVersion).toEqual(await api.trips.getVersion('t-daejeon', 'v-daejeon-1'))
+  })
+
+  it('처음 여는 안: 확정안이 없으면 번호가 가장 큰 최신안', async () => {
+    await loginDemo()
+    const detail = await api.trips.get('t-daejeon')
+    expect(detail.trip.confirmedVersionId).toBeNull()
+    expect(detail.initialVersion?.id).toBe('v-daejeon-2')
+    expect(detail.initialVersion?.number).toBe(2)
+    expect(detail.initialVersion?.stops.length).toBeGreaterThan(0)
+  })
+
+  it('처음 여는 안: 버전이 없는 여행은 null', async () => {
+    await loginDemo()
+    const trip = await api.trips.create({ groupId: 'g-family', title: '빈 여행', mode: 'scratch' })
+    const detail = await api.trips.get(trip.id)
+    expect(detail.versions).toEqual([])
+    expect(detail.initialVersion).toBeNull()
+  })
+
   it('확정은 여행당 한 버전이고 풀 수 있다', async () => {
     await loginDemo()
     await api.trips.confirm('t-daejeon', 'v-daejeon-1')

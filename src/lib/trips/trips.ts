@@ -9,7 +9,7 @@ import type { Db } from '@/lib/db/client'
 import { getDb } from '@/lib/db/client'
 import { trips, user } from '@/lib/db/schema'
 import { listTravelers } from './travelers'
-import { listVersionSummaries, summariesByTrip } from './versions'
+import { getInitialVersion, listVersionSummaries, summariesByTrip } from './versions'
 
 type TripRow = typeof trips.$inferSelect
 
@@ -66,12 +66,20 @@ export async function getTrip(tripId: string, db: Db = getDb()): Promise<Trip> {
 }
 
 // versions는 번호 오름차순이고 stops가 없는 요약이다 (화면은 마지막 것을 '최신'으로 본다).
+// initialVersion은 화면이 처음 여는 안의 전체다 — 여행을 받은 뒤 버전을 또 기다리지 않게 같이 보낸다.
+// 서로 기다릴 필요가 없는 세 조회는 Promise.all로 함께 보낸다 (배포에서 DB 왕복 한 번 분량만 든다).
 export async function getTripDetail(tripId: string, db: Db = getDb()): Promise<TripDetail> {
   const row = await findTrip(tripId, db)
+  const [travelers, versions, initialVersion] = await Promise.all([
+    listTravelers(tripId, db),
+    listVersionSummaries(tripId, db),
+    getInitialVersion({ tripId, confirmedVersionId: row.trip.confirmedVersionId }, db),
+  ])
   return {
     trip: toTrip(row.trip, row.confirmedByName),
-    travelers: await listTravelers(tripId, db),
-    versions: await listVersionSummaries(tripId, db),
+    travelers,
+    versions,
+    initialVersion,
   }
 }
 

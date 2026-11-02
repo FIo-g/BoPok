@@ -105,6 +105,7 @@
 
 - `User`, `Group`, `GroupSummary`(내 역할·구성원 수), `GroupDetail`(구성원), `Invite`, `InvitePreview`, `AcceptInviteResponse`(`{ groupId }`)
 - `Trip`(제목·날짜·모드·이동수단·스타일·예산·**확정 버전·확정한 사람 이름**), `TripDetail`, `TripListItem`(최신·확정 버전 요약)
+- `TripDetail`에 `initialVersion`(처음 여는 안 전체)이 같이 오므로 일정 화면은 그 안을 바로 그리고, 다른 안을 고를 때만 버전 API를 부른다 [결정: 11/2]
 - `VersionSummary`(stops 없는 버전 + **만든 사람 이름** `madeByName`) — 버전 선택 줄에 "누가 만들었는지"를 보여 주려고
 - 요청 본문: `CreateTripRequest`, `UpdateTripRequest`, `PutTravelersRequest`, `SaveVersionRequest`, `ConfirmRequest`, `ShareTextResponse`, `PlaceDetailsRequest`, `LegsRequest`
 - 크기 상한: 경로 요청 20개, 장소 상세 ID 100개(서버 검증과 같은 값), 여행자 20명(서버에 따로 상한이 없어 계약에서 정함). 여행 날짜(`YYYY-MM-DD`)는 달력에 있는 날짜만 받는다. 상한 값은 `trip-api.ts`의 `LEGS_REQUEST_MAX`, `PLACE_DETAILS_IDS_MAX`, `TRAVELERS_MAX`

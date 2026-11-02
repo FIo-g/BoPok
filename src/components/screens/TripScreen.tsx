@@ -13,7 +13,7 @@ import { PlacePicker } from '@/components/trip/PlacePicker'
 import { QuickFixPanel } from '@/components/trip/QuickFixPanel'
 import { StopList, type StopEditing } from '@/components/trip/StopList'
 import { TripMap } from '@/components/trip/TripMap'
-import { showScheduleSpinner } from '@/components/trip/trip-screen-state'
+import { preloadedVersion, showScheduleSpinner } from '@/components/trip/trip-screen-state'
 import { useExplain } from '@/components/trip/useExplain'
 import { useJudged } from '@/components/trip/useJudged'
 import { VersionBar, VersionCompare } from '@/components/trip/VersionBar'
@@ -40,7 +40,11 @@ export function TripScreen({ tripId }: { tripId: string }) {
   const versions = detail.data?.versions
   // 처음 열면 확정된 안, 없으면 가장 최근 안
   const activeId = chosenId ?? detail.data?.trip.confirmedVersionId ?? versions?.[versions.length - 1]?.id ?? null
-  const version = useAsync(() => api.trips.getVersion(tripId, activeId ?? ''), `ver:${tripId}:${activeId}`, enabled && activeId !== null)
+  // 여행 정보에 처음 여는 안이 같이 오므로 버전을 또 기다리지 않는다. 다른 안을 고르면 그때 받는다
+  const preloaded = preloadedVersion(detail.data?.initialVersion, activeId)
+  const version = useAsync(() => api.trips.getVersion(tripId, activeId ?? ''), `ver:${tripId}:${activeId}`, enabled && activeId !== null && preloaded === null)
+  const versionData = preloaded ?? version.data
+  const versionLoading = preloaded === null && version.loading
   const parentId = versions?.find(v => v.id === activeId)?.parentId ?? null
   const parent = useAsync(() => api.trips.getVersion(tripId, parentId ?? ''), `ver:${tripId}:${parentId}`, enabled && parentId !== null)
   const opinions = useAsync(() => api.opinions.list(activeId ?? ''), `op:${activeId}`, enabled && activeId !== null)
@@ -56,7 +60,7 @@ export function TripScreen({ tripId }: { tripId: string }) {
   const [message, setMessage] = useState<{ tone: 'ok' | 'warn' | 'info'; text: string } | null>(null)
 
   const travelers = detail.data?.travelers
-  const stops = draft ?? version.data?.stops
+  const stops = draft ?? versionData?.stops
   const judged = useJudged(stops, travelers, tuned)
   const prevJudged = useJudged(parent.data?.stops, travelers, tuned)
   // 빠른 수정안으로 만든 버전의 바뀐 내용(고정 문장의 재료). 새로고침하면 사라지고, 그때는 비교 숫자로만 설명한다
@@ -70,7 +74,7 @@ export function TripScreen({ tripId }: { tripId: string }) {
     // 조건 바꿔 보기 중에는 저장된 두 안의 비교가 아니므로 설명하지 않는다
     enabled: !tuned && !draft,
   })
-  const dirty = draft !== null && version.data !== undefined && !sameStops(draft, version.data.stops)
+  const dirty = draft !== null && versionData !== undefined && !sameStops(draft, versionData.stops)
 
   // 열어 둔 동안 새 의견을 몇 초마다 다시 받아 온다 (설계 5장)
   const reloadOpinions = opinions.reload
@@ -152,6 +156,9 @@ export function TripScreen({ tripId }: { tripId: string }) {
     setBusy('confirm')
     try {
       await api.trips.unconfirm(tripId)
+      // 확정을 풀면 initialVersion이 최신안으로 바뀐다. 보던 안이 미리 받은 안이면 버전 칸에 넣어 두어
+      // 그 안을 다시 받는 동안 일정이 스피너로 바뀌지 않게 한다
+      if (preloaded) version.mutate(preloaded)
       detail.reload()
       setMessage({ tone: 'info', text: '확정을 풀었어요. 다시 고칠 수 있어요' })
     } catch (e) {
@@ -254,7 +261,7 @@ export function TripScreen({ tripId }: { tripId: string }) {
                   <>
                     <Button onClick={revise} disabled={busy !== null}>{busy === 'revise' ? 'AI가 다시 짜는 중…' : `의견 반영해서 다시 짜기${unapplied > 0 ? ` (${unapplied})` : ''}`}</Button>
                     <Button variant="secondary" onClick={() => setShowQuickFix(v => !v)} disabled={busy !== null}>빠른 수정안 보기</Button>
-                    <Button variant="secondary" onClick={() => setDraft(version.data?.stops ?? null)} disabled={busy !== null || !version.data}>직접 고치기</Button>
+                    <Button variant="secondary" onClick={() => setDraft(versionData?.stops ?? null)} disabled={busy !== null || !versionData}>직접 고치기</Button>
                     {confirmedHere ? (
                       <Button variant="danger" onClick={unconfirm} disabled={busy !== null}>확정 풀기</Button>
                     ) : (
@@ -295,7 +302,7 @@ export function TripScreen({ tripId }: { tripId: string }) {
                 <OpinionForm stopKey={null} onSubmit={addOpinion} label="전체 의견 남기기" />
               </Card>
             </>
-          ) : showScheduleSpinner({ activeId, versionLoading: version.loading, hasStops: !!stops, canJudge }) ? (
+          ) : showScheduleSpinner({ activeId, versionLoading, hasStops: !!stops, canJudge }) ? (
             <Spinner label="일정을 계산하고 있어요" />
           ) : null}
         </div>

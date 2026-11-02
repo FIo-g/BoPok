@@ -61,10 +61,14 @@ export const VersionSummarySchema = TripVersionSchema.omit({ stops: true }).exte
 export type VersionSummary = z.infer<typeof VersionSummarySchema>
 
 // GET /api/trips/:id
+// initialVersion: 일정 화면이 처음 여는 안(확정안, 없으면 번호가 가장 큰 최신안)의 전체(stops 포함). 버전이 없으면 null.
+// 여행 정보를 받은 뒤에 버전을 또 요청하며 기다리지 않도록 같이 보낸다 [결정 11/2 — 응답 속도].
+// 화면은 고른 안의 id가 이것과 같을 때만 쓰고, 다르면 GET /api/trips/:id/versions/:vid로 받는다.
 export const TripDetailSchema = z.object({
   trip: TripSchema,
   travelers: z.array(TravelerSchema),
   versions: z.array(VersionSummarySchema),
+  initialVersion: TripVersionSchema.nullable(),
 })
 export type TripDetail = z.infer<typeof TripDetailSchema>
 

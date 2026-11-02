@@ -39,7 +39,7 @@
 | `POST /api/invites/:token/accept` | 참가 `{ relation? }` (이미 구성원이면 그대로 성공 — role·relation을 덮어쓰지 않는다) | 로그인 |
 | `GET /api/groups/:id/trips` | 여행 목록 + 각 여행의 최신·확정 버전 요약 | 구성원 |
 | `POST /api/trips` | 여행 만들기 `{ groupId, title, date, mode: 'paste' \| 'scratch' }` | 구성원 |
-| `GET /api/trips/:id` | 여행 + 여행자 + 버전 목록(요약만) | 구성원 |
+| `GET /api/trips/:id` | 여행 + 여행자 + 버전 목록(요약만) + `initialVersion`(확정안, 없으면 최신안 전체 — stops 포함, 없으면 null) | 구성원 |
 | `PATCH /api/trips/:id` | 제목·날짜·이동수단·스타일·예산 | 구성원 |
 | `PUT /api/trips/:id/travelers` | 여행자 목록 통째로 저장 | 구성원 |
 | `PATCH /api/trips/:id/travelers/:tid` | 한 사람 고치기 (본인 계정과 연결된 여행자면 `filledBySelf: true`) | 구성원 |
@@ -53,6 +53,8 @@
 | `GET /api/trips/:id/share-text` | 확정 버전의 공유 글 | 구성원 |
 
 요청·응답 모양은 모두 `src/lib/contracts`에 zod로 정하고, 서버에서 검사한다.
+
+`GET /api/trips/:id`의 `initialVersion` **[결정: 11/2]** — 일정 화면이 처음 여는 안을 같이 보낸다(확정안, 없으면 최신안, 버전이 없으면 null). 여행을 받은 뒤 버전을 또 기다리지 않기 위해서다. 화면은 고른 안의 id가 이것과 같을 때만 쓰고, 다르면 `GET /api/trips/:id/versions/:vid`로 받는다.
 
 여행자 계정 연결("이 사람이 저예요") **[결정: 김경선 10/31]** — 화면 PR #10(`src/lib/plan/travelers.ts`)과 같은 규칙:
 - **한 계정은 한 여행에서 한 사람과만** 연결된다. 어기면 400 "한 계정은 한 사람과만 연결할 수 있어요"(화면 목업과 같은 문구).

@@ -181,7 +181,10 @@ export const mockApi: Api = {
     }),
     get: tripId => call(db => {
       const { trip } = requireTrip(db, tripId)
-      return { trip, travelers: db.travelers[tripId] ?? [], versions: versionsOf(db, tripId).map(v => summaryOf(db, v)) }
+      const versions = versionsOf(db, tripId)
+      // 일정 화면이 처음 여는 안: 확정안, 없으면 번호가 가장 큰 안, 버전이 없으면 null (trip-api.ts의 TripDetailSchema 설명과 같은 규칙)
+      const initialVersion = versions.find(v => v.id === trip.confirmedVersionId) ?? versions[versions.length - 1] ?? null
+      return { trip, travelers: db.travelers[tripId] ?? [], versions: versions.map(v => summaryOf(db, v)), initialVersion }
     }),
     update: (tripId, patch) => call(db => {
       const { trip } = requireTrip(db, tripId)

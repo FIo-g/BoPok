@@ -18,6 +18,7 @@ import {
   stop,
 } from '@/lib/auth/test-fixtures'
 import { GET as getTrip } from './[id]/route'
+import { POST as confirmVersionRoute } from './[id]/confirm/route'
 import { POST as postVersion } from './[id]/versions/route'
 import { GET as getVersionRoute } from './[id]/versions/[vid]/route'
 import { GET as getGroupTrips } from '../groups/[id]/trips/route'
@@ -229,5 +230,52 @@ describe('3단계에서 비워 둔 곳이 채워진다', () => {
       await readBody(await getTrip(requestWith(owner.cookie), routeParams({ id: tripId }))),
     )
     expect(detail.versions[0].madeByName).toBe('엄마')
+  })
+})
+
+describe('GET /api/trips/:id의 initialVersion (화면이 처음 여는 안)', () => {
+  const detailOf = async (cookie: string, tripId: string) =>
+    TripDetailSchema.parse(await readBody(await getTrip(requestWith(cookie), routeParams({ id: tripId }))))
+
+  it('버전이 하나도 없으면 null', async () => {
+    const { owner, tripId } = await tripFor()
+    const detail = await detailOf(owner.cookie, tripId)
+    expect(detail.initialVersion).toBeNull()
+  })
+
+  it('확정한 안이 없으면 번호가 가장 큰 최신안을 stops와 함께 보낸다', async () => {
+    const { owner, tripId } = await tripFor()
+    const first = await save(owner.cookie, tripId, { parentId: null, stops: twoStops, madeBy: 'user' })
+    const second = await save(owner.cookie, tripId, {
+      parentId: first.id,
+      stops: [twoStops[0]],
+      madeBy: 'quick_fix',
+    })
+
+    const detail = await detailOf(owner.cookie, tripId)
+    expect(detail.trip.confirmedVersionId).toBeNull()
+    expect(detail.initialVersion).toMatchObject({ id: second.id, number: 2 })
+    expect(detail.initialVersion?.stops.map(one => one.key)).toEqual(['s1'])
+  })
+
+  it('확정한 안이 있으면 최신안이 아니라 확정안을 보낸다', async () => {
+    const { owner, tripId } = await tripFor()
+    const first = await save(owner.cookie, tripId, { parentId: null, stops: twoStops, madeBy: 'user' })
+    await save(owner.cookie, tripId, { parentId: first.id, stops: [twoStops[0]], madeBy: 'quick_fix' })
+
+    const confirmed = await confirmVersionRoute(
+      jsonRequestWith({
+        method: 'POST',
+        cookie: owner.cookie,
+        body: { versionId: first.id },
+        path: '/api/trips/x/confirm',
+      }),
+      routeParams({ id: tripId }),
+    )
+    expect(confirmed.status).toBe(200)
+
+    const detail = await detailOf(owner.cookie, tripId)
+    expect(detail.initialVersion).toMatchObject({ id: first.id, number: 1 })
+    expect(detail.initialVersion?.stops.map(one => one.key)).toEqual(['s1', 's2'])
   })
 })

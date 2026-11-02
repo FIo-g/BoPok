@@ -1,7 +1,7 @@
 // 일정 버전 저장·조회. 담당: 김경선.
 // POST /api/trips/:id/versions(화면)과 createVersion(AI)이 같은 저장 함수를 쓴다.
 import 'server-only'
-import { and, asc, eq, inArray, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm'
 import type { JudgeSummary, SaveVersionRequest, Stop, TripVersion, VersionSummary } from '@/lib/contracts'
 import { HttpError } from '@/lib/auth/http'
 import type { Db } from '@/lib/db/client'
@@ -182,6 +182,25 @@ export async function getVersion(
     .limit(1)
   if (!row) throw new HttpError(404, 'not_found', '버전을 찾을 수 없어요')
   return toVersion(row)
+}
+
+// 여행 상세 화면이 처음 여는 안: 확정안이 있으면 그것, 없으면 번호가 가장 큰 최신안(stops 포함).
+// 버전이 하나도 없으면 null. getTripDetail이 다른 조회와 나란히 부르려고 따로 뺐다.
+// 확정 id는 trip_versions를 가리키는 외래키라, 확정 id가 있으면 그 줄은 반드시 있다.
+export async function getInitialVersion(
+  args: { tripId: string; confirmedVersionId: string | null },
+  db: Db = getDb(),
+): Promise<TripVersion | null> {
+  const condition = args.confirmedVersionId
+    ? and(eq(tripVersions.id, args.confirmedVersionId), eq(tripVersions.tripId, args.tripId))
+    : eq(tripVersions.tripId, args.tripId)
+  const [row] = await db
+    .select()
+    .from(tripVersions)
+    .where(condition)
+    .orderBy(desc(tripVersions.number))
+    .limit(1)
+  return row ? toVersion(row) : null
 }
 
 // 버전 전체(stops 포함) — AI가 쓰는 getTripContext용
