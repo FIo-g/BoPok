@@ -383,6 +383,9 @@ export function createDevDeps(seed?: { opinions?: Opinion[] }): AiDeps {
       const all = [...trips.values()].flatMap(devTrip => devTrip.opinions)
       return all.filter(opinion => opinion.versionId === versionId)
     },
+    async getChatMessages() {
+      return []
+    },
     createVersion,
     async saveTravelers(tripId, travelers) {
       const devTrip = trips.get(tripId)

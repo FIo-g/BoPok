@@ -1,9 +1,10 @@
 'use client'
 
-// ③ 그룹 채팅 — 담당 김경선 (설계 2026-11-02 6.2, 6.3). 화면이 보일 때 10초마다 새 글을 받는다.
+// ③ 그룹 채팅과 'AI에게 전달하기' — 담당 김경선 (설계 2026-11-02 6.2, 6.3). 화면이 보일 때 10초마다 새 글을 받는다.
 // 담당은 이 파일만 고친다. 일정 화면(TripScreen)은 고치지 않아도 된다.
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Button, Card, ErrorNotice, Spinner, TextInput } from '@/components/ui'
+import { aiFailure } from '@/lib/ai-fallback'
 import { api } from '@/lib/api-client'
 import { CHAT_TEXT_MAX, type ChatMessage } from '@/lib/contracts'
 import { errorMessage } from '@/lib/use-async'
@@ -12,10 +13,11 @@ import type { TripSlotProps } from './types'
 
 const CHAT_REFRESH_MS = 10_000
 
-export function ChatSlot({ tripId, userId }: TripSlotProps) {
+export function ChatSlot({ tripId, userId, versionId }: TripSlotProps) {
   const [messages, setMessages] = useState<ChatMessage[] | null>(null)
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
+  const [asking, setAsking] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const listRef = useRef<HTMLOListElement>(null)
   // 타이머 안에서 최신 글 목록을 보려고 ref에도 둔다
@@ -78,6 +80,21 @@ export function ChatSlot({ tripId, userId }: TripSlotProps) {
     }
   }
 
+  async function sendToAi() {
+    if (!versionId) return
+    setAsking(true)
+    setError(null)
+    try {
+      await api.ai.revise({ tripId, versionId, includeChat: true })
+      // 일정 화면의 버전 목록을 이 칸에서 바꿀 수 없어서 새로 열어 새 안을 보여 준다
+      window.location.reload()
+    } catch (e) {
+      const failure = aiFailure(e)
+      setError(failure.canPick ? 'AI가 지금 일정을 못 짰어요. 잠시 뒤에 다시 시도해 주세요.' : failure.message)
+      setAsking(false)
+    }
+  }
+
   return (
     <Card className="flex flex-col gap-3">
       <h2 className="text-xl font-extrabold">가족 대화</h2>
@@ -110,6 +127,12 @@ export function ChatSlot({ tripId, userId }: TripSlotProps) {
         />
         <Button type="submit" disabled={sending || text.trim() === ''}>보내기</Button>
       </form>
+      {versionId !== null && count > 0 && (
+        <div className="flex flex-wrap items-center gap-3 border-t border-line pt-3">
+          <Button variant="secondary" onClick={sendToAi} disabled={asking}>{asking ? 'AI가 다시 짜는 중…' : 'AI에게 전달하기'}</Button>
+          <p className="text-sm text-muted">대화를 읽고 새 안을 만들어요. 고치던 일정은 먼저 저장해 주세요.</p>
+        </div>
+      )}
     </Card>
   )
 }

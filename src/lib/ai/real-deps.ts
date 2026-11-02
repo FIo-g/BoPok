@@ -6,6 +6,7 @@ import { getLegsPartial } from '@/lib/geo/legs'
 import {
   createVersion,
   getOpinions,
+  listChatMessages,
   getTripContext,
   interviews,
   requireTripMember,
@@ -23,6 +24,7 @@ export function createRealDeps(overrides: Partial<AiDeps> = {}): AiDeps {
     // 함수 인자 끝의 db(테스트용)가 새어 들어가지 않게 화살표로 감싼다.
     getTripContext: tripId => getTripContext(tripId),
     getOpinions: versionId => getOpinions(versionId),
+    getChatMessages: tripId => listChatMessages({ tripId }),
     createVersion: (tripId, input) => createVersion(tripId, input),
     saveTravelers: (tripId, travelers) => saveTravelers(tripId, travelers),
     interviews: {
