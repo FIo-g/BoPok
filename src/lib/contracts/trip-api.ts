@@ -43,7 +43,8 @@ export const TripSchema = z.object({
   id: z.string(),
   groupId: z.string(),
   title: z.string().min(1).max(60),
-  date: DateSchema.nullish(),
+  date: DateSchema.nullish(), // 시작일
+  endDate: DateSchema.nullish(), // 끝나는 날. 없으면 당일 여행
   mode: StartModeSchema, // paste 붙여넣기 / scratch 처음부터
   transport: TripTransportSchema.nullish(),
   styles: z.array(TravelStyleSchema),
@@ -80,23 +81,37 @@ export const TripListItemSchema = z.object({
 })
 export type TripListItem = z.infer<typeof TripListItemSchema>
 
+// YYYY-MM-DD 문자열은 글자 순서가 날짜 순서와 같아 그대로 비교한다.
+// 둘 다 있을 때만 비교한다 — 한쪽만 온 수정 요청을 저장된 여행과 맞춰 보는 것은 서버 몫이다.
+function endsBeforeStart(trip: { date?: string | null; endDate?: string | null }): boolean {
+  return Boolean(trip.date && trip.endDate && trip.endDate < trip.date)
+}
+const endBeforeStartIssue = { message: '끝 날짜가 시작 날짜보다 빨라요', path: ['endDate'] }
+
 // POST /api/trips
-export const CreateTripRequestSchema = z.object({
-  groupId: z.string().min(1),
-  title: z.string().trim().min(1).max(60),
-  date: DateSchema.nullish(),
-  mode: StartModeSchema,
-})
+export const CreateTripRequestSchema = z
+  .object({
+    groupId: z.string().min(1),
+    title: z.string().trim().min(1).max(60),
+    date: DateSchema.nullish(),
+    endDate: DateSchema.nullish(),
+    mode: StartModeSchema,
+  })
+  .refine(trip => !endsBeforeStart(trip), endBeforeStartIssue)
 export type CreateTripRequest = z.infer<typeof CreateTripRequestSchema>
 
 // PATCH /api/trips/:id — 바꿀 칸만 보낸다
-export const UpdateTripRequestSchema = z.object({
-  title: z.string().trim().min(1).max(60),
-  date: DateSchema.nullable(),
-  transport: TripTransportSchema.nullable(),
-  styles: z.array(TravelStyleSchema),
-  budget: BudgetSchema.nullable(),
-}).partial()
+export const UpdateTripRequestSchema = z
+  .object({
+    title: z.string().trim().min(1).max(60),
+    date: DateSchema.nullable(),
+    endDate: DateSchema.nullable(),
+    transport: TripTransportSchema.nullable(),
+    styles: z.array(TravelStyleSchema),
+    budget: BudgetSchema.nullable(),
+  })
+  .partial()
+  .refine(patch => !endsBeforeStart(patch), endBeforeStartIssue)
 export type UpdateTripRequest = z.infer<typeof UpdateTripRequestSchema>
 
 // PUT /api/trips/:id/travelers — 여행자 목록 통째로

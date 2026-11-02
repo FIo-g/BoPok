@@ -18,5 +18,21 @@ export const StopSchema = z.object({
   skipSegmentIds: z.array(z.string()),
   detourMap: z.record(z.string(), z.string()), // 계단 구간 id → 우회로 구간 id
   restNodeIds: z.array(z.string()), // 쉬기로 한 쉼터
+  day: z.number().int().min(1).optional(), // 몇째 날인지. 없으면 1일차 (옛 일정은 이 칸 없이 저장돼 있다)
 })
 export type Stop = z.infer<typeof StopSchema>
+
+// day 칸이 없는 옛 일정도 1일차로 읽도록 기본값은 여기서 정한다 (스키마 default는 출력 타입을 필수로 바꿔 쓰지 않는다)
+export function stopDay(stop: Pick<Stop, 'day'>): number {
+  return stop.day ?? 1
+}
+
+// 그날 장소만, 일정에 저장된 순서 그대로
+export function stopsOfDay(stops: Stop[], day: number): Stop[] {
+  return stops.filter(stop => stopDay(stop) === day)
+}
+
+// 일정에 나오는 날짜 번호를 오름차순·중복 없이. 빈 일정이면 []
+export function tripDays(stops: Pick<Stop, 'day'>[]): number[] {
+  return [...new Set(stops.map(stopDay))].sort((a, b) => a - b)
+}

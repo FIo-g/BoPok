@@ -88,15 +88,18 @@ function isRealDate(value: string): boolean {
   return day >= 1 && day <= daysInMonth(year, month)
 }
 
+// 인터뷰의 날짜 칸: date는 시작일, endDate는 끝나는 날(여러 날 여행)이 같은 형식·달력 검사를 쓴다
+const InterviewDateSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine(isRealDate, { message: '없는 날짜예요' })
+
 // 인터뷰가 채운 칸. 이동수단은 인터뷰 답(3가지)이고 Stop.arriveBy는 7.3.1 규칙으로 정한다
 export const InterviewFilledSchema = z.object({
   mode: StartModeSchema,
   travelers: z.array(TravelerSchema),
-  date: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/)
-    .refine(isRealDate, { message: '없는 날짜예요' })
-    .optional(),
+  date: InterviewDateSchema.optional(),
+  endDate: InterviewDateSchema.optional(),
   startTime: TimeSchema.optional(),
   endTime: TimeSchema.optional(),
   transport: z.enum(['car', 'transit', 'taxi']).optional(),
