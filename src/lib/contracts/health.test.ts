@@ -17,8 +17,17 @@ describe('canSeeHealth — 건강 정보가 보이는 범위', () => {
   })
 
   it('본인만 + 계정 없는 여행자(할머니)는 대신 입력한 사람만', () => {
-    expect(canSeeHealth(self, 'u-son')).toBe(true)
-    expect(canSeeHealth(self, 'u-daughter')).toBe(false)
+    expect(canSeeHealth(self, 'u-son', null)).toBe(true)
+    expect(canSeeHealth(self, 'u-daughter', null)).toBe(false)
+  })
+
+  it('세 번째 인자를 빠뜨리면 컴파일 오류 (계정 없음은 null로 분명히 적는다)', () => {
+    // @ts-expect-error travelerUserId는 필수다 — undefined와 "계정 없음"을 헷갈리지 않게 하려는 것이다
+    canSeeHealth(self, 'u-son')
+  })
+
+  it('가족 모두면 계정 없는 여행자(null)여도 누구나 본다 (그룹 구성원인지는 API가 먼저 검사한다)', () => {
+    expect(canSeeHealth({ ...self, visibility: 'group' }, 'u-daughter', null)).toBe(true)
   })
 })
 
@@ -44,6 +53,7 @@ describe('건강 정보 입력', () => {
 
 describe('TravelerHealth — 저장 모양', () => {
   const health = {
+    tripId: 'trip1',
     travelerId: 't-mom',
     conditions: ['diabetes', 'hypertension'],
     medicationClasses: ['anticoagulant'],
@@ -58,11 +68,16 @@ describe('TravelerHealth — 저장 모양', () => {
     expect(TravelerHealthSchema.safeParse({ ...health, consentAt: undefined }).success).toBe(false)
   })
 
+  it('저장 키는 (tripId, travelerId)라 tripId가 꼭 있어야 한다', () => {
+    expect(TravelerHealthSchema.safeParse({ ...health, tripId: undefined }).success).toBe(false)
+    expect(TravelerHealthSchema.safeParse({ ...health, tripId: '' }).success).toBe(false)
+  })
+
   it('약봉투 사진 같은 칸을 담지 않는다 (읽고 바로 버린다)', () => {
     // 들어온 사진 칸은 파싱 결과에서 사라진다. 사진 데이터가 저장·응답으로 번지지 않게 하는 안전망.
     const parsed = TravelerHealthSchema.parse({ ...health, photo: 'data:image/jpeg;base64,AAAA' })
     expect(Object.keys(parsed).sort()).toEqual(
-      ['conditions', 'consentAt', 'enteredByUserId', 'medicationClasses', 'travelerId', 'visibility'],
+      ['conditions', 'consentAt', 'enteredByUserId', 'medicationClasses', 'travelerId', 'tripId', 'visibility'],
     )
   })
 })

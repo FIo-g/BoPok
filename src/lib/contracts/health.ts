@@ -28,7 +28,10 @@ export type MedicationClass = z.infer<typeof MedicationClassSchema>
 export const HealthVisibilitySchema = z.enum(['group', 'self'])
 export type HealthVisibility = z.infer<typeof HealthVisibilitySchema>
 
+// 저장 키는 (tripId, travelerId)다. travelerId는 여행 안에서만 유일하다 — 인터뷰가 t1, t2…로 만들고,
+// trip_travelers의 기본키도 (trip_id, id)이다. travelerId만 키로 쓰면 다른 여행의 건강 정보와 섞인다.
 export const TravelerHealthSchema = z.object({
+  tripId: z.string().min(1),
   travelerId: z.string(),
   conditions: z.array(HealthConditionSchema),
   medicationClasses: z.array(MedicationClassSchema),
@@ -48,11 +51,14 @@ export const TravelerHealthInputSchema = z.object({
 export type TravelerHealthInput = z.infer<typeof TravelerHealthInputSchema>
 
 // "본인만"이면 계정이 연결된 여행자가 우선이다 (대신 입력한 사람도 못 본다).
-// 계정이 없는 여행자는 대신 입력한 사람만 본다. travelerUserId는 여행자에 연결된 계정(Traveler.userId).
+// 계정이 없는 여행자는 대신 입력한 사람만 본다. travelerUserId는 여행자에 연결된 계정(Traveler.userId)이고,
+// 부르는 쪽은 `traveler.userId ?? null`을 넘긴다. 세 번째 인자를 꼭 받는 까닭: 생략(undefined)과
+// "계정 없음"(null)을 같게 두면, 여행자를 못 찾아 값이 빠진 실수도 조용히 "대신 입력한 사람이 본인"으로 읽힌다.
+// 'group'은 어떤 보는 사람이든 true다 — 그 사람이 이 그룹의 구성원인지는 API(route)가 먼저 검사한다.
 export function canSeeHealth(
   health: Pick<TravelerHealth, 'visibility' | 'enteredByUserId'>,
   viewerUserId: string,
-  travelerUserId?: string,
+  travelerUserId: string | null,
 ): boolean {
   if (health.visibility === 'group') return true
   return viewerUserId === (travelerUserId ?? health.enteredByUserId)
@@ -76,13 +82,15 @@ export const DietRuleSchema = z.discriminatedUnion('reasonKind', [
 export type DietRule = z.infer<typeof DietRuleSchema>
 
 // 엔진이 돌려주는 주의 결과. 띄우되 막지 않는다 (설계 4.4).
+// 서버는 주의 결과 "전체"를 canSeeHealth가 true인 사람에게만 내려준다. reason만 빼고 보내지 않는다 —
+// 문장(sentence)·음식 태그·travelerId만으로도 누가 무슨 병인지 드러나기 때문이다.
 export const DietCautionSchema = z.object({
   stopKey: z.string(),
   menuName: z.string().optional(),
   foodTag: FoodTagSchema,
   travelerId: z.string(),
   reasonKind: z.enum(['condition', 'medication']),
-  reason: z.string(), // 화면에 보일 이유 (예: '당뇨'). 보는 사람이 볼 수 있을 때만 서버가 내려준다
+  reason: z.string(), // 화면에 보일 이유 (예: '당뇨'). 위 규칙대로 볼 수 있는 사람에게만 내려간다
   sentence: z.string().min(1),
   source: z.string().min(1),
   checkedAt: z.string().min(1),
