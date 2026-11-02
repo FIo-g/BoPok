@@ -4,12 +4,15 @@
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRequireUser } from '@/components/AuthProvider'
+import { DayTabs } from '@/components/trip/DayTabs'
 import { TripMap } from '@/components/trip/TripMap'
 import { useJudged } from '@/components/trip/useJudged'
 import { Badge, Button, ButtonLink, Card, ErrorNotice, Notice, PageTitle, Spinner, VerdictBadge } from '@/components/ui'
 import { api } from '@/lib/api-client'
+import { stopsOfDay } from '@/lib/contracts'
 import { formatRange } from '@/lib/engine'
 import { TRANSPORT_TEXT, copyText, formatDate, formatRideMin, formatWalk, isWalkInfoMissing, madeByText, shareOrCopy, versionLabel } from '@/lib/format'
+import { tripDayList } from '@/lib/plan/trip-days'
 import { errorMessage, useAsync } from '@/lib/use-async'
 
 export function FinalScreen({ tripId }: { tripId: string }) {
@@ -19,10 +22,17 @@ export function FinalScreen({ tripId }: { tripId: string }) {
   const confirmedId = detail.data?.trip.confirmedVersionId ?? null
   const version = useAsync(() => api.trips.getVersion(tripId, confirmedId ?? ''), `final-ver:${tripId}:${confirmedId}`, enabled && confirmedId !== null)
   const share = useAsync(() => api.trips.shareText(tripId), `share:${tripId}:${confirmedId}`, enabled && confirmedId !== null)
-  const judged = useJudged(version.data?.stops, detail.data?.travelers)
+  // 여러 날이면 일정 화면처럼 고른 날만 판정·지도·목록으로 보여 준다. 공유 글은 모든 날이 들어간다
+  const [pickedDay, setPickedDay] = useState(1)
+  const allStops = version.data?.stops
+  const tripDates = detail.data?.trip
+  const days = useMemo(() => tripDayList({ date: tripDates?.date, endDate: tripDates?.endDate }, allStops ?? []), [tripDates?.date, tripDates?.endDate, allStops])
+  const day = days.includes(pickedDay) ? pickedDay : days[0]
+  const dayStops = useMemo(() => (allStops ? stopsOfDay(allStops, day) : undefined), [allStops, day])
+  const judged = useJudged(dayStops, detail.data?.travelers)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [notice, setNotice] = useState<{ tone: 'ok' | 'warn'; text: string } | null>(null)
-  const mapData = useMemo(() => (judged && version.data ? { stops: version.data.stops, places: judged.places, legs: judged.legs, result: judged.result } : null), [judged, version.data])
+  const mapData = useMemo(() => (judged && dayStops ? { stops: dayStops, places: judged.places, legs: judged.legs, result: judged.result } : null), [judged, dayStops])
 
   if (!user || detail.loading) return <Spinner />
   if (detail.error || !detail.data) return <div className="mx-auto max-w-3xl px-5 py-8"><ErrorNotice message={errorMessage(detail.error)} onRetry={detail.reload} /></div>
@@ -52,7 +62,7 @@ export function FinalScreen({ tripId }: { tripId: string }) {
     <div className="mx-auto w-full max-w-[96rem] px-5 py-6">
       <PageTitle
         title={trip.title}
-        sub={`${formatDate(trip.date)} · ${summary ? `${versionLabel(summary)} · ${madeByText(summary)}` : ''}${trip.confirmedByName ? ` · ${trip.confirmedByName}님이 확정했어요` : ''}`}
+        sub={`${formatDate(trip.date)}${trip.endDate && trip.endDate !== trip.date ? ` ~ ${formatDate(trip.endDate)}` : ''} · ${summary ? `${versionLabel(summary)} · ${madeByText(summary)}` : ''}${trip.confirmedByName ? ` · ${trip.confirmedByName}님이 확정했어요` : ''}`}
         actions={
           <>
             <Link href={`/groups/${trip.groupId}`} className="inline-flex min-h-12 items-center rounded-xl px-4 font-bold text-muted hover:bg-black/5">← 그룹으로</Link>
@@ -62,8 +72,9 @@ export function FinalScreen({ tripId }: { tripId: string }) {
       />
       <div className="grid gap-5 lg:grid-cols-2 lg:items-start">
         <div className="order-2 flex min-w-0 flex-col gap-4 lg:order-1">
-          {judged && version.data ? (
+          {judged && dayStops ? (
             <>
+              <DayTabs days={days} day={day} startDate={trip.date} onSelect={setPickedDay} />
               <Card className="flex flex-wrap items-center gap-3">
                 <Badge tone="ok">✓ 확정</Badge>
                 <VerdictBadge verdict={judged.result.verdict} />
@@ -76,7 +87,7 @@ export function FinalScreen({ tripId }: { tripId: string }) {
               </Card>
               <Card>
                 <ol className="divide-y divide-line">
-                  {version.data.stops.map((stop, index) => {
+                  {dayStops.map((stop, index) => {
                     const stopResult = judged.result.stops.find(s => s.stopKey === stop.key)
                     const leg = judged.result.legs.find(l => l.fromStopKey === stop.key)
                     const place = stop.placeId ? judged.places[stop.placeId] : undefined
