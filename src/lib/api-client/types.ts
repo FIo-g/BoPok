@@ -3,6 +3,8 @@
 import type {
   AcceptInviteResponse,
   Budget,
+  ChatListResponse,
+  ChatMessage,
   CreateGroupRequest,
   CreateTripRequest,
   DayFeedbackInput,
@@ -87,6 +89,11 @@ export interface Api {
     list(tripId: string): Promise<DayFeedbackListResponse>
     // 한 사람이 그날에 하나만 남긴다. 다시 보내면 덮어쓴다
     save(tripId: string, input: DayFeedbackInput): Promise<DayFeedbackItem>
+  }
+  chat: {
+    // after 시각 이후(같은 시각 포함)의 글. 없으면 최근 글. 이미 받은 글이 또 올 수 있어 id로 거른다
+    list(tripId: string, after?: string): Promise<ChatListResponse>
+    post(tripId: string, text: string): Promise<ChatMessage>
   }
   places: {
     list(query?: PlaceQuery): Promise<PlaceSummary[]>

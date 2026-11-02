@@ -30,6 +30,15 @@ describe('목업 API', () => {
     expect((await api.feedback.list('t-daejeon')).feedback).toHaveLength(1)
   })
 
+  it('채팅은 쓴 글이 목록에 나오고 다른 여행에는 보이지 않는다', async () => {
+    await loginDemo()
+    const message = await api.chat.post('t-daejeon', '  계단이 걱정돼요 ')
+
+    expect(message).toMatchObject({ text: '계단이 걱정돼요', userName: '오하연' })
+    expect((await api.chat.list('t-daejeon')).messages).toHaveLength(1)
+    expect((await api.chat.list('t-daejeon', '2999-01-01T00:00:00.000Z')).messages).toEqual([])
+  })
+
   it('틀린 비밀번호는 401', async () => {
     const error = await api.auth.signIn({ email: DEMO_EMAIL, password: 'wrong' }).catch((e: unknown) => e)
     expect(isApiError(error) && error.status).toBe(401)

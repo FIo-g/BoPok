@@ -2,6 +2,8 @@
 import { z } from 'zod'
 import {
   AcceptInviteResponseSchema,
+  ChatListResponseSchema,
+  ChatMessageSchema,
   DayFeedbackItemSchema,
   DayFeedbackListResponseSchema,
   ExplainResponseSchema,
@@ -86,6 +88,11 @@ export const realApi: Api = {
   feedback: {
     list: tripId => request(`/api/trips/${enc(tripId)}/feedback`, { schema: DayFeedbackListResponseSchema }),
     save: (tripId, input) => request(`/api/trips/${enc(tripId)}/feedback`, { method: 'PUT', body: input, schema: DayFeedbackItemSchema }),
+  },
+  chat: {
+    list: (tripId, after) =>
+      request(`/api/trips/${enc(tripId)}/chat${after ? `?after=${encodeURIComponent(after)}` : ''}`, { schema: ChatListResponseSchema }),
+    post: (tripId, text) => request(`/api/trips/${enc(tripId)}/chat`, { method: 'POST', body: { text }, schema: ChatMessageSchema }),
   },
   places: {
     list: (query = {}) => {
