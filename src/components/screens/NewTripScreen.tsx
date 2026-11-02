@@ -217,9 +217,10 @@ function InterviewStep({ tripId, onDone }: { tripId: string; onDone: () => void 
       setMessages(m => [...m, { role: 'assistant', text: res.text }])
       if (res.done) {
         // 서버 인터뷰는 여행자만 저장한다. 여행 칸은 화면이 PATCH로 저장 (docs/roles/frontend.md)
-        const { date, transport, styles: filledStyles, budget } = res.filled
+        const { date, endDate, transport, styles: filledStyles, budget } = res.filled
         const patch = {
           ...(date ? { date } : {}),
+          ...(endDate ? { endDate } : {}),
           ...(transport ? { transport } : {}),
           ...(filledStyles.length ? { styles: filledStyles } : {}),
           ...(budget ? { budget } : {}),

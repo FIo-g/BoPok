@@ -749,6 +749,65 @@ describe('날짜·시간·장소', () => {
     expect(must.state.filled.mustVisit).toEqual([{ name: '한밭수목원' }])
   })
 
+  describe('여행 기간 (trip_length)', () => {
+    const lengthState = (overrides: Record<string, unknown> = {}) =>
+      InterviewStateSchema.parse({
+        filled: {
+          mode: 'scratch',
+          travelers: [parentTraveler()],
+          styles: [],
+          date: '2026-11-28',
+          mustVisit: [],
+          fixTargets: [],
+          ...overrides,
+        },
+        cursor: { slot: 'trip_length', travelerIndex: 0, questionIndex: 0 },
+        history: [],
+      })
+
+    it('날짜 다음에 기간을 묻는다', async () => {
+      const state = InterviewStateSchema.parse({
+        ...lengthState(),
+        cursor: { slot: 'date', travelerIndex: 0, questionIndex: 0 },
+      })
+      const out = await applyAnswer(state, { choiceIndex: 0 }, { callJson: stubCallJson({}) })
+      expect(out.state.cursor.slot).toBe('trip_length')
+    })
+
+    it('당일치기면 끝 날짜를 두지 않고 다음 질문으로 간다', async () => {
+      const out = await applyAnswer(lengthState(), { choiceIndex: 0 }, { callJson: stubCallJson({}) })
+      expect(out.state.filled.endDate).toBeUndefined()
+      expect(out.state.cursor.slot).toBe('time')
+    })
+
+    it('2박 3일을 고르면 시작일 + 2일이 끝 날짜다 (달이 넘어가도)', async () => {
+      const out = await applyAnswer(lengthState({ date: '2026-11-29' }), { choiceIndex: 2 }, { callJson: stubCallJson({}) })
+      expect(out.state.filled.endDate).toBe('2026-12-01')
+    })
+
+    it.each([
+      ['4박 5일', '2026-12-02'],
+      ['4박5일', '2026-12-02'],
+      ['5일', '2026-12-02'],
+      ['1박 2일', '2026-11-29'],
+    ])('직접 적은 "%s"도 알아듣는다', async (text, endDate) => {
+      const out = await applyAnswer(lengthState(), { text }, { callJson: stubCallJson({}) })
+      expect(out.state.filled.endDate).toBe(endDate)
+    })
+
+    it('하루라고 적으면 앞서 정한 끝 날짜를 지운다', async () => {
+      const out = await applyAnswer(lengthState({ endDate: '2026-11-30' }), { text: '하루만요' }, { callJson: stubCallJson({}) })
+      expect(out.state.filled.endDate).toBeUndefined()
+    })
+
+    it.each(['글쎄요', '100박', '0일'])('알 수 없는 "%s"는 다시 묻는다', async text => {
+      const out = await applyAnswer(lengthState(), { text }, { callJson: stubCallJson({}) })
+      expect(out.retryText).toBeDefined()
+      expect(out.state.cursor.slot).toBe('trip_length')
+      expect(out.state.filled.endDate).toBeUndefined()
+    })
+  })
+
   // 데모 버그 11/2: 예약 시간을 말하지 않았는데 AI가 reservedAt에 00:00을 채워 넣었다.
   it('꼭 갈 곳의 예약 시간이 출발~귀가 밖이면 예약 시간을 버림', async () => {
     const planted = InterviewStateSchema.parse({

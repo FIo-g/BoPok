@@ -194,6 +194,16 @@ const BUDGET_CHOICES = [
 const FIX_TARGET_CHOICES = ['전체적으로 덜 걷게', '계단을 피하게', '쉬는 곳을 넣게']
 const DATE_CHOICES = ['이번 주말', '다음 주말']
 
+// 여행 기간. nights가 0이면 당일 여행이라 끝 날짜를 두지 않는다
+const TRIP_LENGTH_CHOICES = [
+  { label: '당일치기', nights: 0 },
+  { label: '1박 2일', nights: 1 },
+  { label: '2박 3일', nights: 2 },
+  { label: '3박 4일', nights: 3 },
+] as const
+// 직접 입력의 상한. 일정 화면의 날짜 탭 상한(30일)과 맞춘다
+const TRIP_NIGHTS_MAX = 29
+
 // AI가 돌려줄 모양. 걷는 시간·거리 칸은 두지 않는다
 const TravelersAiSchema = z.object({
   travelers: z
@@ -334,6 +344,8 @@ export function currentQuestion(state: InterviewState): { slot: InterviewSlot; t
     }
     case 'date':
       return { slot, text: '언제 가세요?', choices: [...DATE_CHOICES] }
+    case 'trip_length':
+      return { slot, text: '며칠 다녀오세요?', choices: TRIP_LENGTH_CHOICES.map(c => c.label) }
     case 'time':
       return { slot, text: '몇 시쯤 출발해서 몇 시쯤 돌아오실까요?', choices: TIME_CHOICES.map(c => c.label) }
     case 'transport':
@@ -356,6 +368,17 @@ function textToChoice(text: string, choices: readonly string[]): number | null {
   const t = stripSpaces(text)
   const exact = choices.findIndex(c => stripSpaces(c) === t)
   return exact >= 0 ? exact : null
+}
+
+// '4박 5일', '5일', '하루'처럼 직접 적은 기간을 몇 박인지로 바꾼다. 모르겠으면 null
+// AI에게 묻지 않는다 — 글자만 봐도 알 수 있고, 날짜는 틀리면 일정 전체가 어긋난다
+function parseTripNights(text: string): number | null {
+  const t = stripSpaces(text)
+  if (/당일|하루/.test(t)) return 0
+  const nights = t.match(/(\d+)박/)
+  const days = t.match(/(\d+)일/)
+  const value = nights ? Number(nights[1]) : days ? Number(days[1]) - 1 : null
+  return value !== null && value >= 0 && value <= TRIP_NIGHTS_MAX ? value : null
 }
 
 function toDateString(date: Date): string {
@@ -731,6 +754,22 @@ export async function applyAnswer(
       } else {
         return { state }
       }
+      return next({ slot: 'trip_length', travelerIndex: 0, questionIndex: 0 })
+    }
+
+    case 'trip_length': {
+      let nights: number | null
+      if (answer.choiceIndex !== undefined) {
+        nights = TRIP_LENGTH_CHOICES[answer.choiceIndex]?.nights ?? null
+      } else if (answer.text !== undefined) {
+        const picked = textToChoice(answer.text, TRIP_LENGTH_CHOICES.map(c => c.label))
+        nights = picked !== null ? TRIP_LENGTH_CHOICES[picked]!.nights : parseTripNights(answer.text)
+      } else {
+        return { state }
+      }
+      if (nights === null || !filled.date) return retry
+      if (nights > 0) filled.endDate = addDaysYmd(filled.date, nights)
+      else delete filled.endDate
       return next({ slot: 'time', travelerIndex: 0, questionIndex: 0 })
     }
 
