@@ -129,7 +129,22 @@ describe('공유 글 형식', () => {
     const run = await judgeStops({ stops, travelers }, depsWith(place))
     const text = buildShareText({ trip, version: versionOf(stops), run })
 
-    expect(text).toContain('↓ 자가용 이동 약 15분')
+    expect(text).toContain('↓ 자가용 이동 약 15분 · 추정치')
+  })
+
+  it('아주 가까운 탈것 구간은 "약 0분"이 아니라 "약 1분 이내"로 나온다', async () => {
+    const place = hanbat
+    const stops = [
+      stop({ key: 's1', name: '한밭수목원', placeId: place.id }),
+      stop({ key: 's2', name: '대전시립미술관', arriveBy: 'car', coord: [127.385, 36.3315] }),
+    ]
+    const run = await judgeStops({ stops, travelers }, depsWith(place))
+    // TMAP은 아주 가까운 구간을 0.3분처럼 준다
+    const result = { ...run.result!, legs: run.result!.legs.map(leg => ({ ...leg, rideMin: 0.3 })) }
+    const text = buildShareText({ trip, version: versionOf(stops), run: { ...run, result } })
+
+    expect(text).toContain('↓ 자가용 이동 약 1분 이내 · 추정치')
+    expect(text).not.toContain('약 0분')
   })
 
   it('전화번호가 있는 장소는 연락처로 나온다', async () => {
