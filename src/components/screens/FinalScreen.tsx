@@ -5,6 +5,7 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRequireUser } from '@/components/AuthProvider'
 import { DayTabs } from '@/components/trip/DayTabs'
+import { SatisfactionSlot } from '@/components/trip/slots/SatisfactionSlot'
 import { TripMap } from '@/components/trip/TripMap'
 import { useJudged } from '@/components/trip/useJudged'
 import { Badge, Button, ButtonLink, Card, ErrorNotice, Notice, PageTitle, Spinner, VerdictBadge } from '@/components/ui'
@@ -122,6 +123,8 @@ export function FinalScreen({ tripId }: { tripId: string }) {
                 </ol>
               </Card>
               <Notice tone="warn">출발 전에 각 장소의 운영 여부를 꼭 확인하세요. 걷는 시간은 모두 추정치예요.</Notice>
+              {/* 확정한 여행은 그룹 화면에서 이 화면으로 온다. 날짜 탭과 같은 자리에 있어야 고른 날을 묻는다 */}
+              <SatisfactionSlot tripId={tripId} day={day} stops={dayStops} result={judged.result} travelers={detail.data.travelers} places={judged.places} versionId={confirmedId} userId={user.id} />
             </>
           ) : version.error ? (
             <ErrorNotice message={errorMessage(version.error)} onRetry={version.reload} />

@@ -7,7 +7,7 @@ import { Button, Card, Chip, ErrorNotice, Notice, TextInput } from '@/components
 import { api } from '@/lib/api-client'
 import type { DayFeedbackItem } from '@/lib/contracts'
 import { errorMessage, useAsync } from '@/lib/use-async'
-import { dayHasArrived, feedbackQuestion, localToday } from './satisfaction-state'
+import { dayHasArrived, feedbackQuestion, localToday, matchesSaved, savedFeedbackKey } from './satisfaction-state'
 import type { TripSlotProps } from './types'
 
 const COMMENT_MAX = 100
@@ -29,6 +29,21 @@ function FeedbackForm({ tripId, day, mine, onSaved }: { tripId: string; day: num
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
+
+  // 저장된 값이 다른 곳에서 바뀌면 입력을 그 값으로 맞춘다. 일정 화면과 확정 화면은 숨겨진 채 상태가 남아서,
+  // 맞추지 않으면 옛 점수가 보이고 '고치기'를 누를 때 새 값을 덮어쓴다
+  const savedKey = savedFeedbackKey(mine)
+  const [seenKey, setSeenKey] = useState(savedKey)
+  if (savedKey !== seenKey) {
+    setSeenKey(savedKey)
+    // 방금 여기서 저장한 값이면 입력이 같으므로 '남겼어요'를 그대로 둔다
+    if (!matchesSaved(mine, score, comment)) {
+      setScore(mine?.score ?? null)
+      setComment(mine?.comment ?? '')
+      setSaved(false)
+      setError(null)
+    }
+  }
 
   async function save() {
     if (score === null) return
@@ -54,6 +69,7 @@ function FeedbackForm({ tripId, day, mine, onSaved }: { tripId: string; day: num
           <Chip
             key={one.score}
             selected={score === one.score}
+            disabled={busy} // 저장 응답을 기다리는 동안 고친 값이 응답으로 되돌아가지 않게 막는다
             onClick={() => {
               setScore(one.score)
               setSaved(false)
@@ -64,7 +80,7 @@ function FeedbackForm({ tripId, day, mine, onSaved }: { tripId: string; day: num
         ))}
       </div>
       <div>
-        <TextInput value={comment} maxLength={COMMENT_MAX} onChange={e => {
+        <TextInput value={comment} maxLength={COMMENT_MAX} disabled={busy} onChange={e => {
             setComment(e.target.value)
             setSaved(false)
           }} placeholder="한 줄 남기기 (선택, 100자까지)" aria-label="한 줄 남기기" />

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { dayHasArrived, feedbackQuestion, localToday } from './satisfaction-state'
+import { dayHasArrived, feedbackQuestion, localToday, matchesSaved, savedFeedbackKey } from './satisfaction-state'
 
 describe('dayHasArrived', () => {
   it('그날 전에는 묻지 않고, 그날부터 묻는다', () => {
@@ -32,5 +32,36 @@ describe('feedbackQuestion', () => {
 describe('localToday', () => {
   it('기기 시간대의 날짜를 쓴다', () => {
     expect(localToday(new Date(2026, 10, 3, 0, 30))).toBe('2026-11-03')
+  })
+})
+
+describe('savedFeedbackKey', () => {
+  it('점수나 한 줄이 바뀌면 달라진다', () => {
+    expect(savedFeedbackKey({ score: 3 })).not.toBe(savedFeedbackKey({ score: 5 }))
+    expect(savedFeedbackKey({ score: 3, comment: '좋아요' })).not.toBe(savedFeedbackKey({ score: 3 }))
+  })
+
+  it('한 줄이 없을 때 null과 undefined는 같다', () => {
+    expect(savedFeedbackKey({ score: 3, comment: null })).toBe(savedFeedbackKey({ score: 3 }))
+  })
+
+  it('저장된 값이 없으면 빈 글자다', () => {
+    expect(savedFeedbackKey(undefined)).toBe('')
+  })
+})
+
+describe('matchesSaved', () => {
+  it('저장 직후처럼 값이 같으면 true (앞뒤 공백은 무시)', () => {
+    expect(matchesSaved({ score: 5, comment: '좋아요' }, 5, ' 좋아요 ')).toBe(true)
+    expect(matchesSaved({ score: 5, comment: null }, 5, '')).toBe(true)
+  })
+
+  it('다른 화면에서 값이 바뀌면 false', () => {
+    expect(matchesSaved({ score: 5, comment: '좋아요' }, 3, '좋아요')).toBe(false)
+    expect(matchesSaved({ score: 5, comment: '좋아요' }, 5, '')).toBe(false)
+  })
+
+  it('저장된 값이 없고 입력도 없으면 true', () => {
+    expect(matchesSaved(undefined, null, '')).toBe(true)
   })
 })
