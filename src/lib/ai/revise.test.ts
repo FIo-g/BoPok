@@ -50,7 +50,7 @@ function opinion(overrides: Partial<Opinion> & { id: string; versionId: string }
 
 // AI가 돌려줄 모양 그대로 — 가짜 callJson은 스키마로 검사해 돌려준다.
 type AiPayload = {
-  stops: { placeId: string | null; name: string; startTime?: string; reservedAt?: string; seated?: boolean }[]
+  stops: { placeId: string | null; name: string; day?: number; startTime?: string; reservedAt?: string; seated?: boolean }[]
   appliedOpinionIds: string[]
   note?: string
 }
@@ -91,6 +91,217 @@ async function setup(opts: {
 const hanbatMust = () =>
   stop({ key: 'k1', placeId: 'hanbat', name: '한밭수목원', mustVisit: true, reservedAt: '14:00' })
 const scienceStop = () => stop({ key: 'k2', placeId: 'science', name: '국립중앙과학관' })
+
+describe('여러 날 일정 다시 짜기', () => {
+  const twoDayStops = () => [
+    stop({ key: 'k1', placeId: 'hanbat', name: '한밭수목원' }),
+    stop({ key: 'k2', placeId: 'science', name: '국립중앙과학관', day: 2 }),
+  ]
+  const opinions = [opinion({ id: 'o1', versionId: 'v1' })]
+
+  async function revised(ai: AiPayload, versionStops = twoDayStops()) {
+    const { deps, versionId, calls } = await setup({ versionStops, opinions, ai: [ai] })
+    const response = await handleRevise(makeRequest({ tripId: 'trip-dev', versionId }), deps)
+    expect(response.status).toBe(200)
+    const body = ReviseResponseSchema.parse(await response.json())
+    return { stops: body.version.stops, prompt: calls[0]! }
+  }
+
+  it('AI가 날을 안 줘도 원래 날에 남는다 (1일차로 합쳐지지 않는다)', async () => {
+    const { stops } = await revised({
+      stops: [{ placeId: 'hanbat', name: '한밭수목원' }, { placeId: 'science', name: '국립중앙과학관' }],
+      appliedOpinionIds: ['o1'],
+    })
+    expect(stops.map(one => one.day ?? 1)).toEqual([1, 2])
+  })
+
+  it('AI가 날을 옮기면 따르고, 날짜 순서로 놓는다', async () => {
+    const { stops } = await revised({
+      stops: [
+        { placeId: 'science', name: '국립중앙과학관', day: 1 },
+        { placeId: 'hanbat', name: '한밭수목원', day: 2 },
+      ],
+      appliedOpinionIds: ['o1'],
+    })
+    expect(stops.map(one => [one.name, one.day ?? 1])).toEqual([['국립중앙과학관', 1], ['한밭수목원', 2]])
+  })
+
+  it('일정에 없는 날을 주면 마지막 날로 둔다', async () => {
+    const { stops } = await revised({
+      stops: [
+        { placeId: 'hanbat', name: '한밭수목원', day: 1 },
+        { placeId: 'science', name: '국립중앙과학관', day: 9 },
+      ],
+      appliedOpinionIds: ['o1'],
+    })
+    expect(stops.map(one => one.day ?? 1)).toEqual([1, 2])
+  })
+
+  it('날에 이상한 값이 와도 일정을 버리지 않고 원래 날에 둔다', async () => {
+    const { stops } = await revised({
+      stops: [
+        { placeId: 'hanbat', name: '한밭수목원', day: 0 },
+        { placeId: 'science', name: '국립중앙과학관', day: 1.5 },
+      ],
+      appliedOpinionIds: ['o1'],
+    })
+    expect(stops.map(one => one.day ?? 1)).toEqual([1, 2])
+  })
+
+  it('꼭 갈 곳·예약은 AI가 날을 옮겨도 원래 날에 둔다', async () => {
+    const { stops } = await revised(
+      {
+        stops: [
+          { placeId: 'hanbat', name: '한밭수목원', day: 2 },
+          { placeId: 'science', name: '국립중앙과학관', day: 2 },
+        ],
+        appliedOpinionIds: ['o1'],
+      },
+      [
+        stop({ key: 'k1', placeId: 'hanbat', name: '한밭수목원', mustVisit: true, reservedAt: '14:00' }),
+        stop({ key: 'k2', placeId: 'science', name: '국립중앙과학관', day: 2 }),
+      ],
+    )
+    expect(stops.find(one => one.name === '한밭수목원')?.day ?? 1).toBe(1)
+  })
+
+  it('AI가 어떤 날을 통째로 빼면 그날 장소를 되살린다', async () => {
+    const { stops } = await revised({
+      stops: [{ placeId: 'hanbat', name: '한밭수목원', day: 1 }],
+      appliedOpinionIds: ['o1'],
+    })
+    expect(stops.map(one => [one.name, one.day ?? 1])).toEqual([['한밭수목원', 1], ['국립중앙과학관', 2]])
+  })
+
+  it('AI가 모든 장소를 한 날로 합치면 비는 날의 장소를 원래 날로 돌린다', async () => {
+    const { stops } = await revised({
+      stops: [
+        { placeId: 'hanbat', name: '한밭수목원', day: 1 },
+        { placeId: 'science', name: '국립중앙과학관', day: 1 },
+      ],
+      appliedOpinionIds: ['o1'],
+    })
+    expect(stops.map(one => [one.name, one.day ?? 1])).toEqual([['한밭수목원', 1], ['국립중앙과학관', 2]])
+  })
+
+  it('같은 꼭 갈 곳을 두 날 들르는데 AI가 하나만 돌려줘도 두 방문이 남는다', async () => {
+    const { stops } = await revised(
+      {
+        stops: [
+          { placeId: 'hanbat', name: '한밭수목원', day: 1 },
+          { placeId: 'science', name: '국립중앙과학관', day: 2 },
+        ],
+        appliedOpinionIds: ['o1'],
+      },
+      [
+        stop({ key: 'k1', placeId: 'hanbat', name: '한밭수목원', mustVisit: true }),
+        stop({ key: 'k2', placeId: 'hanbat', name: '한밭수목원', mustVisit: true, day: 2 }),
+        stop({ key: 'k3', placeId: 'science', name: '국립중앙과학관', day: 2 }),
+      ],
+    )
+    expect(stops.filter(one => one.name === '한밭수목원').map(one => one.day ?? 1).sort()).toEqual([1, 2])
+  })
+
+  it('예약이 같은 장소의 다른 날 방문에 붙지 않는다', async () => {
+    const { stops } = await revised(
+      {
+        stops: [
+          { placeId: 'hanbat', name: '한밭수목원', day: 1 },
+          { placeId: 'hanbat', name: '한밭수목원', day: 2, startTime: '15:00' },
+        ],
+        appliedOpinionIds: ['o1'],
+      },
+      [
+        stop({ key: 'k1', placeId: 'hanbat', name: '한밭수목원' }),
+        stop({ key: 'k2', placeId: 'hanbat', name: '한밭수목원', reservedAt: '15:00', startTime: '15:00', day: 2 }),
+      ],
+    )
+    expect(stops.map(one => [one.day ?? 1, one.reservedAt])).toEqual([[1, undefined], [2, '15:00']])
+  })
+
+  it('되돌린 예약은 그날 시간 순서에 놓인다 (다른 날 시간과 비교하지 않는다)', async () => {
+    const after = () => ({ placeId: 'science', name: '국립중앙과학관', day: 2, startTime: '11:00' })
+    const before = () => ({ placeId: null, name: '점심', seated: true, day: 2, startTime: '09:00' })
+    const first = { placeId: null, name: '카페', seated: true, day: 1, startTime: '14:00' }
+    const answer: AiPayload = { stops: [first, before(), after()], appliedOpinionIds: ['o1'] }
+    const { stops } = await revised(answer, [
+      stop({ key: 'k1', placeId: null, name: '카페', seated: true, startTime: '14:00' }),
+      stop({ key: 'k2', placeId: null, name: '점심', seated: true, startTime: '09:00', day: 2 }),
+      stop({ key: 'k3', placeId: 'hanbat', name: '한밭수목원', reservedAt: '10:00', startTime: '10:00', day: 2 }),
+      stop({ key: 'k4', placeId: 'science', name: '국립중앙과학관', startTime: '11:00', day: 2 }),
+    ])
+    const second = stops.filter(one => one.day === 2).map(one => one.startTime)
+    expect(second).toEqual(['09:00', '10:00', '11:00'])
+  })
+
+  it('다른 날로 옮긴 장소는 그날 첫 장소의 이동수단을 예전 값으로 덮지 않는다', async () => {
+    const { stops } = await revised(
+      {
+        stops: [
+          { placeId: 'hanbat', name: '한밭수목원', day: 1 },
+          { placeId: null, name: '카페', seated: true, day: 2 },
+          { placeId: 'science', name: '국립중앙과학관', day: 2 },
+        ],
+        appliedOpinionIds: ['o1'],
+      },
+      [
+        stop({ key: 'k1', placeId: 'hanbat', name: '한밭수목원', arriveBy: 'car' }),
+        stop({ key: 'k2', placeId: null, name: '카페', seated: true, arriveBy: 'walk' }),
+        stop({ key: 'k3', placeId: 'science', name: '국립중앙과학관', arriveBy: 'car', day: 2 }),
+      ],
+    )
+    expect(stops.find(one => one.name === '카페')).toMatchObject({ day: 2, arriveBy: 'car' })
+  })
+
+  it('하루 일정에 AI가 다른 날을 주어도 날을 만들지 않고 순서를 지킨다', async () => {
+    const { stops } = await revised(
+      {
+        stops: [
+          { placeId: 'hanbat', name: '한밭수목원', day: 3 },
+          { placeId: 'science', name: '국립중앙과학관', day: 1 },
+        ],
+        appliedOpinionIds: ['o1'],
+      },
+      [stop({ key: 'k1', placeId: 'hanbat', name: '한밭수목원' }), scienceStop()],
+    )
+    expect(stops.map(one => one.name)).toEqual(['한밭수목원', '국립중앙과학관'])
+    expect(stops.every(one => one.day === undefined)).toBe(true)
+  })
+
+  it('프롬프트에 일차가 나오고 day를 넣으라고 알려 준다', async () => {
+    const { prompt } = await revised({
+      stops: [{ placeId: 'hanbat', name: '한밭수목원' }, { placeId: 'science', name: '국립중앙과학관' }],
+      appliedOpinionIds: ['o1'],
+    })
+    expect(prompt).toContain('2일차, 이름: 국립중앙과학관')
+    expect(prompt).toContain('"day"')
+  })
+
+  it('하루짜리 일정은 프롬프트와 저장 모양이 그대로다', async () => {
+    const { stops, prompt } = await revised(
+      { stops: [{ placeId: 'hanbat', name: '한밭수목원' }], appliedOpinionIds: ['o1'] },
+      [stop({ key: 'k1', placeId: 'hanbat', name: '한밭수목원' })],
+    )
+    expect(prompt).not.toContain('일차')
+    expect(stops[0]).not.toHaveProperty('day')
+  })
+
+  it('날을 넘어가는 경로를 묻지 않는다', async () => {
+    const { deps, versionId } = await setup({
+      versionStops: twoDayStops(),
+      opinions,
+      ai: [{ stops: [{ placeId: 'hanbat', name: '한밭수목원' }, { placeId: 'science', name: '국립중앙과학관' }], appliedOpinionIds: ['o1'] }],
+    })
+    const asked: string[] = []
+    const getLegs: AiDeps['getLegs'] = async requests => {
+      asked.push(...requests.map(request => `${request.from.placeId}>${request.to.placeId}`))
+      return deps.getLegs(requests)
+    }
+
+    await handleRevise(makeRequest({ tripId: 'trip-dev', versionId }), { ...deps, getLegs })
+    expect(asked).not.toContain('hanbat>science')
+  })
+})
 
 describe('handleRevise', () => {
   it('꼭 갈 곳·예약은 유지(AI가 빼도 되돌림)', async () => {

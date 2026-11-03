@@ -42,6 +42,7 @@ export const INTERVIEW_SLOTS = [
   'traveler_condition_gate',
   'traveler_condition',
   'date',
+  'trip_length',
   'time',
   'transport',
   'styles',

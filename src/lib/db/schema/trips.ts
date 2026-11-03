@@ -18,6 +18,8 @@ export const trips = pgTable(
     title: text('title').notNull(),
     // 'YYYY-MM-DD' 문자열로 주고받는다 (mode: 'string'). Date 객체로 받으면 시간대 때문에 날짜가 하루 밀린다
     date: date('date', { mode: 'string' }),
+    // 끝나는 날. 비어 있으면 당일 여행이다 (설계 2026-11-02 4.2)
+    endDate: date('end_date', { mode: 'string' }),
     startMode: text('start_mode', { enum: ['paste', 'scratch'] }).notNull(), // 계약의 mode
     transport: text('transport', { enum: ['car', 'transit', 'taxi'] }),
     styles: text('styles').array().notNull().default([]),
