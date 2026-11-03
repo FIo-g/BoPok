@@ -48,10 +48,10 @@ export function HealthSlot(props: TripSlotProps) {
       </div>
       <p className="text-muted">의학적 조언이 아니에요. 의사·약사와 상의해 주세요</p>
 
-      {view.kind === 'no_menus' && <Notice tone="info">이날 일정에는 메뉴 정보가 있는 곳이 없어 식단 주의를 확인하지 못했어요 (참고용)</Notice>}
+      {view.kind === 'no_menus' && <Notice tone="info">이날 일정에는 음식 종류가 확인된 메뉴가 없어 식단 주의를 확인하지 못했어요 (참고용)</Notice>}
       {view.kind === 'no_cautions' && <Notice tone="info">등록된 주의 정보 없음 (참고용) — 주의 규칙 표에 있는 조합만 알려 드려요</Notice>}
       {view.kind !== 'no_menus' && view.uncheckedMeals.length > 0 && (
-        <Notice tone="info">메뉴 정보가 없어 확인하지 못한 식사 자리: {view.uncheckedMeals.join(', ')}</Notice>
+        <Notice tone="info">메뉴·음식 종류 정보가 없어 확인하지 못한 식사 자리: {view.uncheckedMeals.join(', ')}</Notice>
       )}
       {view.kind === 'cautions' && (
         <div className="flex flex-col gap-4">
