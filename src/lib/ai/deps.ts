@@ -2,7 +2,7 @@
 // 이름·인자는 역할 문서(account-trip.md, data-geo.md)에서 그대로 왔다.
 // 실제 실행은 real-deps.ts가 실제 함수로 채우고, 테스트는 같은 모양의 개발용 가짜(dev-deps.ts)를 쓴다.
 import 'server-only'
-import type { Budget, FoodTag, Opinion, PlaceDetail, PlaceSummary, Transport, Traveler, TripVersion, Coord } from '@/lib/contracts'
+import type { ChatMessage, Budget, FoodTag, Opinion, PlaceDetail, PlaceSummary, Transport, Traveler, TripVersion, Coord } from '@/lib/contracts'
 import type { StartMode, InterviewState, AiFallback, ApiErrorCode } from '@/lib/contracts'
 import type { Stop, Leg, LegRequest } from '@/lib/contracts'
 import type { callJson } from './client'
@@ -43,6 +43,8 @@ export interface AiDeps {
   requireTripMember(request: Request, tripId: string): Promise<SessionUser>
   getTripContext(tripId: string): Promise<TripContext>
   getOpinions(versionId: string): Promise<Opinion[]>
+  // 김경선 — "AI에게 전달하기"가 읽는 가족 대화. 오래된 글이 먼저다
+  getChatMessages(tripId: string): Promise<ChatMessage[]>
   createVersion(tripId: string, input: CreateVersionInput): Promise<TripVersion>
   // 김경선 — 인터뷰가 채운 여행자를 저장한다
   saveTravelers(tripId: string, travelers: Traveler[]): Promise<void>

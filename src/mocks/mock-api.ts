@@ -368,6 +368,10 @@ export const mockApi: Api = {
     }),
     revise: input => call(db => {
       const { trip } = requireTrip(db, input.tripId)
+      // 서버와 같은 규칙: 반영할 의견도 전달할 대화도 없으면 400
+      const pending = db.opinions.some(o => o.versionId === input.versionId && !o.appliedInVersionId)
+      const hasChat = Boolean(input.includeChat) && db.chat.some(message => message.tripId === trip.id)
+      if (!pending && !hasChat) fail(400, 'invalid_request', input.includeChat ? '반영할 의견이나 대화가 없어요' : '반영할 의견이 없어요')
       return mockRevise(trip, input.versionId, db.travelers[trip.id] ?? [])
     }),
     explain: input => call(db => {

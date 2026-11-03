@@ -7,6 +7,7 @@ import { avoidFoodTagsForTrip } from '@/lib/health'
 import {
   createVersion,
   getOpinions,
+  listChatMessages,
   getTripContext,
   interviews,
   requireTripMember,
@@ -24,6 +25,7 @@ export function createRealDeps(overrides: Partial<AiDeps> = {}): AiDeps {
     // 함수 인자 끝의 db(테스트용)가 새어 들어가지 않게 화살표로 감싼다.
     getTripContext: tripId => getTripContext(tripId),
     getOpinions: versionId => getOpinions(versionId),
+    getChatMessages: tripId => listChatMessages({ tripId }),
     createVersion: (tripId, input) => createVersion(tripId, input),
     saveTravelers: (tripId, travelers) => saveTravelers(tripId, travelers),
     // 김태형 health: 일행 전체의 병·약에서 음식 태그만 모은다 (db 인자가 새어 들어가지 않게 감싼다)
