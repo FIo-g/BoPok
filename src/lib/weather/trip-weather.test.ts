@@ -32,7 +32,15 @@ function fakeFetch(route: Route) {
   })
 }
 
+// 특보현황: 지금 대전에 한파주의보, 11/4 아침 대설 예비특보 (기상특보 가이드 예제 모양)
+const alertBody = () =>
+  kmaJson([
+    { tmFc: '202611030900', tmSeq: 3, tmEf: '202611031000', t6: 'o 한파주의보 : 대전, 세종  o 풍랑주의보 : 서해중부먼바다', t7: '(1) 대설 예비특보 o 11월 04일 아침 : 대전, 충청남도', other: 'o 없음' },
+    { tmFc: '202611020900', tmSeq: 2, tmEf: '202611021000', t6: 'o 폭염경보 : 대전', t7: 'o 없음', other: 'o 없음' },
+  ])
+
 const okRoute: Route = url => {
+  if (url.pathname.endsWith('/getPwnStatus')) return { body: alertBody() }
   if (url.pathname.endsWith('/getVilageFcst')) return { body: shortBody() }
   if (url.pathname.endsWith('/getMidLandFcst')) return { body: kmaJson([MID_LAND_0600]) }
   if (url.pathname.endsWith('/getMidTa')) return { body: kmaJson([MID_TA_0600]) }
@@ -91,7 +99,31 @@ describe('tripWeather', () => {
     const fetchFn = fakeFetch(okRoute)
     await tripWeather({ date: '2026-11-04' }, depsWith(fetchFn))
     await tripWeather({ date: '2026-11-05' }, depsWith(fetchFn))
-    expect(fetchFn).toHaveBeenCalledTimes(1)
+    const paths = fetchFn.mock.calls.map(([url]) => new URL(url).pathname.split('/').at(-1))
+    expect(paths.sort()).toEqual(['getPwnStatus', 'getVilageFcst'])
+  })
+
+  it('발효 중인 특보는 오늘에만, 예비특보는 그 날짜에 붙고, 가장 최근 특보현황을 쓴다', async () => {
+    const fetchFn = fakeFetch(okRoute)
+    const res = await tripWeather({ date: '2026-11-03', endDate: '2026-11-05' }, depsWith(fetchFn))
+    const issuedAt = '2026-11-03T09:00+09:00'
+    expect(res.days[0].alerts).toEqual([{ kind: '한파', grade: 'advisory', when: null, issuedAt }])
+    expect(res.days[1].alerts).toEqual([{ kind: '대설', grade: 'preliminary', when: '아침', issuedAt }])
+    expect(res.days[2]).not.toHaveProperty('alerts')
+  })
+
+  it('특보를 못 받아도 예보는 그대로 온다', async () => {
+    const fetchFn = fakeFetch(url => (url.pathname.endsWith('/getPwnStatus') ? { body: KMA_KEY_ERROR_XML } : okRoute(url)))
+    const res = await tripWeather({ date: '2026-11-04' }, depsWith(fetchFn))
+    expect(res.days[0]).toMatchObject({ status: 'ok' })
+    expect(res.days[0]).not.toHaveProperty('alerts')
+    expect(warn).toHaveBeenCalledWith('[weather] 기상청 예보를 못 받았어요', { kind: 'alerts', code: 'service' })
+  })
+
+  it('먼 날만 있는 여행은 특보를 묻지 않는다', async () => {
+    const fetchFn = fakeFetch(okRoute)
+    await tripWeather({ date: '2026-11-10' }, depsWith(fetchFn))
+    expect(fetchFn.mock.calls.some(([url]) => url.includes('getPwnStatus'))).toBe(false)
   })
 
   it('키 오류(XML)면 그날만 unavailable이고, 로그에 키·주소를 남기지 않는다', async () => {
@@ -123,12 +155,13 @@ describe('tripWeather', () => {
   it('단기예보가 1,000줄을 넘으면 다음 쪽도 받는다', async () => {
     const all = shortBody().response.body.items.item
     const fetchFn = fakeFetch(url => {
+      if (url.pathname.endsWith('/getPwnStatus')) return { body: alertBody() }
       const page = Number(url.searchParams.get('pageNo'))
       const half = Math.ceil(all.length / 2)
       return { body: kmaJson(page === 1 ? all.slice(0, half) : all.slice(half), all.length) }
     })
     const res = await tripWeather({ date: '2026-11-05' }, depsWith(fetchFn))
-    expect(fetchFn).toHaveBeenCalledTimes(2)
+    expect(fetchFn.mock.calls.filter(([url]) => url.includes('getVilageFcst'))).toHaveLength(2)
     expect(res.days[0]).toMatchObject({ status: 'ok', forecast: { tempMaxC: 12, tempMinC: 1 } })
   })
 })

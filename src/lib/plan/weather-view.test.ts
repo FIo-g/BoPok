@@ -72,3 +72,24 @@ describe('weatherSlotView', () => {
     expect(view.preps).toEqual([])
   })
 })
+
+describe('weatherSlotView: 기상청 특보', () => {
+  const base = { stops: [stop('1', 'a')], places: { a: place('a', false) } }
+  const coldAlert = { kind: '한파' as const, grade: 'advisory' as const, when: null, issuedAt: '2026-11-03T09:00+09:00' }
+
+  it('특보는 경고 쪽에 오고, 출처 줄에 특보 발표 시각을 더한다', () => {
+    const view = weatherSlotView({
+      weather: weather([{ day: 1, date: '2026-11-03', status: 'ok', forecast: forecast({ precip: 'none', tempMinC: -13 }), alerts: [coldAlert] }]),
+      day: 1,
+      ...base,
+    })
+    if (view.kind !== 'forecast') throw new Error('forecast')
+    expect(view.warnings.map(c => c.title)).toEqual(['기상청 한파주의보 발효 중 — 대전'])
+    expect(view.sourceLine).toBe('출처: 기상청 단기예보 · 11월 3일 5시 발표 / 기상청 기상특보 · 11월 3일 9시 발표 · 대전 기준 · 예보는 바뀔 수 있어요')
+  })
+
+  it('예보를 못 받은 날도 특보는 보여 준다', () => {
+    const view = weatherSlotView({ weather: weather([{ day: 1, date: '2026-11-03', status: 'unavailable', forecast: null, alerts: [coldAlert] }]), day: 1, ...base })
+    expect(view).toMatchObject({ kind: 'forecast', summary: expect.stringContaining('불러오지 못했어요') })
+  })
+})

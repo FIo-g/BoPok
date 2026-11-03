@@ -4,12 +4,15 @@
 import 'server-only'
 import { z } from 'zod'
 import type { WeatherForecast } from '@/lib/contracts'
+import { NO_ALERTS, parsePwnStatus, type ParsedAlerts } from './alerts'
 import { MidItemSchema, ShortItemSchema, parseMidForecast, parseShortForecast, type MidItem, type ShortItem } from './parse'
 import { midTmFc, shortBase } from './time'
 
 const SHORT_URL = 'https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst'
 const MID_LAND_URL = 'https://apis.data.go.kr/1360000/MidFcstInfoService/getMidLandFcst'
 const MID_TA_URL = 'https://apis.data.go.kr/1360000/MidFcstInfoService/getMidTa'
+// 기상특보 조회서비스 — 특보현황(최근 7일 안의 발효 특보·예비특보). 공공데이터포털에서 따로 활용신청해야 한다
+const ALERT_URL = 'https://apis.data.go.kr/1360000/WthrWrnInfoService/getPwnStatus'
 
 // 대전광역시 대표 격자 (기상청 "격자_위경도" 표의 대전광역시 행: 67, 100). 서비스가 대전만 다루고,
 // 격자 한 칸이 5km라 시내 관광지끼리는 예보가 거의 같아서 한 곳으로 묻는다 (부르는 수도 줄어든다)
@@ -88,7 +91,7 @@ async function callKma<T extends z.ZodTypeAny>(
   const parsed = EnvelopeSchema.safeParse(json)
   if (!parsed.success) throw new WeatherError('bad_response')
   const { header, body } = parsed.data.response
-  if (header.resultCode === '03') throw new WeatherError('no_data')
+  if (header.resultCode === '03' || header.resultCode === '3') throw new WeatherError('no_data')
   if (header.resultCode !== '00' && header.resultCode !== '0') throw new WeatherError('service')
   const raw = body?.items && typeof body.items === 'object' ? body.items.item : undefined
   const list: unknown[] = Array.isArray(raw) ? raw : raw === undefined || raw === null ? [] : [raw]
@@ -133,4 +136,17 @@ export async function fetchMidForecast(fetchFn: WeatherFetch, serviceKey: string
     if (!(error instanceof WeatherError) || error.code !== 'no_data') throw error
     return fetchMidAt(fetchFn, serviceKey, midTmFc(now, 1))
   }
+}
+
+// 지금 대전에 걸린 기상특보와 예비특보. 여러 발표가 오면 가장 최근 것을 쓴다. 자료가 없으면(NO_DATA) 특보 없음으로 본다
+export async function fetchAlerts(fetchFn: WeatherFetch, serviceKey: string): Promise<ParsedAlerts> {
+  let items: MidItem[]
+  try {
+    items = (await callKma(fetchFn, serviceKey, ALERT_URL, { numOfRows: '10' }, MidItemSchema)).items
+  } catch (error) {
+    if (error instanceof WeatherError && error.code === 'no_data') return NO_ALERTS
+    throw error
+  }
+  const latest = items.reduce<MidItem | null>((best, item) => (best === null || String(item.tmFc ?? '') > String(best.tmFc ?? '') ? item : best), null)
+  return latest ? parsePwnStatus(latest) : NO_ALERTS
 }

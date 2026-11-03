@@ -192,6 +192,45 @@ describe('groupProfile', () => {
     expect(blank.conditionFrom.continuousMin).toBe('default')
   })
 
+  // 설계 7.1.2 (김태형 11/3): 쉬지 않고 걷기 기본값은 나이에 맞춘다 — 74세까지 20분, 75세 이상 15분, 85세 이상·보조기구 10분.
+  // 2023 노인실태조사: 300 m 이동이 힘든 사람이 70–74세 13.9% → 75–79세 24.2% → 80–84세 37.0%
+  it('쉬지 않고 걷기 기본값은 나이·보조기구에 맞춘다', () => {
+    const at = (extra: Partial<Traveler>) => groupProfile([t('mom', true, {}, extra)]).condition.continuousMin
+    expect(at({})).toBe(20) // 나이를 모르면 지금과 같다
+    expect(at({ age: 74 })).toBe(20)
+    expect(at({ age: 75 })).toBe(15)
+    expect(at({ age: 84 })).toBe(15)
+    expect(at({ age: 85 })).toBe(10)
+    expect(at({ age: 70, mobilityAid: true })).toBe(10)
+  })
+
+  it('나이 기본값도 답한 분이 있으면 쓰지 않고, 답한 부모님이 없을 때만 가장 엄격한 분의 기본값을 쓴다', () => {
+    const answered = groupProfile([t('mom', true, { continuousMin: 30 }, { age: 80 }), t('dad', true, {}, { age: 88 })])
+    expect(answered.condition.continuousMin).toBe(30)
+    expect(answered.conditionFrom.continuousMin).toBe('parent')
+
+    const blank = groupProfile([t('mom', true, {}, { age: 78 }), t('dad', true, {}, { age: 72 })])
+    expect(blank.condition.continuousMin).toBe(15)
+    expect(blank.conditionFrom.continuousMin).toBe('default')
+  })
+
+  it('나이 기본값보다 느슨한 자녀 답은 부모님께 확인을 받는다 (기본값 15분과 비교)', () => {
+    const profile = groupProfile([t('mom', true, {}, { age: 78 }), t('kid', false, { continuousMin: 18 })])
+    expect(profile.condition.continuousMin).toBe(15)
+    expect(profile.pendingConsents.map(p => [p.field, p.proposedValue])).toEqual([['continuousMin', 18]])
+  })
+
+  it('부모님 없는 여행에서 아무도 답하지 않으면 가장 엄격한 분의 나이 기본값', () => {
+    const profile = groupProfile([t('kid', false, {}, { age: 40 }), t('uncle', false, {}, { age: 76 })])
+    expect(profile.condition.continuousMin).toBe(15)
+  })
+
+  it('하루 총·쉬는 시간 기본값은 나이와 상관없다', () => {
+    const profile = groupProfile([t('mom', true, {}, { age: 90 })])
+    expect(profile.condition.dayMin).toBe(60)
+    expect(profile.condition.restMin).toBe(10)
+  })
+
   it('하루 총: 엄마 60, 자녀 30 → 54', () => {
     const profile = groupProfile([t('mom', true, { dayMin: 60 }), t('kid', false, { dayMin: 30 })])
     expect(profile.condition.dayMin).toBe(54)

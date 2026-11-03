@@ -1,7 +1,7 @@
 // 날씨 예보 → 화면 안내·AI 참고 줄 (순수 함수). 폭염은 경고, 비·눈·추위·바람은 여행 준비 안내다.
 // 판정(judge)에는 쓰지 않는다 — 예보는 바뀔 수 있어서 걷기 조건을 바꾸지 않고 띄우기만 한다.
 // 기준 숫자는 기상청 특보 기준과 단기예보 범주에서 왔다 (근거 노트 docs/superpowers/specs/evidence/2026-11-03-weather.md).
-import type { PrecipKind, SkyKind, TripWeatherDay, WeatherCaution, WeatherForecast } from '@/lib/contracts'
+import { WEATHER_ALERT_GRADE_LABEL, type PrecipKind, type SkyKind, type TripWeatherDay, type WeatherAlert, type WeatherAlertKind, type WeatherCaution, type WeatherForecast } from '@/lib/contracts'
 
 // 기상청 폭염특보: 일 최고 체감온도 33℃ 이상(주의보)·35℃ 이상(경보)이 2일 이상 이어질 것으로 예상될 때.
 // 우리는 하루 예보만 보므로 "특보가 났다"가 아니라 "주의보 기준만큼 덥다"고 말한다
@@ -113,14 +113,18 @@ function snowCaution(forecast: WeatherForecast, outdoorStops: number): WeatherCa
   }
 }
 
+// 한파주의보 기준(−12℃ 이하)은 폭염처럼 경고로 띄운다 (김태형 11/3 결정: 부모님께는 저체온·빙판 낙상 위험이 크다).
+// 그보다 덜 추운 영하는 여행 준비 안내다. 폭염과 같은 까닭으로 화면에 보이는 정수로 비교한다
 function coldCaution(forecast: WeatherForecast): WeatherCaution | null {
-  if (forecast.tempMinC === null || forecast.tempMinC > FREEZING_MIN_C) return null
-  const wave = forecast.tempMinC <= COLD_WAVE_MIN_C
+  if (forecast.tempMinC === null) return null
+  const min = Math.round(forecast.tempMinC)
+  if (min > FREEZING_MIN_C) return null
+  const wave = min <= COLD_WAVE_MIN_C
   return {
     kind: 'cold',
-    level: 'prep',
+    level: wave ? 'warning' : 'prep',
     title: wave
-      ? `매우 추운 날 — 최저 ${degrees(forecast.tempMinC)}, 한파주의보 기준만큼 추워요`
+      ? `한파 주의 — 최저 ${degrees(forecast.tempMinC)}, 한파주의보 기준만큼 추운 날이에요`
       : `아침 기온이 영하예요 — 최저 ${degrees(forecast.tempMinC)}`,
     tips: [
       '두꺼운 옷을 여러 겹 입고 모자·장갑·목도리를 챙겨 주세요.',
@@ -140,7 +144,7 @@ function windCaution(forecast: WeatherForecast): WeatherCaution | null {
   }
 }
 
-// 그날 예보로 띄울 안내. 경고(폭염)가 먼저 온다. 특별한 것이 없으면 빈 배열 — 그래도 "괜찮아요"라고 말하지 않는다
+// 그날 예보로 띄울 안내. 경고(폭염·한파)가 먼저 온다. 특별한 것이 없으면 빈 배열 — 그래도 "괜찮아요"라고 말하지 않는다
 // (예보는 바뀔 수 있다). outdoorStops는 그날 일정의 야외 장소 수 (장소 정보의 indoor가 false인 것)
 export function weatherCautions(forecast: WeatherForecast, opts: { outdoorStops: number }): WeatherCaution[] {
   const outdoor = Math.max(0, Math.floor(opts.outdoorStops))
@@ -150,25 +154,76 @@ export function weatherCautions(forecast: WeatherForecast, opts: { outdoorStops:
     snowCaution(forecast, outdoor),
     coldCaution(forecast),
     windCaution(forecast),
-  ].filter((caution): caution is WeatherCaution => caution !== null)
+  ]
+    .filter((caution): caution is WeatherCaution => caution !== null)
+    .sort((a, b) => (a.level === b.level ? 0 : a.level === 'warning' ? -1 : 1))
 }
 
-// AI가 일정을 짤 때 참고할 한 줄. 비·눈·폭염·한파인 날만 적고, 그런 날이 없으면 null.
+// 기상청이 실제로 낸 특보·예비특보 (기상특보 조회서비스). 예보로 짐작한 안내보다 앞서고, 모두 경고다.
+// 행동 안내는 일반 안전 수칙(질병관리청 폭염 수칙, 행정안전부 호우·대설·강풍 행동요령의 요지)이다
+const ALERT_TIPS: Record<WeatherAlertKind, string[]> = {
+  폭염: ['목마르지 않아도 물을 자주 드세요.', '가장 더운 낮 12시~5시에는 실내 장소에서 쉬어 가세요.', '어지럽거나 속이 메스꺼우면 바로 시원한 곳에서 쉬세요.'],
+  한파: ['두꺼운 옷을 여러 겹 입고 모자·장갑·목도리를 챙겨 주세요.', '실내에서 자주 몸을 녹이고, 얼어 있는 길과 계단을 조심하세요.'],
+  호우: ['야외 일정은 미루거나 실내 장소로 바꾸세요.', '하천·계곡 가까이와 지하 공간은 피하세요.'],
+  대설: ['바닥이 미끄럽지 않은 신발을 신고, 눈 쌓인 계단과 경사로는 피하세요.', '차로 다니신다면 길 상황을 먼저 확인하세요.'],
+  강풍: ['간판과 큰 나무 가까이는 피하고, 야외 일정은 줄이세요.'],
+  태풍: ['야외 일정은 미루고, 기상청 태풍 정보를 확인하세요.'],
+  황사: ['마스크를 챙기고, 야외에 머무는 시간을 줄이세요.'],
+}
+
+// 특보가 있으면 같은 종류의 예보 안내는 빼서 두 번 말하지 않는다
+const ALERT_COVERS: Record<WeatherAlertKind, WeatherCaution['kind'][]> = {
+  폭염: ['heat'],
+  한파: ['cold'],
+  호우: ['rain'],
+  대설: ['snow'],
+  강풍: ['wind'],
+  태풍: ['wind', 'rain'],
+  황사: [],
+}
+
+export function alertCaution(alert: WeatherAlert, opts: { outdoorStops: number }): WeatherCaution {
+  const outdoor = Math.max(0, Math.floor(opts.outdoorStops))
+  const title =
+    alert.grade === 'preliminary'
+      ? `기상청 ${alert.kind} 예비특보${alert.when ? ` (${alert.when})` : ''} — 특보가 날 수 있어요`
+      : `기상청 ${alert.kind}${WEATHER_ALERT_GRADE_LABEL[alert.grade]} 발효 중 — 대전`
+  return {
+    kind: 'alert',
+    level: 'warning',
+    title,
+    tips: [...ALERT_TIPS[alert.kind], ...outdoorTip(outdoor, '실내 장소로 바꾸거나 일정을 줄이는 게 좋아요.')],
+  }
+}
+
+// 그날 띄울 안내 전부: 기상청 특보 → 예보로 본 경고 → 준비 안내 순서
+export function dayWeatherCautions(day: Pick<TripWeatherDay, 'forecast' | 'alerts'>, opts: { outdoorStops: number }): WeatherCaution[] {
+  const alerts = day.alerts ?? []
+  const covered = new Set(alerts.flatMap(alert => ALERT_COVERS[alert.kind]))
+  const fromForecast = day.forecast ? weatherCautions(day.forecast, opts).filter(caution => !covered.has(caution.kind)) : []
+  return [...alerts.map(alert => alertCaution(alert, opts)), ...fromForecast].sort((a, b) =>
+    a.level === b.level ? 0 : a.level === 'warning' ? -1 : 1,
+  )
+}
+
+// AI가 일정을 짤 때 참고할 한 줄. 비·눈·폭염·한파인 날과 기상청 특보가 있는 날만 적고, 그런 날이 없으면 null.
 // 걷는 시간·판정은 엔진이 따로 계산하므로, 이 줄은 실내·야외 장소를 고르는 참고일 뿐이다
-export function weatherAiLine(days: readonly Pick<TripWeatherDay, 'day' | 'forecast'>[], multiDay: boolean): string | null {
+export function weatherAiLine(days: readonly Pick<TripWeatherDay, 'day' | 'forecast' | 'alerts'>[], multiDay: boolean): string | null {
   const notes: string[] = []
   let hasHeat = false
-  for (const { day, forecast } of days) {
-    if (!forecast) continue
+  for (const { day, forecast, alerts } of days) {
     const words: string[] = []
-    const heat = heatValue(forecast)
-    if (heat && heat.value >= HEAT_WATCH_FEELS_C) {
-      words.push('폭염')
-      hasHeat = true
+    if (forecast) {
+      const heat = heatValue(forecast)
+      if (heat && heat.value >= HEAT_WATCH_FEELS_C) words.push('폭염')
+      if (forecast.precip !== 'none') words.push(PRECIP_LABEL[forecast.precip])
+      if (forecast.tempMinC !== null && Math.round(forecast.tempMinC) <= COLD_WAVE_MIN_C) words.push('한파')
     }
-    if (forecast.precip !== 'none') words.push(PRECIP_LABEL[forecast.precip])
-    if (forecast.tempMinC !== null && forecast.tempMinC <= COLD_WAVE_MIN_C) words.push('한파')
-    if (words.length > 0) notes.push(`${multiDay ? `${day}일차` : '여행 날'} ${words.join('·')}`)
+    for (const alert of alerts ?? []) words.push(`${alert.kind} ${alert.grade === 'preliminary' ? '예비특보' : '특보'}`)
+    if (words.some(word => word.startsWith('폭염'))) hasHeat = true
+    // 예보의 "폭염"과 특보의 "폭염 특보"가 겹치면 특보만 남긴다
+    const unique = words.filter(word => !words.some(other => other !== word && other.startsWith(`${word} `)))
+    if (unique.length > 0) notes.push(`${multiDay ? `${day}일차` : '여행 날'} ${[...new Set(unique)].join('·')}`)
   }
   if (notes.length === 0) return null
   return (

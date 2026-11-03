@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { WeatherForecast } from '@/lib/contracts'
-import { summerFeelsLikeC, weatherAiLine, weatherCautions, weatherSummaryParts } from './weather'
+import type { WeatherAlert, WeatherForecast } from '@/lib/contracts'
+import { alertCaution, dayWeatherCautions, summerFeelsLikeC, weatherAiLine, weatherCautions, weatherSummaryParts } from './weather'
 
 const forecast = (patch: Partial<WeatherForecast> = {}): WeatherForecast => ({
   source: 'short',
@@ -83,9 +83,18 @@ describe('weatherCautions', () => {
     expect(cautions.every(c => c.level === 'prep')).toBe(true)
   })
 
-  it('최저 -12℃ 이하면 한파주의보 기준이라고 적는다', () => {
+  it('최저 -12℃ 이하면 한파 경고 (김태형 11/3: 폭염처럼 경고)', () => {
     const [cold] = weatherCautions(forecast({ tempMinC: -12, tempMaxC: -4 }), { outdoorStops: 0 })
-    expect(cold.title).toBe('매우 추운 날 — 최저 -12℃, 한파주의보 기준만큼 추워요')
+    expect(cold).toMatchObject({ kind: 'cold', level: 'warning', title: '한파 주의 — 최저 -12℃, 한파주의보 기준만큼 추운 날이에요' })
+    expect(weatherCautions(forecast({ tempMinC: -11.4 }), { outdoorStops: 0 })[0].level).toBe('prep')
+  })
+
+  it('경고는 준비 안내보다 먼저 온다 (눈 + 한파)', () => {
+    const cautions = weatherCautions(forecast({ precip: 'snow', tempMinC: -13 }), { outdoorStops: 0 })
+    expect(cautions.map(c => [c.kind, c.level])).toEqual([
+      ['cold', 'warning'],
+      ['snow', 'prep'],
+    ])
   })
 
   it('강한 바람(9m/s 이상)만 바람 안내를 띄운다', () => {
@@ -123,5 +132,48 @@ describe('weatherAiLine', () => {
       '날씨 예보(기상청): 여행 날 눈·한파 — 그날은 실내 장소를 많이 넣고 야외 장소는 짧게 잡아라.',
     )
     expect(weatherAiLine([{ day: 1, forecast: forecast() }], false)).toBeNull()
+  })
+})
+
+const alert = (patch: Partial<WeatherAlert> = {}): WeatherAlert => ({ kind: '한파', grade: 'advisory', when: null, issuedAt: '2026-11-13T10:00+09:00', ...patch })
+
+describe('기상청 특보', () => {
+  it('발효 중인 특보는 등급 이름과 함께 경고로 띄운다', () => {
+    const caution = alertCaution(alert({ kind: '폭염', grade: 'severe' }), { outdoorStops: 2 })
+    expect(caution).toMatchObject({ kind: 'alert', level: 'warning', title: '기상청 폭염중대경보 발효 중 — 대전' })
+    expect(caution.tips).toContain('이날 일정에 야외 장소가 2곳 있어요. 실내 장소로 바꾸거나 일정을 줄이는 게 좋아요.')
+  })
+
+  it('예비특보는 때와 "특보가 날 수 있어요"를 적는다', () => {
+    expect(alertCaution(alert({ kind: '대설', grade: 'preliminary', when: '아침' }), { outdoorStops: 0 }).title).toBe(
+      '기상청 대설 예비특보 (아침) — 특보가 날 수 있어요',
+    )
+  })
+
+  it('특보가 있으면 같은 종류의 예보 안내는 빼고, 특보가 맨 앞에 온다', () => {
+    const cautions = dayWeatherCautions(
+      { forecast: forecast({ precip: 'snow', tempMinC: -13, windLevel: 'strong' }), alerts: [alert({ kind: '한파' })] },
+      { outdoorStops: 0 },
+    )
+    expect(cautions.map(c => [c.kind, c.level])).toEqual([
+      ['alert', 'warning'],
+      ['snow', 'prep'],
+      ['wind', 'prep'],
+    ])
+  })
+
+  it('예보가 없는 날도 특보는 띄운다', () => {
+    expect(dayWeatherCautions({ forecast: null, alerts: [alert({ kind: '호우', grade: 'warning' })] }, { outdoorStops: 0 }).map(c => c.title)).toEqual([
+      '기상청 호우경보 발효 중 — 대전',
+    ])
+  })
+
+  it('AI 참고 줄에도 특보를 적고, 예보의 같은 말은 겹치지 않게 한다', () => {
+    expect(weatherAiLine([{ day: 1, forecast: forecast({ feelsMaxC: 34 }), alerts: [alert({ kind: '폭염', grade: 'warning' })] }], false)).toBe(
+      '날씨 예보(기상청): 여행 날 폭염 특보 — 그날은 실내 장소를 많이 넣고 야외 장소는 짧게 잡아라. 폭염인 날은 한낮(12~17시)에 야외 장소를 넣지 마라.',
+    )
+    expect(weatherAiLine([{ day: 2, forecast: null, alerts: [alert({ kind: '대설', grade: 'preliminary' })] }], true)).toBe(
+      '날씨 예보(기상청): 2일차 대설 예비특보 — 그날은 실내 장소를 많이 넣고 야외 장소는 짧게 잡아라.',
+    )
   })
 })

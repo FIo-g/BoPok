@@ -37,7 +37,9 @@ export function mockTripWeather(trip: Pick<Trip, 'date' | 'endDate'>, now = new 
         source === 'short'
           ? { ...sample, source, issuedAt }
           : { ...sample, source, issuedAt, rainLevel: null, snowLevel: null, windLevel: null, feelsMaxC: null }
-      return [{ day, date, status: 'ok', forecast }]
+      // 더운 날 견본에는 기상청 폭염 예비특보도 붙여 화면에서 특보 경고를 볼 수 있게 한다
+      const alerts = sample.tempMaxC !== null && sample.tempMaxC >= 33 ? [{ kind: '폭염' as const, grade: 'preliminary' as const, when: '오후', issuedAt }] : []
+      return [alerts.length > 0 ? { day, date, status: 'ok', forecast, alerts } : { day, date, status: 'ok', forecast }]
     }),
   }
 }

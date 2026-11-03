@@ -38,6 +38,29 @@ export const WeatherForecastSchema = z.object({
 })
 export type WeatherForecast = z.infer<typeof WeatherForecastSchema>
 
+// 기상청 기상특보(특보현황조회) 가운데 대전에 걸린 것. 발효 중인 특보는 오늘에만, 예비특보는 그 날짜에 붙는다.
+// 육지 여행에 상관있는 종류만 온다: 폭염·한파·호우·대설·강풍·태풍·황사 (풍랑·폭풍해일·건조·열대야는 뺀다)
+export const WEATHER_ALERT_KINDS = ['폭염', '한파', '호우', '대설', '강풍', '태풍', '황사'] as const
+export const WeatherAlertKindSchema = z.enum(WEATHER_ALERT_KINDS)
+export type WeatherAlertKind = z.infer<typeof WeatherAlertKindSchema>
+// advisory 주의보, warning 경보, severe 중대경보, preliminary 예비특보(앞으로 특보가 날 수 있다는 예고)
+export const WeatherAlertGradeSchema = z.enum(['advisory', 'warning', 'severe', 'preliminary'])
+export type WeatherAlertGrade = z.infer<typeof WeatherAlertGradeSchema>
+export const WEATHER_ALERT_GRADE_LABEL: Record<WeatherAlertGrade, string> = {
+  advisory: '주의보',
+  warning: '경보',
+  severe: '중대경보',
+  preliminary: '예비특보',
+}
+
+export const WeatherAlertSchema = z.object({
+  kind: WeatherAlertKindSchema,
+  grade: WeatherAlertGradeSchema,
+  when: z.string().max(20).nullable(), // 예비특보의 때 ("오후", "밤"). 발효 중인 특보는 null
+  issuedAt: z.string(), // 특보현황 발표 시각 "2026-11-03T05:00+09:00"
+})
+export type WeatherAlert = z.infer<typeof WeatherAlertSchema>
+
 // ok = 예보 있음, past = 지난 날, too_far = 아직 예보가 안 나온 날(10일 뒤보다 멀다), unavailable = 기상청 응답을 못 받음
 export const WeatherDayStatusSchema = z.enum(['ok', 'past', 'too_far', 'unavailable'])
 export type WeatherDayStatus = z.infer<typeof WeatherDayStatusSchema>
@@ -47,6 +70,7 @@ export const TripWeatherDaySchema = z.object({
   date: z.string(), // YYYY-MM-DD
   status: WeatherDayStatusSchema,
   forecast: WeatherForecastSchema.nullable(),
+  alerts: z.array(WeatherAlertSchema).optional(), // 대전에 걸린 기상특보·예비특보. 없으면 칸이 없다
 })
 export type TripWeatherDay = z.infer<typeof TripWeatherDaySchema>
 
@@ -67,7 +91,7 @@ export const WEATHER_FORECAST_DAYS_MAX = 10
 // 화면에 띄우는 날씨 안내 한 묶음 (엔진 weatherCautions가 만든다).
 // warning = 폭염처럼 몸이 위험할 수 있는 날, prep = 비·눈·추위·바람처럼 챙길 것이 있는 날
 export type WeatherCaution = {
-  kind: 'heat' | 'rain' | 'snow' | 'cold' | 'wind'
+  kind: 'heat' | 'rain' | 'snow' | 'cold' | 'wind' | 'alert'
   level: 'warning' | 'prep'
   title: string
   tips: string[]

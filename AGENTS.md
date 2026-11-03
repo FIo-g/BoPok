@@ -118,8 +118,6 @@ PR을 올리기 전에 `pnpm lint && pnpm test && pnpm build`가 모두 통과�
 - 30분 이상 막히면 팀에 공유한다(노션 팀 규칙).
 - 설계 문서·역할 문서에 없는 결정이 필요하면 추측으로 구현하지 말고 사용자에게 묻는다. 정해지면 문서에 적는다.
 
-<!-- BEGIN:nextjs-agent-rules -->
-
 ## 10. 지금 할 일 — 2단계 (11/2~)
 
 자세한 내용은 범위 확장 설계 `docs/superpowers/specs/2026-11-02-bopok-scope-expansion-design.md` 6장, 각자 할 일은 역할 문서의 "2단계 할 일"에 있다.
@@ -134,6 +132,8 @@ PR을 올리기 전에 `pnpm lint && pnpm test && pnpm build`가 모두 통과�
 - 일정 화면은 뼈대가 main에 들어간 뒤 `src/components/trip/slots/`의 **자기 파일만** 고친다 (설계 6.5).
 - DB 마이그레이션은 main을 최신으로 받은 직후에 만들고, 머지 직전에 번호가 겹치면 지우고 다시 만든다.
 - 공용 타입(`src/lib/contracts`)은 1단계에서 정해 두었다. 바꿔야 하면 PR에 세 사람 모두 리뷰어로 넣는다.
+
+<!-- BEGIN:nextjs-agent-rules -->
 
 ## This is NOT the Next.js you know
 

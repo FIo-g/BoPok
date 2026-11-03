@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { useRequireUser } from '@/components/AuthProvider'
 import { DayTabs } from '@/components/trip/DayTabs'
 import { SatisfactionSlot } from '@/components/trip/slots/SatisfactionSlot'
+import { WeatherSlot } from '@/components/trip/slots/WeatherSlot'
 import { TripMap } from '@/components/trip/TripMap'
 import { useJudged } from '@/components/trip/useJudged'
 import { Badge, Button, ButtonLink, Card, ErrorNotice, Notice, PageTitle, Spinner, VerdictBadge } from '@/components/ui'
@@ -94,6 +95,8 @@ export function FinalScreen({ tripId }: { tripId: string }) {
                   )}
                 </p>
               </Card>
+              {/* 확정 화면은 떠나기 전에 다시 여는 곳이라 날씨(폭염·한파 경고, 비·눈 준비)를 일정 바로 위에 둔다 */}
+              <WeatherSlot tripId={tripId} day={day} stops={dayStops} result={judged.result} travelers={detail.data.travelers} places={judged.places} versionId={confirmedId} userId={user.id} />
               <Card>
                 <ol className="divide-y divide-line">
                   {dayStops.map((stop, index) => {

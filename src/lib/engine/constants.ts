@@ -86,9 +86,20 @@ export const MARGIN_RATE = 0.2
 export const PARENT_WEIGHT = 0.8
 
 // 여행자가 조건 칸을 비워 두면 엔진이 쓰는 기본값 (설계 7.1.2 기본값과 같다).
+// 쉬지 않고 걷기는 나이·보조기구에 따라 더 짧게 본다 (CONTINUOUS_DEFAULT_BY_AGE). 여기 20분은 74세까지·나이 모름의 값이다
 export const DEFAULT_CONDITION: Readonly<Condition> = {
   continuousMin: 20, // 쉬지 않고 걷기: 동네 마트까지
   dayMin: 60, // 하루 총 걷기: 시장 장보기
   restMin: 10, // 한 번 쉬는 시간: 차 한 잔 정도
   avoidStairs: true, // 계단은 기본으로 피하기
 }
+
+// 쉬지 않고 걷기 기본값을 나이에 맞춘다 (설계 7.1.2, 김태형 11/3 결정 — 근거 노트 B4).
+// 2023 노인실태조사(N=10,078): "300 m 이동이 힘들다" 70–74세 13.9%, 75–79세 24.2%, 80–84세 37.0% (신뢰 A).
+// 15·10분이라는 숫자 자체는 판단이다(신뢰 C) — 답이 없을 때만 쓰는 안전한 쪽 기본값이라 받아들였다.
+export const CONTINUOUS_DEFAULT_BY_AGE: readonly { minAge: number; continuousMin: number }[] = [
+  { minAge: 75, continuousMin: 15 },
+  { minAge: 85, continuousMin: 10 },
+]
+// 지팡이·보행기를 쓰면 나이와 상관없이 이 값
+export const CONTINUOUS_DEFAULT_MOBILITY_AID_MIN = 10

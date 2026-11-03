@@ -1,8 +1,8 @@
 'use client'
 
-// 날씨: 고른 날의 기상청 예보(대전 기준). 폭염은 경고로 눈에 띄게, 비·눈·추위·바람은 여행 준비 안내로 — 담당 김태형.
+// 날씨: 고른 날의 기상청 예보·특보(대전 기준). 기상청 특보와 폭염·한파는 경고로 눈에 띄게, 비·눈·추위·바람은 여행 준비 안내로 — 담당 김태형.
 // 판정(걷기 조건)은 바꾸지 않는다. 이 카드는 덤이라 불러오는 중이거나 실패해도 일정 화면을 막지 않는다.
-// 담당은 이 파일만 고친다. 일정 화면(TripScreen)에는 연결하는 한 줄만 있다.
+// 담당은 이 파일만 고친다. 일정 화면(TripScreen)·확정 화면(FinalScreen)에는 연결하는 한 줄만 있다.
 import { useMemo } from 'react'
 import { Badge, Card, Notice } from '@/components/ui'
 import { api } from '@/lib/api-client'
@@ -75,12 +75,12 @@ export function WeatherSlot({ tripId, userId, day, stops, places }: TripSlotProp
         <>
           <p className="text-lg font-bold">{view.summary || '예보 내용이 비어 있어요'}</p>
           {view.warnings.map(caution => (
-            <WarningBox key={caution.kind} caution={caution} />
+            <WarningBox key={`${caution.kind}:${caution.title}`} caution={caution} />
           ))}
           {view.preps.length > 0 ? (
             <ul className="grid gap-3">
               {view.preps.map(caution => (
-                <PrepBox key={caution.kind} caution={caution} />
+                <PrepBox key={`${caution.kind}:${caution.title}`} caution={caution} />
               ))}
             </ul>
           ) : (
