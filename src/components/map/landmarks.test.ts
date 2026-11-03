@@ -8,10 +8,10 @@ import { MAP_MAX_BOUNDS } from './map-config'
 const [west, south, east, north] = MAP_MAX_BOUNDS
 
 describe('랜드마크 고정값', () => {
-  it('세 곳이고 id 와 모형 파일이 겹치지 않는다', () => {
-    expect(LANDMARKS).toHaveLength(3)
-    expect(new Set(LANDMARKS.map(l => l.id)).size).toBe(3)
-    expect(new Set(LANDMARKS.map(l => l.model)).size).toBe(3)
+  it('일곱 곳이고 id 와 모형 파일이 겹치지 않는다', () => {
+    expect(LANDMARKS).toHaveLength(7)
+    expect(new Set(LANDMARKS.map(l => l.id)).size).toBe(7)
+    expect(new Set(LANDMARKS.map(l => l.model)).size).toBe(7)
   })
 
   it('좌표가 대전 경계 안이다', () => {
@@ -24,8 +24,11 @@ describe('랜드마크 고정값', () => {
   })
 
   it('숨길 건물이 비어 있지 않고 곳끼리 겹치지 않는다', () => {
+    // 다리·광장처럼 대신할 건물이 없는 곳만 비어 있다
+    const NO_BUILDING = ['expo-bridge', 'expo-plaza']
     for (const l of LANDMARKS) {
-      expect(l.hideFids.length).toBeGreaterThan(0)
+      if (NO_BUILDING.includes(l.id)) expect(l.hideFids).toEqual([])
+      else expect(l.hideFids.length).toBeGreaterThan(0)
       for (const fid of l.hideFids) expect(Number.isInteger(fid) && fid > 0).toBe(true)
     }
     const all = hiddenFids()
@@ -78,7 +81,8 @@ describe('offsetM 보정', () => {
 })
 
 describe('푸른빛 강조 값', () => {
-  it('기존 투톤 재질(벽·지붕·유리) 색과 유리 투명도가 정해져 있다', () => {
+  it('기존 투톤 재질(벽·지붕·유리·녹지) 색이 정해져 있다', () => {
+    expect(LANDMARK_MATERIAL_COLORS.green).toBe('#CFE6F4')
     expect(LANDMARK_MATERIAL_COLORS.wall).toBe('#E3EAFB')
     expect(LANDMARK_MATERIAL_COLORS.roof).toBe('#EEF3FE')
     expect(LANDMARK_MATERIAL_COLORS.glass).toBe('#BFD3F8')

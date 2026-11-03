@@ -33,6 +33,14 @@ export const LANDMARKS: Landmark[] = [
   { id: 'science-museum', name: '국립중앙과학관', model: 'science-museum.glb', lng: 127.375263, lat: 36.375062, offsetM: [14, 28], footprintLongM: 116, bearingDeg: 355.8, scale: 1.3, heightScale: 1.3, hideFids: [96430, 11060, 96431, 11075], placeId: '국립중앙과학관' },
   { id: 'arts-center', name: '대전예술의전당', model: 'arts-center.glb', lng: 127.383798, lat: 36.366591, offsetM: [3, 6], footprintLongM: 145, bearingDeg: 90, scale: 1.3, heightScale: 1.3, hideFids: [133229] },
   { id: 'art-museum', name: '대전시립미술관', model: 'art-museum.glb', lng: 127.385743, lat: 36.366824, offsetM: [-3, 9], footprintLongM: 88, bearingDeg: 94, scale: 1.25, heightScale: 1.3, hideFids: [118740], placeId: '대전시립미술관' },
+  // 한밭수목원 열대식물원(온실): 바닥 모양 74.5×45.9m 가 모형(75×51m)과 거의 같은 fid 140185
+  { id: 'hanbat-arboretum', name: '한밭수목원', model: 'hanbat-arboretum.glb', lng: 127.392562, lat: 36.367784, offsetM: [-6, 3], footprintLongM: 75, bearingDeg: 90, scale: 0.95, heightScale: 1.3, hideFids: [140185], placeId: '한밭수목원' },
+  // 기초과학연구원 도서관: 연구원 터에서 모형(78×42m)과 모양이 가장 닮은 fid 106589(72.6×40.7m, 남북 방향). 건물 이름은 지도 데이터에 없어 모양으로 고른 것이라 확인이 필요하다
+  { id: 'ibs-library', name: '기초과학연구원 도서관', model: 'ibs-library.glb', lng: 127.387171, lat: 36.377117, offsetM: [3, -8], footprintLongM: 73, bearingDeg: 0.3, scale: 0.95, heightScale: 1.3, hideFids: [106589] },
+  // 엑스포다리(갑천 위 남북 방향 보행교). 다리에는 숨길 건물이 없다. 좌표는 OpenStreetMap 의 다리 가운데
+  { id: 'expo-bridge', name: '엑스포다리', model: 'expo-bridge.glb', lng: 127.38804, lat: 36.37261, offsetM: [0, 12], footprintLongM: 120, bearingDeg: 0, scale: 1.2, heightScale: 1, hideFids: [] },
+  // 대전엑스포 시민광장: 엑스포로와 갑천 사이 강변 띠(엑스포다리 북쪽 끝). 광장에는 숨길 건물이 없다
+  { id: 'expo-plaza', name: '대전엑스포 시민광장', model: 'expo-plaza.glb', lng: 127.38805, lat: 36.37392, offsetM: [0, 0], footprintLongM: 134, bearingDeg: 90, scale: 1, heightScale: 1, hideFids: [] },
 ]
 
 export const LANDMARK_SCALE_RANGE: [number, number] = [0.8, 2]
@@ -51,6 +59,7 @@ export const LANDMARK_MATERIAL_COLORS: Record<string, string> = {
   roof: '#EEF3FE',
   glass: '#BFD3F8',
   trim: '#F3F7FE', // 테두리·기둥: 지붕 색 가까이
+  green: '#CFE6F4', // 정원·옥상 녹지: 푸른 기가 도는 연한 색
   slit: '#D2DFF8', // 틈: 벽보다 살짝 진하게
 }
 export const LANDMARK_FALLBACK_COLOR = '#E3EAFB'

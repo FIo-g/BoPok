@@ -48,17 +48,17 @@ export const TOUR_WAYPOINTS: LandingView[] = [
   EXPLORE_VIEW,
   // 대전예술의전당·대전시립미술관 모형 (map/landmarks.ts)
   { center: [127.3847, 36.3669], zoom: 16.4, pitch: 62, bearing: 20 },
-  { center: [127.3925, 36.3750], zoom: 15.8, pitch: 64, bearing: 45 },
-  { center: [127.3870, 36.3775], zoom: 15.8, pitch: 62, bearing: 80 },
+  // 엑스포다리·대전엑스포 시민광장 모형
+  { center: [127.3881, 36.3733], zoom: 16.2, pitch: 64, bearing: 30 },
+  // 기초과학연구원 도서관 모형
+  { center: [127.3872, 36.3771], zoom: 16.6, pitch: 62, bearing: 80 },
   // 국립중앙과학관 모형
   { center: [127.3758, 36.3753], zoom: 16.4, pitch: 64, bearing: -35 },
 ]
 
-// 시연 장소 핀. 랜드마크 모형이 있는 곳(국립중앙과학관·대전시립미술관·대전예술의전당)은 이름 라벨과 파란 핀을 두지 않고
-// 모형 자체를 눌러 장소로 간다(map/landmarks.ts). 모형이 없는 장소만 핀으로 보여 준다
-export const PLACE_PINS: { id: string; name: string; coord: [number, number] }[] = [
-  { id: 'place-hanbat', name: '한밭수목원', coord: [127.3856, 36.3684] },
-]
+// 시연 장소 핀. 랜드마크 모형이 있는 곳은 모두 이름 라벨과 파란 핀을 두지 않고 모형 자체를 눌러 장소로 간다(map/landmarks.ts).
+// 지금은 모형이 없는 시연 장소가 없어 비어 있다. 모형이 없는 장소를 더하면 여기에 핀으로 둔다
+export const PLACE_PINS: { id: string; name: string; coord: [number, number] }[] = []
 
 // 둘러보기로 내려앉을 때 필요한 줌 16 건물 타일을 소개가 끝난 뒤 미리 받아 둔다(내려앉는 중 네트워크 기다림을 없앤다)
 export const PREFETCH_ZOOM = 16

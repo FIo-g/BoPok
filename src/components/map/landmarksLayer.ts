@@ -56,6 +56,8 @@ export async function createLandmarksLayer(landmarks: Landmark[], opts: Landmark
     // 마지막으로 그린 투영 행렬(눌림 판정·시선 방향 계산용)
     proj: InstanceType<typeof THREE.Matrix4>
     drawn: boolean
+    // 모형을 감싸는 구의 반지름(m). 화면 밖이면 그리지 않는 데 쓴다
+    radiusM: number
     // 호버·선택 강조 정도 0~1 (부드럽게 따라간다)
     level: number
   }
@@ -165,7 +167,11 @@ export async function createLandmarksLayer(landmarks: Landmark[], opts: Landmark
 
     const [lng, lat] = landmarkCenter(landmark)
     const origin = MercatorCoordinate.fromLngLat([lng, lat], 0)
-    items.push({ landmark, scene, group, solids, glasses, glowMaterial, rim, origin, unit: origin.meterInMercatorCoordinateUnits(), proj: new THREE.Matrix4(), drawn: false, level: 0 })
+    // 모형(방향·크기·높이 배율 반영)을 감싸는 구와 바닥 글로우 반지름 중 큰 쪽
+    group.updateMatrixWorld(true)
+    const sphere = new THREE.Box3().setFromObject(group).getBoundingSphere(new THREE.Sphere())
+    const radiusM = Math.max(sphere.radius + Math.hypot(landmark.offsetM[0], landmark.offsetM[1]), radius)
+    items.push({ landmark, scene, group, solids, glasses, glowMaterial, rim, origin, unit: origin.meterInMercatorCoordinateUnits(), proj: new THREE.Matrix4(), drawn: false, radiusM, level: 0 })
   }
 
   let renderer: InstanceType<typeof THREE.WebGLRenderer> | null = null
@@ -178,6 +184,8 @@ export async function createLandmarksLayer(landmarks: Landmark[], opts: Landmark
   const toMercator = new THREE.Matrix4()
   const inverse = new THREE.Matrix4()
   const eye = new THREE.Vector4()
+  const clipCenter = new THREE.Vector4()
+  const clipSide = new THREE.Vector4()
   const raycaster = new THREE.Raycaster()
   const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
@@ -223,6 +231,22 @@ export async function createLandmarksLayer(landmarks: Landmark[], opts: Landmark
       for (const item of items) {
         item.drawn = visible && fade > 0.001 && grow > 0.001
         if (!item.drawn) continue
+        // 화면 밖 모형은 그리지 않는다(여러 개를 매 프레임 다 그리면 느려진다). 가운데와 반지름만큼 동쪽 점을 투영해 화면 반지름을 어림한다
+        toMercator.makeTranslation(item.origin.x, item.origin.y, item.origin.z).scale(new THREE.Vector3(item.unit, item.unit, item.unit * grow))
+        item.proj.copy(main).multiply(toMercator)
+        clipCenter.set(0, 0, 0, 1).applyMatrix4(item.proj)
+        clipSide.set(item.radiusM, 0, 0, 1).applyMatrix4(item.proj)
+        if (clipCenter.w <= 0) {
+          item.drawn = false
+          continue
+        }
+        const cx = clipCenter.x / clipCenter.w
+        const cy = clipCenter.y / clipCenter.w
+        const r = (Math.hypot(clipSide.x / clipSide.w - cx, clipSide.y / clipSide.w - cy) || 0) * 1.6 + 0.2
+        if (Math.abs(cx) > 1 + r || Math.abs(cy) > 1 + r) {
+          item.drawn = false
+          continue
+        }
         // 호버·선택 강조(부드럽게)
         const target = item.landmark.id === hoverId || item.landmark.id === selectedId ? 1 : 0
         item.level += (target - item.level) * 0.25
@@ -241,8 +265,6 @@ export async function createLandmarksLayer(landmarks: Landmark[], opts: Landmark
         }
         // 바닥 글로우도 같은 구간에서 같이 나타난다
         item.glowMaterial.opacity = fade * (style.glowAlpha + (style.glowAlphaActive - style.glowAlpha) * item.level)
-        toMercator.makeTranslation(item.origin.x, item.origin.y, item.origin.z).scale(new THREE.Vector3(item.unit, item.unit, item.unit * grow))
-        item.proj.copy(main).multiply(toMercator)
         // 시선 위치(장면 좌표): 투영 행렬에서 x=y=w=0 이 되는 점. 림 라이트 방향 계산용
         inverse.copy(item.proj).invert()
         eye.set(0, 0, 1, 0).applyMatrix4(inverse)
