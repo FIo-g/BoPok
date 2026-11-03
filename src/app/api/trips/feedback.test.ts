@@ -1,6 +1,8 @@
 // 일차별 만족도 API 테스트. 응답은 화면이 쓰는 계약 스키마로 검사하고 '다른 그룹 사람 → 403'을 확인한다.
+import { eq } from 'drizzle-orm'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DayFeedbackItemSchema, DayFeedbackListResponseSchema } from '@/lib/contracts'
+import { trips } from '@/lib/db/schema'
 import type { TestDb } from '@/lib/db/test-db'
 import { setupTestDb } from '@/lib/db/test-db'
 import { addMember, createGroup as insertGroup, insertTrip, jsonRequestWith, readBody, requestWith, routeParams, signUp } from '@/lib/auth/test-fixtures'
@@ -33,7 +35,8 @@ const list = (cookie: string | undefined, tripId: string) => listFeedback(reques
 async function tripFor() {
   const owner = await signUp({ name: '김경선', email: 'gs@example.com' })
   const groupId = await insertGroup(testDb.db, { name: '우리 가족', ownerId: owner.userId })
-  const tripId = await insertTrip(testDb.db, { groupId, createdBy: owner.userId })
+  const tripId = await insertTrip(testDb.db, { groupId, createdBy: owner.userId, date: '2026-11-14' })
+  await testDb.db.update(trips).set({ endDate: '2026-11-15' }).where(eq(trips.id, tripId))
   return { owner, groupId, tripId }
 }
 
@@ -82,7 +85,7 @@ describe('일차별 만족도 API', () => {
     ['점수 0', { day: 1, score: 0 }],
     ['점수 6', { day: 1, score: 6 }],
     ['0일차', { day: 0, score: 3 }],
-    ['너무 먼 날', { day: 31, score: 3 }],
+    ['여행 기간 밖의 날', { day: 3, score: 3 }],
     ['101자', { day: 1, score: 3, comment: '가'.repeat(101) }],
   ])('%s은 400', async (_, body) => {
     const { owner, tripId } = await tripFor()
