@@ -22,7 +22,8 @@ function headline(trip: Trip): string {
 export function buildShareText(args: { trip: Trip; days: DayRun[] }): string {
   const { trip, days } = args
   const lines: string[] = [`[보폭] ${trip.title}`, headline(trip), '']
-  const multiDay = days.length > 1
+  // 장소가 하루에만 있어도 여러 날 여행이면 언제인지 밝힌다
+  const multiDay = days.length > 1 || days[0]?.day !== 1 || Boolean(trip.endDate && trip.endDate !== trip.date)
 
   days.forEach((run, index) => {
     if (multiDay) {

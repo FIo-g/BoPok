@@ -228,6 +228,13 @@ describe('정보가 없을 때 숫자를 지어내지 않는다', () => {
       expect(text.match(/하루 걷기/g)).toHaveLength(2)
     })
 
+    it('장소가 둘째 날에만 있어도 일차와 날짜를 밝힌다', async () => {
+      const days = await judgeDays({ stops: [stop({ key: 's1', name: '성심당', day: 2 })], travelers }, depsWith(hanbat))
+      const text = buildShareText({ trip: { ...trip, endDate: '2026-11-16' }, days })
+
+      expect(text).toContain('[2일차 2026-11-16]')
+    })
+
     it('하루짜리 여행에는 일차 머리가 없다', async () => {
       const days = await judgeDays({ stops: [stop({ key: 's1', name: '한밭수목원', placeId: hanbat.id })], travelers }, depsWith(hanbat))
       const text = buildShareText({ trip, days })

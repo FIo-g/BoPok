@@ -74,7 +74,15 @@ export function FinalScreen({ tripId }: { tripId: string }) {
         <div className="order-2 flex min-w-0 flex-col gap-4 lg:order-1">
           {judged && dayStops ? (
             <>
-              <DayTabs days={days} day={day} startDate={trip.date} onSelect={setPickedDay} />
+              <DayTabs
+                days={days}
+                day={day}
+                startDate={trip.date}
+                onSelect={next => {
+                  setPickedDay(next)
+                  setSelectedId(null) // 고른 장소는 그날 지도에만 있다
+                }}
+              />
               <Card className="flex flex-wrap items-center gap-3">
                 <Badge tone="ok">✓ 확정</Badge>
                 <VerdictBadge verdict={judged.result.verdict} />
