@@ -2,7 +2,7 @@
 // 권한(로그인·구성원·그룹장)과 에러 코드(401·403·404·410)도 서버처럼 흉내 내서 화면의 에러 처리를 미리 확인할 수 있다.
 import type { Api, SignInInput, SignUpInput } from '@/lib/api-client/types'
 import { ApiRequestError } from '@/lib/api-client/http'
-import { AcceptInviteRequestSchema, type ApiErrorCode, type Group, type Opinion, type Trip, type TripListItem, type TripVersion, type User, type VersionSummary } from '@/lib/contracts'
+import { AcceptInviteRequestSchema, type ApiErrorCode, type DayFeedbackItem, type Group, type Opinion, type Trip, type TripListItem, type TripVersion, type User, type VersionSummary } from '@/lib/contracts'
 import { judgeWithMocks } from './judge-helper'
 import { mockLeg } from './legs'
 import { mockExplain, mockGenerate, mockInterview, mockParseSchedule, mockRevise, saveMockVersion } from './mock-ai'
@@ -264,6 +264,22 @@ export const mockApi: Api = {
     }),
   },
 
+  feedback: {
+    list: tripId => call(db => {
+      const { trip } = requireTrip(db, tripId)
+      return { tripDate: trip.date ?? null, feedback: db.feedback.filter(item => item.tripId === tripId) }
+    }),
+    save: (tripId, input) => call(db => {
+      const { user } = requireTrip(db, tripId)
+      const before = db.feedback.find(item => item.tripId === tripId && item.day === input.day && item.userId === user.id)
+      const saved: DayFeedbackItem = {
+        tripId, day: input.day, userId: user.id, userName: user.name, score: input.score,
+        comment: input.comment ?? null, createdAt: before?.createdAt ?? now(),
+      }
+      db.feedback = [...db.feedback.filter(item => item !== before), saved]
+      return saved
+    }),
+  },
   places: {
     list: (query = {}) => call(() =>
       mockPlaceDetails
