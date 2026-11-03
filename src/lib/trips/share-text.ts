@@ -5,6 +5,7 @@
 // 0분 같은 값을 지어내지 않는다. DB를 쓰지 않는 순수 함수라 테스트하기 쉽다.
 import type { Trip, TripVersion } from '@/lib/contracts'
 import { formatRange } from '@/lib/engine'
+import { formatRideMin } from '@/lib/format'
 import type { JudgeRun } from './judge-run'
 
 const MODE_TEXT = { walk: '걸어서', car: '자가용', taxi: '택시', bus: '버스' } as const
@@ -40,7 +41,7 @@ export function buildShareText(args: { trip: Trip; version: TripVersion; run: Ju
     const leg = result?.legs.find(one => one.fromStopKey === stop.key)
     const next = version.stops[index + 1]
     if (leg && next && leg.mode !== 'walk') {
-      const ride = leg.rideMin !== null ? ` 약 ${Math.round(leg.rideMin)}분` : ''
+      const ride = leg.rideMin !== null ? ` ${formatRideMin(leg.rideMin)}` : ''
       lines.push(`  ↓ ${MODE_TEXT[leg.mode]} 이동${ride}`)
     }
   })
