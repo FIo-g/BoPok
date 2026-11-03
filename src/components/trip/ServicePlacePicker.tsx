@@ -29,6 +29,8 @@ export function ServicePlacePicker({ kind, usedIds, picked = [], onPick, busy }:
     if (!anchorOptions.some(known => known.id === place.id)) anchorOptions.push(place)
   }
   const from = anchorOptions.find(place => place.id === fromId)
+  // 기준으로 고른 곳이 목록에서 빠지면(여러 곳 고르기에서 뺌) 기준도 없는 것으로 본다. 다시 넣었을 때 조용히 되살아나지 않게
+  const activeFromId = from ? fromId : ''
   const to = anchorOptions.find(place => place.id === toId)
   const recommendationRequest = { kind, query, near: from?.coord, route: from && to && from.id !== to.id ? [from.coord, to.coord] : undefined, limit: 20 }
   const key = JSON.stringify(recommendationRequest)
@@ -43,13 +45,13 @@ export function ServicePlacePicker({ kind, usedIds, picked = [], onPick, busy }:
       <Button className="shrink-0 whitespace-nowrap" type="submit">찾기</Button>
     </form>
     {anchorOptions.length > 0 && <div className="my-3 grid gap-2 sm:grid-cols-2">
-      <label>가까운 곳을 찾을 기준<select className={selectClass} value={fromId} onChange={event => setFromId(event.target.value)}>
+      <label>가까운 곳을 찾을 기준<select className={selectClass} value={activeFromId} onChange={event => setFromId(event.target.value)}>
         <option value="">기준 장소 선택</option>
         {anchorOptions.map(place => <option key={place.id} value={place.id}>{place.name}</option>)}
       </select></label>
       <label>다음 방문지(선택)<select className={selectClass} value={toId} onChange={event => setToId(event.target.value)} disabled={!from || !anchorOptions.some(place => place.id !== from.id)}>
         <option value="">두 장소 사이 동선도 고려</option>
-        {anchorOptions.filter(place => place.id !== fromId).map(place => <option key={place.id} value={place.id}>{place.name}</option>)}
+        {anchorOptions.filter(place => place.id !== activeFromId).map(place => <option key={place.id} value={place.id}>{place.name}</option>)}
       </select></label>
     </div>}
     <p className="my-3 text-sm text-muted">{result.data?.method === 'vector' ? '의미가 가까운 순으로 검색했어요.' : '이름·메뉴·설명에서 찾은 결과예요.'} 거리와 동선은 직선 기준이며 실제 이동 경로는 장소를 넣은 뒤 확인해 주세요.</p>

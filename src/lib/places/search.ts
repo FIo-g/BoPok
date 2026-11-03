@@ -79,8 +79,8 @@ export async function searchCandidates(query: PlaceCandidateQuery, database?: Db
     if (input.query) {
       try {
         semantic = (await recommendServicePlaces({ kind, query: input.query, avoidStairs: input.avoidStairs, limit: Math.min(limit, 20) }, { db, embedQuery })).items.map(item => item.place)
-      } catch {
-        console.error('[places]', '추천 검색 실패', kind)
+      } catch (error) {
+        console.error('[places]', '추천 검색 실패', kind, error instanceof Error ? error.name : typeof error)
       }
     }
     all.push(...semantic, ...await structured(kind, limit - semantic.length, semantic.map(place => place.id)))

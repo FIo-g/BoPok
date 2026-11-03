@@ -32,8 +32,9 @@ export function prepareFoodCatalog(input: unknown): PreparedCatalogPlace {
   return PreparedCatalogPlaceSchema.parse({
     summary: { id: entry.id, name: entry.name, category: entry.businessType ?? '음식점',
       kind: entry.kind === 'cafe' ? 'cafe' : 'restaurant', styles: [], coord: entry.coord,
-      // API가 착석·실내를 확인해 주지 않는다. 확인 전에는 걷기가 끊긴다고 판정하지 않는다.
-      seated: false, indoor: false, address: entry.address ?? undefined, phone: entry.phone ?? undefined,
+      // 식당·카페는 앉아서 먹고 마시는 곳으로 본다 — 계약의 seated 정의와 같고, 식사 자리(placeId null)와 판정이 같아진다
+      // (김태형 11/3, PR #29 김경선 리뷰). 좌석을 실제로 확인한 것은 아니라 data.seatingVerified는 false로 둔다. 실내는 미확인이라 false.
+      seated: true, indoor: false, address: entry.address ?? undefined, phone: entry.phone ?? undefined,
       source: entry.source, checkedAt: entry.checkedAt, confidence: entry.confidence },
     provider: 'daejeon_food', sourceId: entry.sourceId, searchText: entry.searchText, menus,
     data: { ...entry, seatingVerified: false, indoorVerified: false, dietaryTagsVerified: false },
@@ -52,7 +53,8 @@ export function prepareTourCatalog(input: unknown, curatedSummary?: unknown): Pr
   return PreparedCatalogPlaceSchema.parse({
     summary: summary ?? { id: entry.id, name: entry.name, category: entry.kind === 'attraction' ? entry.contentTypeId === '14' ? '문화시설' : '관광지' : entry.kind === 'lodging' ? '숙박' : '음식점',
       kind: entry.kind === 'attraction' ? 'attraction' : entry.kind === 'lodging' ? 'lodging' : entry.kind === 'cafe' ? 'cafe' : 'restaurant',
-      styles: [], coord: entry.coord, seated: false, indoor: false,
+      // 식당·카페만 앉는 곳으로 본다 (위 prepareFoodCatalog와 같은 까닭). 관광지·숙박은 미확인이라 false
+      styles: [], coord: entry.coord, seated: entry.kind !== 'attraction' && entry.kind !== 'lodging', indoor: false,
       address: entry.address ?? undefined, phone: entry.phone ?? undefined,
       source: entry.source, checkedAt: entry.checkedAt, confidence: entry.confidence },
     provider: 'tourapi', sourceId: entry.contentId, searchText: entry.searchText, menus: [],

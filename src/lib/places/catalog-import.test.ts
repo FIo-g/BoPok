@@ -40,7 +40,7 @@ describe('공용 장소 계약에 수집 자료 적재', () => {
     const entry = prepareFoodCatalog(food())
     expect(await importPreparedCatalog(db, [entry])).toEqual({ inserted: 1, unchanged: 0, total: 1 })
     const summaries = await listPlaces({}, db)
-    expect(summaries[0]).toMatchObject({ id: 'daejeon-food-1', kind: 'restaurant', seated: false })
+    expect(summaries[0]).toMatchObject({ id: 'daejeon-food-1', kind: 'restaurant', seated: true })
     expect(summaries[0]).not.toHaveProperty('menus')
     const detail = (await getPlaceDetails(['daejeon-food-1'], db))[0]
     expect(detail.menus?.[0]).toMatchObject({ name: '가상 국수', priceKrw: 8000, foodTags: [], source: entry.summary.source })

@@ -85,9 +85,10 @@ function candidateLine(place: PlaceSummary): string {
   if (place.styles.length > 0) parts.push(`스타일: ${place.styles.join(', ')}`)
   parts.push(place.visitMin !== undefined ? `머무는 시간 약 ${place.visitMin}분` : '머무는 시간 미정')
   parts.push(`종류: ${KIND_LABEL[placeKindOf(place)]}`)
-  // false는 '아님'과 '미확인'을 함께 뜻한다 (필수 칸이라). 날씨 줄이 야외 장소를 짧게 하라고 하므로 AI가 야외를 알아볼 수 있게 쓴다.
+  // false는 '아님'과 '미확인'을 함께 뜻한다 (필수 칸이라). 날씨 줄이 야외 장소를 짧게 하라고 하므로 관광지는 야외로 보게 쓴다.
+  // 식당·카페·숙박의 false는 미확인일 뿐이라 야외라고 하지 않는다 (비 오는 날 사람이 넣은 점심 식당을 빼지 않게, weather-view와 같은 기준).
   parts.push(place.seated ? '앉는 곳' : '앉는 곳 아님 또는 미확인')
-  parts.push(place.indoor ? '실내' : '실외 또는 실내 미확인(야외로 볼 것)')
+  parts.push(place.indoor ? '실내' : placeKindOf(place) === 'attraction' ? '실외 또는 실내 미확인(야외로 볼 것)' : '실내 여부 미확인')
   return `- ${parts.join(', ')}`
 }
 

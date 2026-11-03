@@ -42,6 +42,9 @@ function cleanTime(value: string | undefined): string | undefined {
   return parsed.success ? parsed.data : undefined
 }
 
+// 장소 이름 맞추기·POI 검색을 한 번에 몇 개씩 부를지
+const LOOKUP_BATCH = 5
+
 export async function handleParseSchedule(request: Request, deps: AiDeps): Promise<Response> {
   return handle(async () => {
     const input = await readJson(request, ParseScheduleRequestSchema)
@@ -92,30 +95,32 @@ export async function handleParseSchedule(request: Request, deps: AiDeps): Promi
     const drafts: DraftStop[] = []
     const unmatched: string[] = []
 
-    // 못 맞춘 이름마다 TMAP을 부르므로 한 개씩 기다리면 60초를 넘을 수 있어 동시에 찾는다.
-    // 결과는 원래 순서대로 모은다 (아래 루프).
-    const lookups = await Promise.all(
-      parsed.items.map(async item => {
-        let found: PlaceSummary | null = null
+    // 못 맞춘 이름마다 TMAP을 부르므로 한 개씩 기다리면 60초를 넘을 수 있어 다섯 개씩 동시에 찾는다
+    // (한꺼번에 다 부르면 TMAP 한도(429)에 걸려 좌표가 조용히 빠질 수 있다). 결과는 원래 순서대로 모은다 (아래 루프).
+    const lookupOne = async (item: (typeof parsed.items)[number]) => {
+      let found: PlaceSummary | null = null
+      try {
+        found = await deps.matchPlaceByName(item.name)
+      } catch (error) {
+        console.error('[ai]', '장소 조회 실패', error instanceof Error ? error.name : typeof error)
+        found = null
+      }
+      let coord: Coord | undefined
+      if (!found) {
         try {
-          found = await deps.matchPlaceByName(item.name)
+          const poi = await deps.searchPoi(item.name)
+          // DB에 없는 이름은 좌표가 있어도 unmatched에 남긴다 (정보 없음 장소).
+          if (poi) coord = poi.coord
         } catch (error) {
           console.error('[ai]', '장소 조회 실패', error instanceof Error ? error.name : typeof error)
-          found = null
         }
-        let coord: Coord | undefined
-        if (!found) {
-          try {
-            const poi = await deps.searchPoi(item.name)
-            // DB에 없는 이름은 좌표가 있어도 unmatched에 남긴다 (정보 없음 장소).
-            if (poi) coord = poi.coord
-          } catch (error) {
-            console.error('[ai]', '장소 조회 실패', error instanceof Error ? error.name : typeof error)
-          }
-        }
-        return { item, found, coord }
-      }),
-    )
+      }
+      return { item, found, coord }
+    }
+    const lookups: Awaited<ReturnType<typeof lookupOne>>[] = []
+    for (let start = 0; start < parsed.items.length; start += LOOKUP_BATCH) {
+      lookups.push(...await Promise.all(parsed.items.slice(start, start + LOOKUP_BATCH).map(lookupOne)))
+    }
 
     for (const { item, found, coord } of lookups) {
       if (found) {

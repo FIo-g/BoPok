@@ -28,7 +28,11 @@ export function CostSlot({ tripId, versionId, day, stops, travelers }: TripSlotP
     ? [stop.arriveBy, taxiCostKey(scope, stops[index - 1], stop, travelers.length)] : placeCostKey(scope, stop))])
   const taxiBusy = taxiStatus.scope === taxiScope && taxiStatus.busy
   const taxiMessage = taxiStatus.scope === taxiScope ? taxiStatus.message : ''
-  useEffect(() => () => { taxiController.current?.abort() }, [taxiScope])
+  // 범위가 바뀌면 조회를 끊고 '확인 중'도 푼다. 안 풀면 응답 전에 같은 날로 돌아왔을 때 버튼이 잠긴 채 남는다
+  useEffect(() => () => {
+    taxiController.current?.abort()
+    setTaxiStatus(status => status.scope === taxiScope ? { ...status, busy: false } : status)
+  }, [taxiScope])
   const idsKey = [...new Set(stops.flatMap(stop => stop.placeId ? [stop.placeId] : []))].join(',')
   // 연습(목업) 모드에는 가격 API가 없고, 장소가 없으면 부를 것도 없다 — 빈 가격표로 본다
   const noPriceCall = USE_MOCKS || !idsKey
