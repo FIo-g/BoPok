@@ -174,7 +174,7 @@ export const mockApi: Api = {
       const user = requireMember(db, input.groupId)
       void user
       const trip: Trip = {
-        id: nextId('t'), groupId: input.groupId, title: input.title, date: input.date ?? null, mode: input.mode, transport: null,
+        id: nextId('t'), groupId: input.groupId, title: input.title, date: input.date ?? null, endDate: input.endDate ?? null, mode: input.mode, transport: null,
         styles: [], budget: null, confirmedVersionId: null, confirmedByName: null, createdAt: now(),
       }
       db.trips.push(trip)

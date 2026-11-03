@@ -3,7 +3,7 @@
 // 응답 모양은 src/lib/contracts/trip-api.ts(화면이 쓰는 모양)를 그대로 따른다.
 import 'server-only'
 import { desc, eq } from 'drizzle-orm'
-import type { CreateTripRequest, Trip, TripDetail, TripListItem, UpdateTripRequest } from '@/lib/contracts'
+import { tripDatesOutOfOrder, type CreateTripRequest, type Trip, type TripDetail, type TripListItem, type UpdateTripRequest } from '@/lib/contracts'
 import { HttpError } from '@/lib/auth/http'
 import type { Db } from '@/lib/db/client'
 import { getDb } from '@/lib/db/client'
@@ -19,6 +19,7 @@ function toTrip(row: TripRow, confirmedByName: string | null): Trip {
     groupId: row.groupId,
     title: row.title,
     date: row.date, // 'YYYY-MM-DD' 또는 null
+    endDate: row.endDate, // 끝나는 날. null이면 당일 여행
     mode: row.startMode,
     transport: row.transport,
     styles: row.styles,
@@ -46,6 +47,7 @@ export async function createTrip(
       groupId: args.groupId,
       title: args.title,
       date: args.date ?? null,
+      endDate: args.endDate ?? null,
       startMode: args.mode,
       createdBy: args.userId,
     })
@@ -92,11 +94,22 @@ export async function updateTrip(
   const { patch } = args
   if (Object.keys(patch).length === 0) return toTrip(existing, confirmedByName)
 
+  const nextDate = 'date' in patch ? patch.date ?? null : existing.date
+  const nextEndDate = 'endDate' in patch ? patch.endDate ?? null : existing.endDate
+  // 계약은 요청에 온 칸만 볼 수 있어서, 한쪽만 고친 경우는 저장된 값과 합친 뒤에 검사한다 (설계 4.2)
+  if (tripDatesOutOfOrder(nextDate, nextEndDate)) {
+    throw new HttpError(400, 'invalid_request', '끝 날짜가 시작 날짜보다 빨라요')
+  }
+  if (nextEndDate && !nextDate) {
+    throw new HttpError(400, 'invalid_request', '시작 날짜를 먼저 정해 주세요')
+  }
+
   const [row] = await db
     .update(trips)
     .set({
       title: patch.title ?? existing.title,
-      date: 'date' in patch ? patch.date ?? null : existing.date,
+      date: nextDate,
+      endDate: nextEndDate,
       transport: 'transport' in patch ? patch.transport ?? null : existing.transport,
       styles: patch.styles ?? existing.styles,
       budget: 'budget' in patch ? patch.budget ?? null : existing.budget,
