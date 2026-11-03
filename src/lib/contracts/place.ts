@@ -126,7 +126,7 @@ export const PlaceListQuerySchema = z.object({
   q: z.string().trim().max(100).default(''),
   styles: z.array(z.string().trim().min(1).max(30)).max(10).default([]),
   kind: PlaceKindSchema.optional(),
-  limit: z.number().int().min(1).max(100).optional(),
+  limit: z.number().int().min(1).max(300).optional(),
 }).strict()
 export type PlaceListQuery = z.infer<typeof PlaceListQuerySchema>
 export const PlaceSummaryListSchema = z.array(PlaceSummarySchema)

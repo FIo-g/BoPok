@@ -19,9 +19,17 @@ describe('Upstage 장소 임베딩', () => {
     [{ index: 0, embedding: [1, 0] }],
     [{ index: 0, embedding: Array(1024).fill(0) }],
     [{ index: 1, embedding: vector() }],
-  ])('차원·영벡터·인덱스가 잘못되면 두 번 이내에 실패한다', async data => {
+  ])('차원·영벡터·인덱스가 잘못되면 검색어는 한 번만 부르고 실패한다', async data => {
     const fetchFn = vi.fn<typeof fetch>().mockImplementation(async () => Response.json({ model: PLACE_QUERY_MODEL, data }))
     await expect(embedPlaceTexts(['검색'], 'query', { apiKey: 'test-secret', fetchFn })).rejects.not.toThrow('test-secret')
+    expect(fetchFn).toHaveBeenCalledTimes(1)
+  })
+
+  it('문서(passage)는 5xx에 한 번 재시도한 뒤 성공한다', async () => {
+    const fetchFn = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response('server error', { status: 503 }))
+      .mockResolvedValueOnce(Response.json({ model: PLACE_PASSAGE_MODEL, data: [{ index: 0, embedding: vector() }] }))
+    expect(await embedPlaceTexts(['문서'], 'passage', { apiKey: 'test-only', fetchFn })).toHaveLength(1)
     expect(fetchFn).toHaveBeenCalledTimes(2)
   })
 

@@ -26,4 +26,13 @@ describe('택시 비용 API 경계', () => {
     }))).status).toBe(400)
     expect(quoteTaxiCosts).not.toHaveBeenCalled()
   })
+  it('장소 ID 형식이 틀리면 외부 경로 호출 전에 400으로 막는다', async () => {
+    state.loggedIn = true
+    const end = { coord: [127.38, 36.35] }
+    expect((await POST(new Request('http://localhost/api/places/taxi-costs', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requests: [{ from: { ...end, placeId: 'bad id!' }, to: { ...end, placeId: 'hanbat' }, mode: 'taxi' }] }),
+    }))).status).toBe(400)
+    expect(quoteTaxiCosts).not.toHaveBeenCalled()
+  })
 })

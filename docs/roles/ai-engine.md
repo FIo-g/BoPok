@@ -71,8 +71,9 @@ AI 실패 시: 붙여넣기는 "장소를 직접 골라 주세요"로, 처음부
 - 이동주 (`src/lib/places`, `src/lib/geo`)
   - `getPlaceDetails(ids)` → `PlaceDetail[]` — 연결됨. 형식이 틀린 id는 빼고 묻는다
   - `getLegs(requests)` → `Leg[]` — `getLegsPartial`을 20개씩 나눠 부른다. 걷는 구간(walk)만 묻고, 받지 못한 경로는 빼서 엔진이 '정보 부족'으로 판정한다
-  - `searchCandidates({ styles, budget?, transport, avoidStairs, limit })`, `matchPlaceByName(name)` — 이동주 쪽에 아직 없어 `src/lib/ai/place-adapters.ts`가 `listPlaces`로 대신 만든다. 후보는 스타일이 맞는 순서로 정렬할 뿐 거르지 않는다(예산·이동수단·계단은 장소 요약에 없다). 이름 맞추기는 이름이 같거나 입력에 장소 이름이 통째로 들어 있을 때만 맞추고, 후보가 둘 이상이면 null이다
-  - `searchPoi(name)` — TMAP POI 검색이 아직 없어 항상 null이다. 붙여넣기 정리가 그 이름을 '정보 없음' 자리(좌표 없음)로 둔다(설계 6.4). 이동주가 같은 이름의 함수를 만들면 `place-adapters.ts`의 해당 부분을 그쪽으로 바꾼다
+  - `searchCandidates({ styles, budget?, transport, avoidStairs, limit, query?, kind? })`, `matchPlaceByName(name)`, `searchPoi(name)` — **11/3 이동주 실제 함수로 연결**(PR #29, `src/lib/places/search.ts`·`src/lib/geo/poi.ts`). 후보는 SQL로 종류·계단을 보고, 스타일 점수 → 걷는 길 기록이 있는 장소 → 이름 순서다. 장소 DB에 식당·카페가 2만 곳이라 이름 맞추기의 "입력 안에 이름이 통째로 들어 있음"은 **세 글자 이상** 이름만 본다(두 글자 식당 "시장"이 "한밭 전통시장"에 맞지 않게)
+  - **AI 일정 짜기·다시 짜기 후보는 관광지만**(`kind: 'attraction'`) **[제안: 김태형 확인 필요]**: 가져온 식당·카페에는 위치 기준 순위가 아직 없어 대전 어디든 이름순으로 뽑히기 때문이다. 식사는 전처럼 식사 자리(placeId null)로 두고, 사람이 고른 식당·꼭 갈 곳은 그대로 쓴다(다시 짜기는 지금 버전의 장소를 모두 후보에 더한다). 방문지 근처 식당 추천(`/api/places/recommendations`의 `near`)을 AI에 붙이는 것은 다음 일
+  - 붙여넣기 정리는 장소마다 이름 맞추기·POI 검색을 동시에 부른다(TMAP POI 8초 제한이 차례로 쌓여 60초를 넘지 않게)
 
 ## 작업 순서
 

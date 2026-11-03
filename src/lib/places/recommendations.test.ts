@@ -3,7 +3,7 @@ import { vector } from '@electric-sql/pglite-pgvector'
 import { drizzle } from 'drizzle-orm/pglite'
 import { migrate } from 'drizzle-orm/pglite/migrator'
 import { readFileSync } from 'node:fs'
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as schema from '@/lib/db/schema'
 import { sql } from 'drizzle-orm'
 import { importPreparedCatalog, prepareFoodCatalog } from './catalog-import'
@@ -72,6 +72,20 @@ describe('실제 pgvector와 후보 추천', () => {
     expect(await indexPlaceEmbeddings(db, { embed: async () => { throw new Error('같은 원문을 재호출하면 안 됨') } }))
       .toMatchObject({ indexed: 0, requests: 0 })
     expect(calls).toBe(1)
+  })
+
+  it('일부만 색인된 종류는 벡터 검색과 질의 임베딩을 건너뛰고 키워드로 답한다', async () => {
+    await importPreparedCatalog(db, [item(1, '가상 국수')])
+    await indexPlaceEmbeddings(db, { embed: async texts => texts.map(() => firstVector) })
+    await importPreparedCatalog(db, [item(2, '가상 밥집')])
+    const embedQuery = vi.fn(async () => firstVector)
+    const partial = await recommendServicePlaces({ kind: 'restaurant', query: '가상' }, { db, embedQuery })
+    expect(partial.method).toBe('keyword')
+    expect(embedQuery).not.toHaveBeenCalled()
+    await indexPlaceEmbeddings(db, { embed: async texts => texts.map(() => secondVector) })
+    const full = await recommendServicePlaces({ kind: 'restaurant', query: '가상' }, { db, embedQuery })
+    expect(full.method).toBe('vector')
+    expect(embedQuery).toHaveBeenCalledOnce()
   })
 
   it('벡터 생성이 실패하면 실제 키워드 검색임을 표시하고 다른 메뉴를 지어내지 않는다', async () => {

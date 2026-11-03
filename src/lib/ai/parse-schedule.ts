@@ -92,25 +92,35 @@ export async function handleParseSchedule(request: Request, deps: AiDeps): Promi
     const drafts: DraftStop[] = []
     const unmatched: string[] = []
 
-    for (const item of parsed.items) {
-      let found: PlaceSummary | null = null
-      try {
-        found = await deps.matchPlaceByName(item.name)
-      } catch (error) {
-        console.error('[ai]', '장소 조회 실패', error instanceof Error ? error.name : typeof error)
-        found = null
-      }
-      let coord: Coord | undefined
+    // 못 맞춘 이름마다 TMAP을 부르므로 한 개씩 기다리면 60초를 넘을 수 있어 동시에 찾는다.
+    // 결과는 원래 순서대로 모은다 (아래 루프).
+    const lookups = await Promise.all(
+      parsed.items.map(async item => {
+        let found: PlaceSummary | null = null
+        try {
+          found = await deps.matchPlaceByName(item.name)
+        } catch (error) {
+          console.error('[ai]', '장소 조회 실패', error instanceof Error ? error.name : typeof error)
+          found = null
+        }
+        let coord: Coord | undefined
+        if (!found) {
+          try {
+            const poi = await deps.searchPoi(item.name)
+            // DB에 없는 이름은 좌표가 있어도 unmatched에 남긴다 (정보 없음 장소).
+            if (poi) coord = poi.coord
+          } catch (error) {
+            console.error('[ai]', '장소 조회 실패', error instanceof Error ? error.name : typeof error)
+          }
+        }
+        return { item, found, coord }
+      }),
+    )
+
+    for (const { item, found, coord } of lookups) {
       if (found) {
         places[found.id] = found
       } else {
-        try {
-          const poi = await deps.searchPoi(item.name)
-          // DB에 없는 이름은 좌표가 있어도 unmatched에 남긴다 (정보 없음 장소).
-          if (poi) coord = poi.coord
-        } catch (error) {
-          console.error('[ai]', '장소 조회 실패', error instanceof Error ? error.name : typeof error)
-        }
         unmatched.push(item.name)
       }
 

@@ -10,6 +10,8 @@ import {
   stopDay,
   TimeSchema,
   tripDays,
+  placeKindOf,
+  type PlaceKind,
   type PlaceSummary,
   type Reaction,
   type Stop,
@@ -52,7 +54,7 @@ const AiReviseSchema = z.object({
 })
 
 const SYSTEM_PROMPT =
-  '가족 여행 일정을 의견에 맞게 다시 짠다. 관광지·식당·카페·숙박 모두 후보 목록의 id로만 골라라. 식사 장소가 미정일 때만 placeId null + 식사 자리로 넣는다. ' +
+  '가족 여행 일정을 의견에 맞게 다시 짠다. 후보 목록의 id로만 골라라. 식사 자리는 placeId null + 이름으로 넣는다. ' +
   '꼭 갈 곳·예약된 장소는 손대지 마라(이미 정해진 표시를 그대로 쓴다). 의견이 서로 부딪히면 [부모님] 의견을 따르라(부모님을 위한 서비스). ' +
   '반영한 의견 id를 appliedOpinionIds에 넣어라. 걷는 시간·거리·계단 수는 쓰지 마라. 메모와 식사 자리 이름에 건강·식단 이야기를 쓰지 마라. ' +
   '반드시 JSON으로만 답하라. 모양: {"stops":[{"placeId":"장소 id 또는 null","name":"장소 이름","startTime":"HH:mm","visitMin":60,"seated":false}],"appliedOpinionIds":["의견 id"],"note":"한 줄 메모"}'
@@ -71,13 +73,21 @@ const REACTION_LABEL: Record<Reaction, string> = {
   prefer_other: '다른 곳이 좋겠어요',
 }
 
+const KIND_LABEL: Record<PlaceKind, string> = {
+  attraction: '관광지',
+  restaurant: '식당',
+  cafe: '카페',
+  lodging: '숙박',
+}
+
 function candidateLine(place: PlaceSummary): string {
   const parts = [`id: ${place.id}`, `이름: ${place.name}`, `분류: ${place.category}`]
   if (place.styles.length > 0) parts.push(`스타일: ${place.styles.join(', ')}`)
   parts.push(place.visitMin !== undefined ? `머무는 시간 약 ${place.visitMin}분` : '머무는 시간 미정')
-  parts.push(`종류: ${place.kind ?? 'attraction'}`)
-  parts.push(place.seated ? '앉는 곳' : '착석 여부 확인 필요')
-  parts.push(place.indoor ? '실내' : '실내 여부 확인 필요')
+  parts.push(`종류: ${KIND_LABEL[placeKindOf(place)]}`)
+  // false는 '아님'과 '미확인'을 함께 뜻한다 (필수 칸이라). 날씨 줄이 야외 장소를 짧게 하라고 하므로 AI가 야외를 알아볼 수 있게 쓴다.
+  parts.push(place.seated ? '앉는 곳' : '앉는 곳 아님 또는 미확인')
+  parts.push(place.indoor ? '실내' : '실외 또는 실내 미확인(야외로 볼 것)')
   return `- ${parts.join(', ')}`
 }
 
@@ -276,6 +286,9 @@ export async function handleRevise(
         // 장소 사이 이동수단 고르기용이라 대중교통은 버스로 찾는다 (설계 7.3.1)
         transport: transport === 'transit' ? 'bus' : transport,
         avoidStairs: profile.condition.avoidStairs,
+        // 가져온 식당·카페는 위치 순위가 없어 대전 어디서나 이름순으로 뽑힌다. 관광지만 고르게 하고,
+        // 식사는 식사 자리(null)나 사람이 고른 장소로 둔다.
+        kind: 'attraction',
         limit: 30,
       })
 
@@ -294,11 +307,13 @@ export async function handleRevise(
         ...(stop.startTime !== undefined ? { startTime: stop.startTime } : {}),
         ...(stop.reservedAt !== undefined ? { reservedAt: stop.reservedAt } : {}),
       }))
+      // 후보는 큰 DB에서 일부만 골라 온 목록이라, 사람이 직접 넣은 장소도 현재 일정에 있으면 여기에 더한다.
+      // 그래야 다시 짜기에서 AI가 그 장소를 그대로 둘 수 있다.
       const missingPlaceIds = [
         ...new Set(
-          musts
-            .filter(must => must.placeId !== null && !candidates.some(candidate => candidate.id === must.placeId))
-            .map(must => must.placeId as string),
+          version.stops
+            .filter(stop => stop.placeId !== null && !candidates.some(candidate => candidate.id === stop.placeId))
+            .map(stop => stop.placeId as string),
         ),
       ]
       if (missingPlaceIds.length > 0) {

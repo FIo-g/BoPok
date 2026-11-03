@@ -45,13 +45,26 @@ export async function recommendServicePlaces(input: unknown, options: {
     const state = await db.select({ ready: sql<boolean>`to_regclass('public.place_embeddings') is not null` }).from(places).limit(1)
     if (state[0]?.ready) {
       try {
-        const vector = PlaceEmbeddingSchema.parse(await (options.embedQuery ?? (async text => (await embedPlaceTexts([text], 'query'))[0]))(query.query))
-        const similarity = sql`place_embeddings.embedding <=> ${JSON.stringify(vector)}::vector`
-        const result = await db.select(columns).from(places).innerJoin(placeCatalog, eq(placeCatalog.placeId, places.id))
-          .innerJoin(sql`place_embeddings`, sql`place_embeddings.place_id = ${places.id}
+        // 일부만 색인된 종류는 벡터 검색을 건너뛴다. 조인으로 걸러지면 일부 장소만 놓고 벡터 결과라고 표시하게 된다.
+        // 질의 임베딩 호출도 건너뛰어 키 사용을 줄인다.
+        const [coverage] = await db.select({
+          embedded: sql<number>`count(distinct place_embeddings.place_id)`,
+          total: sql<number>`count(distinct place_catalog.place_id)`,
+        }).from(placeCatalog).innerJoin(places, eq(places.id, placeCatalog.placeId))
+          .leftJoin(sql`place_embeddings`, sql`place_embeddings.place_id = ${placeCatalog.placeId}
             and place_embeddings.content_hash = ${placeCatalog.contentHash} and place_embeddings.model = ${PLACE_PASSAGE_MODEL}`)
-          .where(kind).orderBy(...stairsOrder, asc(similarity), ...order).limit(query.limit)
-        if (result.length) { found = result; method = 'vector' }
+          .where(kind)
+        const embedded = Number(coverage?.embedded ?? 0)
+        const total = Number(coverage?.total ?? 0)
+        if (embedded > 0 && embedded >= total) {
+          const vector = PlaceEmbeddingSchema.parse(await (options.embedQuery ?? (async text => (await embedPlaceTexts([text], 'query'))[0]))(query.query))
+          const similarity = sql`place_embeddings.embedding <=> ${JSON.stringify(vector)}::vector`
+          const result = await db.select(columns).from(places).innerJoin(placeCatalog, eq(placeCatalog.placeId, places.id))
+            .innerJoin(sql`place_embeddings`, sql`place_embeddings.place_id = ${places.id}
+              and place_embeddings.content_hash = ${placeCatalog.contentHash} and place_embeddings.model = ${PLACE_PASSAGE_MODEL}`)
+            .where(kind).orderBy(...stairsOrder, asc(similarity), ...order).limit(query.limit)
+          if (result.length) { found = result; method = 'vector' }
+        }
       } catch {
         // 키·DB 내부 정보·외부 오류는 돌려주지 않고, 응답에 실제 검색 방식을 명시한다.
       }

@@ -1,19 +1,21 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { PlaceCostChoicesResponseSchema, TaxiCostResponseSchema, legKey, type CostItemKind, type PlaceCostChoices } from '@/lib/contracts'
+import { PlaceCostChoicesResponseSchema, TaxiCostResponseSchema, legKey, type CostItemKind, type LegRequest, type PlaceCostChoices } from '@/lib/contracts'
 import { estimateCosts } from '@/lib/engine/cost'
-import { requiredLegs } from '@/lib/engine/required-legs'
 import { api, USE_MOCKS } from '@/lib/api-client'
+import { request } from '@/lib/api-client/http'
 import { Card, Button } from '@/components/ui'
 import type { TripSlotProps } from './types'
 import { applyUneditedQuotes, costScope, placeCostKey, taxiCostKey } from './cost-drafts'
 
-type Draft = { amount: string; unit: '' | 'per_person' | 'shared'; quantity: number; kind: CostItemKind; option: string; source?: string }
+type Draft = { amount: string; unit: '' | 'per_person' | 'shared'; quantity: number; kind: CostItemKind; option: string; source?: string; checkedAt?: string; confidence?: string }
 const emptyDraft = (): Draft => ({ amount: '', unit: '', quantity: 1, kind: 'other', option: '' })
 const labels: Record<CostItemKind, string> = { admission: '입장료', meal: '식사·카페', lodging: '숙박', taxi: '택시', other: '기타' }
 const inputClass = 'min-h-12 w-full rounded-xl border border-line bg-white px-3 py-2 text-base'
 const won = (amount: number) => `${amount.toLocaleString('ko-KR')}원`
+// 출처 링크는 http(s) 주소만 건다 (그 밖의 값은 링크로 만들지 않는다)
+const isWebUrl = (value?: string): value is string => !!value && /^https?:\/\//.test(value)
 
 export function CostSlot({ tripId, versionId, day, stops, travelers }: TripSlotProps) {
   const [drafts, setDrafts] = useState<Record<string, Draft>>({})
@@ -27,20 +29,18 @@ export function CostSlot({ tripId, versionId, day, stops, travelers }: TripSlotP
   const taxiBusy = taxiStatus.scope === taxiScope && taxiStatus.busy
   const taxiMessage = taxiStatus.scope === taxiScope ? taxiStatus.message : ''
   useEffect(() => () => { taxiController.current?.abort() }, [taxiScope])
-  const idsKey = JSON.stringify([...new Set(stops.flatMap(stop => stop.placeId ? [stop.placeId] : []))])
+  const idsKey = [...new Set(stops.flatMap(stop => stop.placeId ? [stop.placeId] : []))].join(',')
+  // 연습(목업) 모드에는 가격 API가 없고, 장소가 없으면 부를 것도 없다 — 빈 가격표로 본다
+  const noPriceCall = USE_MOCKS || !idsKey
+  const priceView: typeof prices = noPriceCall ? { scope: idsKey, data: [], error: false } : prices
   useEffect(() => {
-    const controller = new AbortController()
-    fetch('/api/places/cost-choices', { method: 'POST', signal: controller.signal,
-      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: JSON.parse(idsKey) }),
-    }).then(async response => {
-      if (!response.ok) throw new Error('가격 조회 실패')
-      const data = PlaceCostChoicesResponseSchema.parse(await response.json())
-      if (!controller.signal.aborted) setPrices({ scope: idsKey, data, error: false })
-    }).catch(() => {
-      if (!controller.signal.aborted) setPrices({ scope: idsKey, data: [], error: true })
-    })
-    return () => controller.abort()
-  }, [idsKey])
+    if (noPriceCall) return
+    let cancelled = false
+    request('/api/places/cost-choices', { method: 'POST', body: { ids: idsKey.split(',') }, schema: PlaceCostChoicesResponseSchema })
+      .then(data => { if (!cancelled) setPrices({ scope: idsKey, data, error: false }) })
+      .catch(() => { if (!cancelled) setPrices({ scope: idsKey, data: [], error: true }) })
+    return () => { cancelled = true }
+  }, [idsKey, noPriceCall])
   const rows = useMemo(() => [
     ...stops.flatMap((stop, index) => [
       { id: placeCostKey(scope, stop), stopKey: stop.key, placeId: stop.placeId, label: stop.name, taxi: false },
@@ -75,24 +75,30 @@ export function CostSlot({ tripId, versionId, day, stops, travelers }: TripSlotP
     }
     setTaxiStatus({ scope: taxiScope, busy: true, message: '' })
     try {
-      const details = await api.places.details(JSON.parse(idsKey))
+      const details = idsKey ? await api.places.details(idsKey.split(',')) : []
       if (controller.signal.aborted) return
-      const byId = Object.fromEntries(details.map(place => [place.id, place]))
-      const requests = requiredLegs(stops, byId).filter(request => request.mode === 'taxi')
-      if (!requests.length) { message('좌표가 있는 택시 구간이 아직 없어요.'); return }
+      const byId = new Map(details.map(place => [place.id, place] as const))
+      // 두 끝이 모두 등록된 장소인 택시 구간만 장소 id·좌표로 직접 만든다.
+      // requiredLegs는 지점이 없는 장소(가져온 식당·숙박)에 placeId를 붙이지 않아 서버가 묶음 전체를 거절한다.
+      const planned = stops.flatMap((stop, index) => {
+        const previous = stops[index - 1]
+        if (!index || stop.arriveBy !== 'taxi' || !previous.placeId || !stop.placeId) return []
+        const from = byId.get(previous.placeId)
+        const to = byId.get(stop.placeId)
+        if (!from || !to) return []
+        const leg: LegRequest = { from: { placeId: from.id, coord: from.coord }, to: { placeId: to.id, coord: to.coord }, mode: 'taxi' }
+        return [{ key: taxiCostKey(scope, previous, stop, travelers.length), leg }]
+      })
+      if (!planned.length) { message('좌표가 있는 택시 구간이 아직 없어요.'); return }
       if (USE_MOCKS) { message('연습 화면에서는 택시 요금을 직접 입력해 주세요.'); return }
-      const response = await fetch('/api/places/taxi-costs', { method: 'POST', signal: controller.signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requests }) })
-      if (!response.ok) throw new Error('택시 조회 실패')
-      const quotes = TaxiCostResponseSchema.parse(await response.json())
+      const quotes = await request('/api/places/taxi-costs', { method: 'POST', body: { requests: planned.map(item => item.leg) }, schema: TaxiCostResponseSchema })
       if (controller.signal.aborted) return
       const changes: Record<string, Draft> = {}
-      stops.forEach((stop, index) => {
-        if (!index || stop.arriveBy !== 'taxi') return
-        const request = requests.find(request => request.from.placeId === stops[index - 1].placeId && request.to.placeId === stop.placeId)
-        const quote = request ? quotes.find(quote => quote.key === legKey(request)) : undefined
-        if (quote) changes[taxiCostKey(scope, stops[index - 1], stop, travelers.length)] = { amount: String(quote.fareKrw), unit: 'shared',
-          quantity: Math.max(1, Math.ceil(travelers.length / 4)), kind: 'taxi', option: '', source: quote.source }
-      })
+      for (const { key, leg } of planned) {
+        const quote = quotes.find(quote => quote.key === legKey(leg))
+        if (quote) changes[key] = { amount: String(quote.fareKrw), unit: 'shared',
+          quantity: Math.max(1, Math.ceil(travelers.length / 4)), kind: 'taxi', option: '', source: quote.source, checkedAt: quote.checkedAt }
+      }
       setDrafts(previous => applyUneditedQuotes(previous, requestedDrafts, changes))
       message('거리 기준 추정치예요. 정체·심야·시외 할증·통행료는 포함하지 않았어요.')
     } catch { message('택시 요금을 받지 못했어요. 로그인·장소·경로 정보를 확인하거나 직접 입력해 주세요.') }
@@ -108,13 +114,13 @@ export function CostSlot({ tripId, versionId, day, stops, travelers }: TripSlotP
       ) : <p className="my-3 font-bold">금액과 계산 단위를 선택하면 합계가 나와요.</p>}
       {calculation.missing > 0 && <p className="mb-3 font-bold text-info">미확인 {calculation.missing}항목은 합계에 포함되지 않았어요.</p>}
       {travelers.length === 0 && <p className="mb-3 text-info">함께 가는 사람을 먼저 넣어 주세요.</p>}
-      {prices.scope === idsKey && prices.error && <p className="mb-3 text-info">가격표를 불러오지 못했어요. 확인한 금액을 직접 입력할 수 있어요.</p>}
+      {priceView.scope === idsKey && priceView.error && <p className="mb-3 text-info">가격표를 불러오지 못했어요. 확인한 금액을 직접 입력할 수 있어요.</p>}
       <details>
         <summary className="min-h-12 cursor-pointer py-3 font-bold">가격 고르기·직접 입력</summary>
         <div className="space-y-4">
           {rows.map(row => {
             const draft = drafts[row.id] ?? emptyDraft()
-            const entry = prices.scope === idsKey ? prices.data.find(entry => entry.placeId === row.placeId) : undefined
+            const entry = priceView.scope === idsKey ? priceView.data.find(entry => entry.placeId === row.placeId) : undefined
             return <fieldset key={row.id} className="rounded-xl border border-line p-3">
               <legend className="px-1 font-bold">{row.label}</legend>
               {!!entry?.options.length && <label className="mb-2 block text-sm">등록된 가격
@@ -122,7 +128,7 @@ export function CostSlot({ tripId, versionId, day, stops, travelers }: TripSlotP
                   const option = entry.options.find(option => option.id === event.target.value)
                   if (!option) { update(row.id, { option: '' }); return }
                   update(row.id, { option: option.id, amount: String(option.amountKrw), kind: option.kind,
-                    unit: option.unit === 'unspecified' ? '' : option.unit, source: option.source })
+                    unit: option.unit === 'unspecified' ? '' : option.unit, source: option.source, checkedAt: option.checkedAt, confidence: option.confidence })
                 }}>
                   <option value="">직접 입력하거나 가격 선택</option>
                   {entry.options.map(option => <option key={option.id} value={option.id}>{option.label} · {won(option.amountKrw)}</option>)}
@@ -130,7 +136,7 @@ export function CostSlot({ tripId, versionId, day, stops, travelers }: TripSlotP
               </label>}
               <div className="grid gap-2 sm:grid-cols-2">
                 <label className="text-sm">금액(원)<input className={inputClass} aria-label={`${row.label} 금액`} type="number" min="0" max="2000000000" step="1" value={draft.amount}
-                  placeholder="미확인" onChange={event => update(row.id, { amount: event.target.value, option: '', source: undefined })} /></label>
+                  placeholder="미확인" onChange={event => update(row.id, { amount: event.target.value, option: '', source: undefined, checkedAt: undefined, confidence: undefined })} /></label>
                 <label className="text-sm">계산 단위<select className={inputClass} aria-label={`${row.label} 계산 단위`} value={draft.unit} onChange={event => update(row.id, { unit: event.target.value as Draft['unit'] })}>
                   <option value="">수량 단위를 확인해 주세요</option><option value="per_person">한 사람 금액</option><option value="shared">함께 내는 전체 금액</option>
                 </select></label>
@@ -141,8 +147,11 @@ export function CostSlot({ tripId, versionId, day, stops, travelers }: TripSlotP
                   {Object.entries(labels).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
                 </select></label>
               </div>
-              {entry?.notes.map(note => <p key={note} className="mt-2 text-sm text-muted">{note}</p>)}
-              {draft.source && <a href={draft.source} className="mt-2 inline-block text-sm underline" target="_blank" rel="noreferrer">가격 출처 확인</a>}
+              {entry?.notes.map((note, index) => <p key={`${index}:${note}`} className="mt-2 text-sm text-muted">{note}</p>)}
+              {(draft.source || draft.checkedAt) && <p className="mt-2 text-sm text-muted">
+                {isWebUrl(draft.source) ? <a href={draft.source} className="underline" target="_blank" rel="noreferrer">가격 출처 확인</a> : '가격 출처'}
+                {draft.checkedAt && ` · 확인 ${draft.checkedAt}`}{draft.confidence && ` · 신뢰 ${draft.confidence}`}
+              </p>}
             </fieldset>
           })}
           <Button variant="secondary" onClick={() => setExtras(previous => ({ ...previous, [scope]: Math.min(20, (previous[scope] ?? 0) + 1) }))}>기타 비용 더하기</Button>

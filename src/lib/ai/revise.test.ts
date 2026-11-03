@@ -306,6 +306,26 @@ describe('여러 날 일정 다시 짜기', () => {
   })
 })
 
+describe('다시 짜기 — 후보 밖의 장소 유지', () => {
+  it('현재 일정에 있는 장소는 후보 목록 밖이어도 AI가 고르면 그대로 남는다', async () => {
+    const museumStop = () => stop({ key: 'k2', placeId: 'museum', name: '대전시립미술관' })
+    const { deps, versionId } = await setup({
+      versionStops: [scienceStop(), museumStop()],
+      opinions: [opinion({ id: 'o1', versionId: 'v1' })],
+      ai: [{ stops: [{ placeId: 'science', name: '국립중앙과학관' }, { placeId: 'museum', name: '대전시립미술관' }], appliedOpinionIds: ['o1'] }],
+    })
+    // 후보는 미술관을 뺀 목록만 준다 (큰 DB에서 일부만 고른 상황)
+    const base = deps.searchCandidates
+    const withoutMuseum: AiDeps['searchCandidates'] = async query =>
+      (await base(query)).filter(candidate => candidate.id !== 'museum')
+
+    const response = await handleRevise(makeRequest({ tripId: 'trip-dev', versionId }), { ...deps, searchCandidates: withoutMuseum })
+    expect(response.status).toBe(200)
+    const body = ReviseResponseSchema.parse(await response.json())
+    expect(body.version.stops.map(one => one.placeId)).toEqual(['science', 'museum'])
+  })
+})
+
 describe('handleRevise', () => {
   it('꼭 갈 곳·예약은 유지(AI가 빼도 되돌림)', async () => {
     const opinions = [opinion({ id: 'o1', versionId: 'v1' })]

@@ -51,11 +51,16 @@ export async function searchCandidates(query: PlaceCandidateQuery, database?: Db
   const score = styles.length ? sql<number>`(select count(*) from unnest(${places.styles}) style where style = any(${sql`ARRAY[${sql.join(styles.map(style => sql`${style}`), sql`, `)}]::text[]`}))` : sql<number>`0`
   const stairs = input.avoidStairs ? sql<number>`case when exists (select 1 from ${placeSegments}
     where ${placeSegments.placeId} = ${places.id} and ${placeSegments.stairsStatus} = 'present') then 1 else 0 end` : sql<number>`0`
+  // 구간 기록(걷기 데이터)이 있는 장소를 먼저 둔다. 가져온 관광지는 스타일이 없어 이름순만 남으므로,
+  // 이 정렬이 없으면 시범 장소가 이름순 목록 밖으로 밀려난다.
+  const walked = sql<number>`case when exists (select 1 from ${placeSegments}
+    where ${placeSegments.placeId} = ${places.id}) then 1 else 0 end`
   async function structured(kind: PlaceKind | undefined, limit: number, excluded: string[] = []) {
     if (!limit) return []
     const rows = await db.select(placeSummaryColumns).from(places).where(and(
       kind ? eq(kindColumn, kind) : undefined, excluded.length ? notInArray(places.id, excluded) : undefined,
-    )).orderBy(...(input.avoidStairs ? [asc(stairs)] : []), ...(styles.length ? [sql`${score} desc`] : []), asc(places.name), asc(places.id)).limit(limit)
+    )).orderBy(...(input.avoidStairs ? [asc(stairs)] : []), ...(styles.length ? [sql`${score} desc`] : []),
+    sql`${walked} desc`, asc(places.name), asc(places.id)).limit(limit)
     return rows.map(toPlaceSummary)
   }
   // 음식점 2만 곳이 관광지 후보를 밀어내지 않도록 종류별로 먼저 확보한다.
@@ -69,7 +74,15 @@ export async function searchCandidates(query: PlaceCandidateQuery, database?: Db
   const all: PlaceSummary[] = []
   for (const [kind, limit] of quotas) {
     if (!limit) continue
-    const semantic = input.query ? (await recommendServicePlaces({ kind, query: input.query, avoidStairs: input.avoidStairs, limit: Math.min(limit, 20) }, { db, embedQuery })).items.map(item => item.place) : []
+    // 의미 검색은 보조 단계다. 실패해도 AI 후보 생성을 멈추지 않고 구조화 검색으로 채운다. 오류 내용·질의는 남기지 않는다.
+    let semantic: PlaceSummary[] = []
+    if (input.query) {
+      try {
+        semantic = (await recommendServicePlaces({ kind, query: input.query, avoidStairs: input.avoidStairs, limit: Math.min(limit, 20) }, { db, embedQuery })).items.map(item => item.place)
+      } catch {
+        console.error('[places]', '추천 검색 실패', kind)
+      }
+    }
     all.push(...semantic, ...await structured(kind, limit - semantic.length, semantic.map(place => place.id)))
   }
   if (all.length < input.limit) all.push(...await structured(input.kind, input.limit - all.length, all.map(place => place.id)))
@@ -95,7 +108,9 @@ function hasNearbyWord(rest: string): boolean {
 
 // 이름(또는 별칭)이 같거나, 입력 안에 이름이 통째로 들어 있으면("한밭수목원 산책") 맞춘다.
 // 비슷한 다른 장소로 잘못 맞추는 것보다 못 맞추는 편이 낫다(정보 없음으로 둔다) — 후보가 둘 이상이면 null.
-// 입력이 이름의 일부일 때("미술관")와 두 글자 미만 이름은 맞추지 않는다.
+// 입력이 이름의 일부일 때("미술관")는 맞추지 않는다.
+// 입력 안에 이름이 들어 있는 경우는 세 글자 이상만 본다. "시장" 같은 짧은 이름이 "전통시장"류 문장에 우연히 들어 있어도
+// 맞추지 않으려는 것이다. 두 글자 이름은 입력 전체가 이름과 같을 때만 맞춘다.
 export function findPlaceByName<T extends NamedPlace>(all: readonly T[], name: string): T | null {
   const input = normalizePlaceName(name)
   if (input.length === 0) return null
@@ -115,7 +130,7 @@ export function findPlaceByName<T extends NamedPlace>(all: readonly T[], name: s
   // 입력에 이름이 통째로 들어 있는 장소. 장소마다 가장 긴 이름 하나만 본다.
   const longestByPlace = new Map<T, string>()
   for (const { place, key } of entries) {
-    if (!input.includes(key)) continue
+    if (key.length < 3 || !input.includes(key)) continue
     if (hasNearbyWord(input.replace(key, ''))) continue
     const current = longestByPlace.get(place)
     if (current === undefined || key.length > current.length) longestByPlace.set(place, key)

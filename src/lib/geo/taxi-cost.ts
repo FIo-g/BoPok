@@ -10,11 +10,11 @@ export async function quoteTaxiCosts(value: unknown, dependencies: {
 } = {}) {
   const { requests } = TaxiCostRequestSchema.parse(value)
   if (!requests.length) return []
-  const ids = [...new Set(requests.flatMap(request => [request.from.placeId!, request.to.placeId!]))]
+  const ids = [...new Set(requests.flatMap(request => [request.from.placeId, request.to.placeId]))]
   const details = await (dependencies.details ?? getPlaceDetails)(ids)
   const places = new Map(details.map(place => [place.id, place]))
   for (const request of requests) for (const end of [request.from, request.to]) {
-    const place = places.get(end.placeId!)
+    const place = places.get(end.placeId)
     const coord = end.nodeId ? place?.nodes.find(node => node.id === end.nodeId)?.coord : place?.coord
     if (!place || !/^(?:대전광역시|대전)\s/.test(place.address ?? '') || !coord ||
       coord.some((value, index) => Math.abs(value - end.coord[index]) > 0.00001)) {

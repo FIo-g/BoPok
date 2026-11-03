@@ -7,7 +7,7 @@ import { migrate } from 'drizzle-orm/pglite/migrator'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { PlaceSummaryListSchema, PlaceSummarySchema, type StairsStatus } from '@/lib/contracts'
 import * as schema from '@/lib/db/schema'
-import { placeNodes, placeSegments } from '@/lib/db/schema/places'
+import { placeNodes, places, placeSegments } from '@/lib/db/schema/places'
 import { matchPlaceByName, searchCandidates } from './search'
 import { insertPilotPlaces, PilotPlaceSchema } from './seed'
 import type { PlaceCandidateQuery } from './validation'
@@ -87,6 +87,17 @@ describe('searchCandidates', () => {
 
   it('스타일 앞뒤 공백은 무시한다', async () => {
     expect(ids(await searchCandidates(query({ styles: [' 자연·산책 '] }), db))).toEqual(['hanbat', 'art', 'leeungno'])
+  })
+
+  it('걷기 구간이 기록된 장소는 이름순으로 밀려나지 않는다', async () => {
+    // 가져온 관광지는 스타일이 없어 이름순만 남는다. 이름이 앞선 관광지가 많아도 구간이 있는 시범 장소는 남아야 한다.
+    await db.insert(places).values(Array.from({ length: 12 }, (_, index) => ({
+      id: `imported-${index}`, name: `가 관광지 ${String(index).padStart(2, '0')}`, category: '관광지', kind: 'attraction' as const,
+      styles: [], lng: 127.38, lat: 36.35, seated: false, indoor: false,
+      source: '테스트용 가상 자료', checkedAt: '2026-11-03', confidence: 'C' as const,
+    })))
+    await addSegments('hanbat', ['unknown'])
+    expect(ids(await searchCandidates(query({ kind: 'attraction', limit: 3 }), db))).toEqual(['hanbat', 'imported-0', 'imported-1'])
   })
 
   it('limit만큼만 자른다 (0이면 빈 목록)', async () => {
