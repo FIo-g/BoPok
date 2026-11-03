@@ -790,6 +790,9 @@ describe('날짜·시간·장소', () => {
       ['4박5일', '2026-12-02'],
       ['5일', '2026-12-02'],
       ['1박 2일', '2026-11-29'],
+      ['3일이요', '2026-11-30'],
+      ['2박 정도요', '2026-11-30'],
+      ['5일간', '2026-12-02'],
     ])('직접 적은 "%s"도 알아듣는다', async (text, endDate) => {
       const out = await applyAnswer(lengthState(), { text }, { callJson: stubCallJson({}) })
       expect(out.state.filled.endDate).toBe(endDate)
@@ -800,7 +803,7 @@ describe('날짜·시간·장소', () => {
       expect(out.state.filled.endDate).toBeUndefined()
     })
 
-    it.each(['글쎄요', '100박', '0일'])('알 수 없는 "%s"는 다시 묻는다', async text => {
+    it.each(['글쎄요', '100박', '0일', '15일까지', '11월 16일에 돌아와요', '하루 자고 와요', '하루 더 묵어요', '2박 5일'])('알 수 없는 "%s"는 다시 묻는다', async text => {
       const out = await applyAnswer(lengthState(), { text }, { callJson: stubCallJson({}) })
       expect(out.retryText).toBeDefined()
       expect(out.state.cursor.slot).toBe('trip_length')

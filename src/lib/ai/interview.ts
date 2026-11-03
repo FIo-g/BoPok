@@ -370,15 +370,24 @@ function textToChoice(text: string, choices: readonly string[]): number | null {
   return exact >= 0 ? exact : null
 }
 
-// '4박 5일', '5일', '하루'처럼 직접 적은 기간을 몇 박인지로 바꾼다. 모르겠으면 null
-// AI에게 묻지 않는다 — 글자만 봐도 알 수 있고, 날짜는 틀리면 일정 전체가 어긋난다
+// '4박 5일', '5일', '하루'처럼 기간만 적은 답을 몇 박인지로 바꾼다. 모르겠으면 null이라 다시 묻는다.
+// 글 전체가 기간 모양일 때만 받는다 — '15일까지', '하루 자고 와요'를 기간으로 읽으면 끝 날짜가 틀어진다.
+// AI에게 묻지 않는다: 글자만 봐도 알 수 있고, 날짜가 틀리면 일정 전체가 어긋난다
 function parseTripNights(text: string): number | null {
-  const t = stripSpaces(text)
-  if (/당일|하루/.test(t)) return 0
-  const nights = t.match(/(\d+)박/)
-  const days = t.match(/(\d+)일/)
-  const value = nights ? Number(nights[1]) : days ? Number(days[1]) - 1 : null
-  return value !== null && value >= 0 && value <= TRIP_NIGHTS_MAX ? value : null
+  const t = stripSpaces(text).replace(/(정도|이요|요|입니다|이에요|예요)+$/, '')
+  if (/^(당일|당일치기|하루|하루만)$/.test(t)) return 0
+
+  const nightsAndDays = t.match(/^(\d+)박(?:(\d+)일)?$/)
+  const daysOnly = t.match(/^(\d+)일(?:간|동안)?$/)
+  let nights: number | null = null
+  if (nightsAndDays) {
+    nights = Number(nightsAndDays[1])
+    // '2박 5일'처럼 앞뒤가 안 맞으면 고르지 않고 다시 묻는다
+    if (nightsAndDays[2] !== undefined && Number(nightsAndDays[2]) !== nights + 1) return null
+  } else if (daysOnly) {
+    nights = Number(daysOnly[1]) - 1
+  }
+  return nights !== null && nights >= 0 && nights <= TRIP_NIGHTS_MAX ? nights : null
 }
 
 function toDateString(date: Date): string {
