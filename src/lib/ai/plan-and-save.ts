@@ -2,6 +2,7 @@
 // AI는 장소·순서·시간만 고르고, 걷는 시간·계단 수·판정은 엔진 결과만 쓴다 (설계 6.4).
 import 'server-only'
 import {
+  stopDay,
   stopsOfDay,
   tripDays,
   type JudgeResult,
@@ -104,7 +105,10 @@ function preserveArriveBy(stops: Stop[], original: Stop[] | undefined): Stop[] {
   return stops.map((stop, i) => {
     if (i === 0) return stop
     const prev = stops[i - 1]!
+    // 그날 첫 장소는 앞 장소에서 이어지지 않는다 — draftsToStops가 정한 값을 지킨다
+    if (stopDay(stop) !== stopDay(prev)) return stop
     for (let j = 1; j < original.length; j++) {
+      if (stopDay(original[j]!) !== stopDay(original[j - 1]!)) continue
       if (matchesKeep(stop, original[j]!) && matchesKeep(prev, original[j - 1]!)) {
         if (original[j]!.arriveBy === stop.arriveBy) return stop
         return { ...stop, arriveBy: original[j]!.arriveBy }

@@ -23,6 +23,7 @@ import {
   arrangeDraftsByDay,
   dropTimesOutsideWindow,
   enforceMustStops,
+  keepEveryDay,
   restoreMustStops,
   samePlaceName,
   type DraftStop,
@@ -55,8 +56,8 @@ const SYSTEM_PROMPT =
 
 // 여러 날 일정일 때만 덧붙인다. 하루짜리 여행의 프롬프트는 그대로다
 const MULTI_DAY_PROMPT =
-  '현재 일정은 여러 날이다. stops의 항목마다 몇째 날인지 "day"(1부터)를 넣어라. 일정에 없는 날은 만들지 마라. ' +
-  '의견과 상관없는 날의 일정은 바꾸지 마라. 시간과 순서는 날마다 따로 정한다.'
+  '현재 일정은 여러 날이다. stops에는 모든 날의 장소를 빠짐없이 넣고, 항목마다 몇째 날인지 "day"(1부터)를 넣어라. ' +
+  '일정에 없는 날은 만들지 마라. 의견과 상관없는 날의 장소는 그대로 돌려줘라. 시간과 순서는 날마다 따로 정한다.'
 
 // 반응 버튼 문구 (프론트 표시와 같은 말로 AI에게 보여준다)
 const REACTION_LABEL: Record<Reaction, string> = {
@@ -106,24 +107,27 @@ function filterDrafts(
   return drafts
 }
 
-// 원래 버전의 꼭 갈 곳·예약 stop. 빠지면 되돌려 넣을 때 쓰는 원래 값이다.
+// 원래 stop을 초안으로. 되돌려 넣을 때 쓰는 원래 값이다.
+function draftOf(stop: Stop): DraftStop {
+  return {
+    placeId: stop.placeId,
+    name: stop.name,
+    day: stopDay(stop),
+    mustVisit: stop.mustVisit,
+    ...(stop.startTime !== undefined ? { startTime: stop.startTime } : {}),
+    ...(stop.reservedAt !== undefined ? { reservedAt: stop.reservedAt } : {}),
+    ...(stop.coord !== undefined ? { coord: stop.coord } : {}),
+    ...(stop.visitMin !== undefined ? { visitMin: stop.visitMin } : {}),
+    ...(stop.seated !== undefined ? { seated: stop.seated } : {}),
+    skipSegmentIds: [...stop.skipSegmentIds],
+    detourMap: { ...stop.detourMap },
+    restNodeIds: [...stop.restNodeIds],
+  }
+}
+
+// 원래 버전의 꼭 갈 곳·예약 stop.
 function mustDraftsOf(versionStops: Stop[]): DraftStop[] {
-  return versionStops
-    .filter(stop => stop.mustVisit || stop.reservedAt !== undefined)
-    .map(stop => ({
-      placeId: stop.placeId,
-      name: stop.name,
-      day: stopDay(stop),
-      mustVisit: stop.mustVisit,
-      ...(stop.startTime !== undefined ? { startTime: stop.startTime } : {}),
-      ...(stop.reservedAt !== undefined ? { reservedAt: stop.reservedAt } : {}),
-      ...(stop.coord !== undefined ? { coord: stop.coord } : {}),
-      ...(stop.visitMin !== undefined ? { visitMin: stop.visitMin } : {}),
-      ...(stop.seated !== undefined ? { seated: stop.seated } : {}),
-      skipSegmentIds: [...stop.skipSegmentIds],
-      detourMap: { ...stop.detourMap },
-      restNodeIds: [...stop.restNodeIds],
-    }))
+  return versionStops.filter(stop => stop.mustVisit || stop.reservedAt !== undefined).map(draftOf)
 }
 
 // 원래 일정의 stop과 초안이 같은 곳인지 본다 (stops.ts의 짝짓기와 같은 규칙).
@@ -297,8 +301,18 @@ export async function handleRevise(
       const lastDay = Math.max(1, ...tripDays(version.stops))
       const multiDay = lastDay > 1
       const systemPrompt = multiDay ? `${SYSTEM_PROMPT} ${MULTI_DAY_PROMPT}` : SYSTEM_PROMPT
-      // 하루짜리 일정은 초안을 건드리지 않는다
-      const arranged = (drafts: DraftStop[]): DraftStop[] => (multiDay ? arrangeDraftsByDay(drafts, lastDay) : drafts)
+      const originalDays = tripDays(version.stops).map(day => ({
+        day,
+        drafts: version.stops.filter(stop => stopDay(stop) === day).map(draftOf),
+      }))
+      // 없는 날을 만들지 않고, 여러 날 일정의 어떤 날도 통째로 사라지지 않게 한다. 하루짜리는 전부 1일차가 된다
+      const arranged = (drafts: DraftStop[]): DraftStop[] => {
+        const placed = arrangeDraftsByDay(drafts, lastDay)
+        if (!multiDay) return placed
+        const samePlace = (original: DraftStop, draft: DraftStop): boolean =>
+          original.placeId !== null ? original.placeId === draft.placeId : samePlaceName(original.name, draft.name)
+        return arrangeDraftsByDay(keepEveryDay(placed, originalDays, samePlace), lastDay)
+      }
       const scheduleText = version.stops.map(stop => scheduleLine(stop, multiDay)).join('\n')
       const baseUser =
         `현재 일정:\n${scheduleText}\n\n` +

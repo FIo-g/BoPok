@@ -148,6 +148,25 @@ export function arrangeDraftsByDay(drafts: DraftStop[], lastDay: number): DraftS
     .map(({ draft }) => draft)
 }
 
+// AI가 어떤 날을 통째로 빼면 그날을 되살린다. 프롬프트로 부탁해도 '바꿀 날만' 답할 수 있어서
+// 코드로 막는다. 다른 날로 옮겨 둔 장소는 원래 날로 돌리고, 없어진 장소는 원래 값으로 넣는다.
+export function keepEveryDay(
+  drafts: DraftStop[],
+  days: { day: number; drafts: DraftStop[] }[],
+  samePlace: (original: DraftStop, draft: DraftStop) => boolean,
+): DraftStop[] {
+  const out = drafts.map(draft => ({ ...draft }))
+  for (const { day, drafts: originals } of days) {
+    if (out.some(draft => draft.day === day)) continue
+    for (const original of originals) {
+      const moved = out.find(draft => draft.day !== day && samePlace(original, draft))
+      if (moved) moved.day = day
+      else out.push({ ...original, day })
+    }
+  }
+  return out
+}
+
 // 초안과 원래 꼭 갈 곳·예약이 같은 곳인지 본다.
 // 꼭 갈 곳이 DB 장소면 같은 id끼리만 짝짓는다 (비슷한 이름의 다른 자리로 바뀌지 않게).
 // placeId가 없을 때만 이름 포함으로 본다.
@@ -156,6 +175,11 @@ function matchesMust(must: DraftStop, draft: DraftStop): boolean {
     return draft.placeId !== null && draft.placeId === must.placeId
   }
   return samePlaceName(draft.name, must.name)
+}
+
+// 꼭 갈 곳이 정해진 날과 같은 날의 초안인지. 날이 없는 꼭 갈 곳(generate)은 어느 초안과도 같다고 본다
+function onSameDay(must: DraftStop, draft: DraftStop): boolean {
+  return must.day === undefined || (draft.day ?? 1) === must.day
 }
 
 function timeKey(draft: DraftStop): string | undefined {
@@ -172,7 +196,9 @@ export function enforceMustStops(
   const out = drafts.map(draft => ({ ...draft }))
   const missing: DraftStop[] = []
   for (const must of mustStops) {
-    const index = out.findIndex((draft, i) => !used[i] && matchesMust(must, draft))
+    // 같은 장소를 여러 날 들르면 예약이 다른 날 방문에 붙지 않게 같은 날부터 찾는다
+    const sameDay = out.findIndex((draft, i) => !used[i] && matchesMust(must, draft) && onSameDay(must, draft))
+    const index = sameDay >= 0 ? sameDay : out.findIndex((draft, i) => !used[i] && matchesMust(must, draft))
     if (index < 0) {
       // 짝이 없으면 아직 넣지 않는다 — revise가 한 번 더 묻고 그래도 빠지면 되돌려 넣는다.
       missing.push({ ...must })
@@ -204,12 +230,13 @@ export function restoreMustStops(
   // 원래 일정에서 miss의 자리를 찾는다 — 같은 값의 stop을 앞에서부터 순서대로 소모한다.
   const consumed = new Array<boolean>(original?.length ?? 0).fill(false)
   for (const miss of missing) {
-    if (out.some(draft => matchesMust(miss, draft))) continue
+    if (out.some(draft => matchesMust(miss, draft) && onSameDay(miss, draft))) continue
     const key = timeKey(miss)
     if (key !== undefined) {
+      // 시간은 그날 안에서만 비교한다 — 전날 오후 일정 앞에 끼워지지 않게
       const at = out.findIndex(draft => {
         const other = timeKey(draft)
-        return other !== undefined && other > key
+        return onSameDay(miss, draft) && other !== undefined && other > key
       })
       if (at >= 0) out.splice(at, 0, { ...miss })
       else out.push({ ...miss })
