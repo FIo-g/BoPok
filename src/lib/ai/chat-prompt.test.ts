@@ -69,6 +69,16 @@ describe('chatPromptLines', () => {
     expect(lines.join('')).not.toContain('가가')
   })
 
+  // 건강 정보는 AI에 보내지 않는다(설계 4.4). 대화에 병·약 이야기가 있으면 그 글을 통째로 뺀다 — 낱말만 지워도 짐작이 된다
+  it('병·약 이야기가 든 글은 통째로 빼고 나머지만 넣는다', () => {
+    const lines = chatPromptLines(
+      [message('엄마 당뇨라서 단 거는 빼 주세요'), message('혈압약을 드셔서 점심은 일찍요'), message('오후에는 실내가 좋겠어요')],
+      new Set(),
+    )
+    expect(lines).toEqual(['- "엄마": "오후에는 실내가 좋겠어요"'])
+    for (const word of ['당뇨', '혈압']) expect(lines.join('\n')).not.toContain(word)
+  })
+
   it('글이 없으면 빈 목록', () => {
     expect(chatPromptLines([], new Set())).toEqual([])
   })

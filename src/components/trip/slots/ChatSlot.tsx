@@ -136,10 +136,14 @@ export function ChatSlot({ tripId, userId, versionId }: TripSlotProps) {
         />
         <Button type="submit" disabled={sending || text.trim() === ''}>보내기</Button>
       </form>
+      {/* 쓰는 사람이 쓰기 전에 보도록 입력칸 바로 아래에 둔다. 누르는 사람과 쓴 사람이 다를 수 있어서다 */}
+      <p className="text-muted">
+        이 대화는 ‘AI에게 전달하기’를 누르면 일정을 짜는 외부 AI에 보내질 수 있어요. 병·약 이야기는 ‘함께 가는 사람’의 건강 정보 칸에 적어 주세요.
+      </p>
       {versionId !== null && count > 0 && (
         <div className="flex flex-wrap items-center gap-3 border-t border-line pt-3">
           <Button variant="secondary" onClick={sendToAi} disabled={asking}>{asking ? 'AI가 다시 짜는 중…' : 'AI에게 전달하기'}</Button>
-          <p className="text-sm text-muted">대화를 읽고 새 안을 만들어요. 지금 일정은 바뀌지 않아요.</p>
+          <p className="text-muted">누르면 최근 대화를 일정을 짜는 외부 AI에 보내 새 안을 만들어요. 병·약 이야기가 든 글은 보내지 않아요. 지금 일정은 바뀌지 않아요.</p>
         </div>
       )}
       {newVersion !== null && (

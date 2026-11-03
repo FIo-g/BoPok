@@ -125,7 +125,7 @@
 
 - `ChatMessage`: `{ id, tripId, userId, userName, text(1~`CHAT_TEXT_MAX`자), createdAt }`. 한 글의 한도 `CHAT_TEXT_MAX`는 500이다(의견 한 줄 100자보다 길게)
 - `GET /api/trips/[id]/chat?after=`(`ChatListQuery`: `after`는 ISO 날짜·시각이고 모르는 키는 거부한다. 이 시각 이후(같은 시각 포함, `>=`)의 글을 `ChatListResponse` `{ messages }`로 주므로 화면이 `id`로 중복을 거른다), `POST /api/trips/[id]/chat`(`ChatPostRequest`: `{ text }`, 앞뒤 공백을 자른 뒤 길이를 재서 공백뿐인 글은 거부) (여행 구성원만). `POST`는 저장된 글 하나(`ChatMessage`)를 돌려준다
-- "AI에게 전달하기": 다시 짜기(`POST /api/ai/revise`)가 의견과 함께 최근 채팅을 받는다. 요청 본문 `ReviseRequest`에 `includeChat?: boolean`을 더했다(없으면 `false`). **RAG를 쓰지 않고** 대화를 그대로 넘기고, 길면 요약한다 **[결정]**
+- "AI에게 전달하기": 다시 짜기(`POST /api/ai/revise`)가 의견과 함께 최근 채팅을 받는다. 요청 본문 `ReviseRequest`에 `includeChat?: boolean`을 더했다(없으면 `false`). **RAG를 쓰지 않고** 대화를 그대로 넘긴다 **[결정]**. 길면 요약하는 대신 **최근 30개·3,000자**만 넣는다(요약하려면 AI를 한 번 더 불러 다시 짜기 50초 제한에 부담 — 김경선 11/3). **병·약 이야기가 든 글(`hasHealthClaim`)은 통째로 빼고**, 화면에는 "외부 AI에 보내질 수 있어요. 병·약 이야기는 건강 정보 칸에"를 입력칸과 버튼 옆에 보인다 — 건강 정보는 AI에 보내지 않는다(4.4) **[제안: 11/3, 김태형 확인 필요]**
 - 채팅 글은 다른 사람이 쓴 글이라 의견과 같은 프롬프트 방어(`sanitizePromptText`)를 거친다
 
 ### 4.6 비용 (`cost.ts`, 주인 [2단계])
