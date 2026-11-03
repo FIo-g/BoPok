@@ -13,4 +13,7 @@ export type TripSlotProps = {
   places: Record<string, PlaceDetail>
   versionId: string | null // 보고 있는 버전. 일정이 아직 없으면 null
   userId: string // 로그인한 사람
+  // slot이 새 안을 만들었을 때 부른다(예: 대화를 AI에게 전달하기). 일정 화면이 그 안을 바로 고르고 message를 띄운다.
+  // 고치던 일정이 있으면 일정 화면이 버릴지 먼저 묻는다. 새로 고침 없이 새 안을 보여 주려는 것이다.
+  onNewVersion?: (versionId: string, message: string) => void
 }

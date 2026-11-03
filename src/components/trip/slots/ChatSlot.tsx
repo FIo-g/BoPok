@@ -13,7 +13,7 @@ import type { TripSlotProps } from './types'
 
 const CHAT_REFRESH_MS = 10_000
 
-export function ChatSlot({ tripId, userId, versionId }: TripSlotProps) {
+export function ChatSlot({ tripId, userId, versionId, onNewVersion }: TripSlotProps) {
   const [messages, setMessages] = useState<ChatMessage[] | null>(null)
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
@@ -93,8 +93,10 @@ export function ChatSlot({ tripId, userId, versionId }: TripSlotProps) {
     setNewVersion(null)
     try {
       const res = await api.ai.revise({ tripId, versionId, includeChat: true })
-      // 바로 새로 열지 않는다. 직접 고치던 일정이 있으면 사라지므로 사람이 눌러서 연다
-      setNewVersion(res.version.number)
+      // 일정 화면이 새 안을 바로 고른다(고치던 일정이 있으면 일정 화면이 먼저 묻는다).
+      // 일정 화면 밖에서 쓰일 때만 예전처럼 "새 안 보러 가기"를 띄운다
+      if (onNewVersion) onNewVersion(res.version.id, `대화를 반영해서 ${res.version.number}번째 안을 만들었어요`)
+      else setNewVersion(res.version.number)
     } catch (e) {
       const failure = aiFailure(e)
       setSendError(failure.canPick ? 'AI가 지금 일정을 못 짰어요. 잠시 뒤에 다시 시도해 주세요.' : failure.message)

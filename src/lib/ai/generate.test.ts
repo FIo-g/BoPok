@@ -46,6 +46,7 @@ type AiPayload = {
     startTime?: string
     visitMin?: number
     seated?: boolean
+    day?: number
   }[]
   note?: string
 }
@@ -636,6 +637,100 @@ describe('handleGenerate', () => {
 
 // 건강 정보는 병·약 이름이 아니라 음식 태그의 한국어 이름으로만 프롬프트에 간다 (AGENTS 6장, 설계 4.4).
 const HEALTH_WORDS = ['당뇨', '고혈압', '와파린', '칼슘채널', 'diabetes', 'warfarin', 'hypertension']
+
+// 여러 날 여행: 인터뷰의 시작~끝 날짜로 날 수를 정하고, AI가 장소마다 day를 준다 (설계 4.2·6.5).
+// 하루짜리 여행은 프롬프트와 저장 모양이 지금과 같다.
+describe('handleGenerate: 여러 날 여행', () => {
+  const threeDays = { transport: 'car' as const, date: '2026-11-14', endDate: '2026-11-16' }
+  const daysOf = (stops: { day?: number }[]) => stops.map(stop => stop.day ?? 1)
+
+  it('날 수를 프롬프트에 알리고, AI가 준 day대로 날마다 저장한다 (1일차는 day 칸 없이)', async () => {
+    const { deps, calls } = depsWithAi([
+      {
+        stops: [
+          { placeId: 'science', name: '국립중앙과학관', day: 1, startTime: '10:00' },
+          { placeId: null, name: '점심', seated: true, day: 1, startTime: '12:30' },
+          { placeId: 'hanbat', name: '한밭수목원', day: 2, startTime: '10:00' },
+          { placeId: null, name: '점심', seated: true, day: 3, startTime: '12:00' },
+        ],
+      },
+    ])
+    await deps.interviews.save('trip-dev', doneState(threeDays))
+
+    const response = await handleGenerate(makeRequest({ tripId: 'trip-dev' }), deps)
+    expect(response.status).toBe(200)
+    const body = PlanResponseSchema.parse(await response.json())
+
+    expect(daysOf(body.version.stops)).toEqual([1, 1, 2, 3])
+    expect(body.version.stops[0]).not.toHaveProperty('day')
+    expect(calls[0]).toContain('3일')
+    expect(calls[0]).toContain('"day"')
+    expect(calls[0]).not.toContain('하루 여행')
+  })
+
+  it('AI가 날을 거꾸로 주어도 날짜 순서로 놓고, 없는 날(여행 기간 밖)은 마지막 날로 둔다', async () => {
+    const { deps } = depsWithAi([
+      {
+        stops: [
+          { placeId: 'hanbat', name: '한밭수목원', day: 2 },
+          { placeId: 'science', name: '국립중앙과학관', day: 1 },
+          { placeId: null, name: '저녁', seated: true, day: 9 },
+        ],
+      },
+    ])
+    await deps.interviews.save('trip-dev', doneState(threeDays))
+
+    const body = PlanResponseSchema.parse(await (await handleGenerate(makeRequest({ tripId: 'trip-dev' }), deps)).json())
+    expect(body.version.stops.map(stop => stop.name)).toEqual(['국립중앙과학관', '한밭수목원', '저녁'])
+    expect(daysOf(body.version.stops)).toEqual([1, 2, 3])
+  })
+
+  it('1일차 마지막과 2일차 첫 장소가 같아도 하나로 합치지 않는다 (같은 날 안에서만 합친다)', async () => {
+    const { deps } = depsWithAi([
+      {
+        stops: [
+          { placeId: 'science', name: '국립중앙과학관', day: 1 },
+          { placeId: 'hanbat', name: '한밭수목원', day: 1 },
+          { placeId: 'hanbat', name: '한밭수목원', day: 2 },
+          { placeId: 'hanbat', name: '한밭수목원', day: 2 },
+        ],
+      },
+    ])
+    await deps.interviews.save('trip-dev', doneState(threeDays))
+
+    const body = PlanResponseSchema.parse(await (await handleGenerate(makeRequest({ tripId: 'trip-dev' }), deps)).json())
+    expect(body.version.stops.map(stop => `${stop.placeId}:${stop.day ?? 1}`)).toEqual(['science:1', 'hanbat:1', 'hanbat:2'])
+  })
+
+  it('AI가 날을 안 주면 지어내지 않고 1일차에 둔다', async () => {
+    const { deps } = depsWithAi([{ stops: [{ placeId: 'science', name: '국립중앙과학관' }, { placeId: 'hanbat', name: '한밭수목원' }] }])
+    await deps.interviews.save('trip-dev', doneState(threeDays))
+
+    const body = PlanResponseSchema.parse(await (await handleGenerate(makeRequest({ tripId: 'trip-dev' }), deps)).json())
+    expect(daysOf(body.version.stops)).toEqual([1, 1])
+  })
+
+  it('하루짜리 여행은 AI가 day를 주어도 모두 1일차이고, 프롬프트에 날 이야기가 없다', async () => {
+    const { deps, calls } = depsWithAi([
+      { stops: [{ placeId: 'science', name: '국립중앙과학관', day: 1 }, { placeId: 'hanbat', name: '한밭수목원', day: 2 }] },
+    ])
+    await deps.interviews.save('trip-dev', doneState({ transport: 'car', date: '2026-11-14' }))
+
+    const body = PlanResponseSchema.parse(await (await handleGenerate(makeRequest({ tripId: 'trip-dev' }), deps)).json())
+    for (const stop of body.version.stops) expect(stop).not.toHaveProperty('day')
+    expect(calls[0]).not.toContain('"day"')
+    expect(calls[0]).toContain('대전 하루 여행')
+  })
+
+  it('아주 긴 여행도 AI에는 앞쪽 7일까지만 짜게 한다 (응답 시간·길이 한도)', async () => {
+    const { deps, calls } = depsWithAi([{ stops: [{ placeId: 'science', name: '국립중앙과학관', day: 12 }] }])
+    await deps.interviews.save('trip-dev', doneState({ transport: 'car', date: '2026-11-01', endDate: '2026-11-20' }))
+
+    const body = PlanResponseSchema.parse(await (await handleGenerate(makeRequest({ tripId: 'trip-dev' }), deps)).json())
+    expect(calls[0]).toContain('7일')
+    expect(daysOf(body.version.stops)).toEqual([7])
+  })
+})
 
 describe('handleGenerate: 피할 음식·운동 참고 줄', () => {
   const planBody = { stops: [{ placeId: 'science', name: '국립중앙과학관' }] }
