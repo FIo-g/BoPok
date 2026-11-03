@@ -289,6 +289,7 @@ export const mockApi: Api = {
         trip.styles = res.filled.styles.length ? res.filled.styles : trip.styles
         trip.budget = res.filled.budget ?? trip.budget
         trip.date = res.filled.date ?? trip.date
+        trip.endDate = res.filled.endDate ?? trip.endDate
         trip.transport = res.filled.transport ?? trip.transport
       }
       return res
@@ -305,6 +306,7 @@ export const mockApi: Api = {
         trip.styles = interview.styles.length ? interview.styles : trip.styles
         trip.budget = interview.budget ?? trip.budget
         trip.date = interview.date ?? trip.date
+        trip.endDate = interview.endDate ?? trip.endDate
         trip.transport = interview.transport ?? trip.transport
       }
       return mockGenerate(trip, db.travelers[trip.id] ?? [])

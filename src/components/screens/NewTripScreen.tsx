@@ -217,9 +217,11 @@ function InterviewStep({ tripId, onDone }: { tripId: string; onDone: () => void 
       setMessages(m => [...m, { role: 'assistant', text: res.text }])
       if (res.done) {
         // 서버 인터뷰는 여행자만 저장한다. 여행 칸은 화면이 PATCH로 저장 (docs/roles/frontend.md)
-        const { date, transport, styles: filledStyles, budget } = res.filled
+        const { date, endDate, transport, styles: filledStyles, budget } = res.filled
         const patch = {
-          ...(date ? { date } : {}),
+          // 끝 날짜는 시작 날짜와 함께 보낸다. 당일치기면 null로 비운다 — 예전 끝 날짜가 남아 있으면
+          // 새 시작 날짜와 순서가 어긋나 저장이 통째로 거절된다
+          ...(date ? { date, endDate: endDate ?? null } : {}),
           ...(transport ? { transport } : {}),
           ...(filledStyles.length ? { styles: filledStyles } : {}),
           ...(budget ? { budget } : {}),

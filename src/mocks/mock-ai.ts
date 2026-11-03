@@ -49,6 +49,15 @@ const BUDGET_CHOICES: { label: string; value: Budget }[] = [
 ]
 const FIX_TARGETS = ['너무 많이 걸어요', '계단이 걱정돼요', '쉴 곳이 적어요', '시간이 빡빡해요']
 
+const TRIP_LENGTH_CHOICES = [
+  { label: '당일치기', nights: 0 },
+  { label: '1박 2일', nights: 1 },
+  { label: '2박 3일', nights: 2 },
+  { label: '3박 4일', nights: 3 },
+]
+
+const ymd = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+
 type Question = { slot: InterviewSlot; text: string; choices: string[] }
 
 function questionOf(state: InterviewState): Question {
@@ -64,6 +73,8 @@ function questionOf(state: InterviewState): Question {
       return { slot: 'traveler_condition', text: `${label}는 쉬지 않고 얼마나 걸을 수 있으세요?`, choices: [...CONTINUOUS_CHOICES.map(c => c.label), '잘 모르겠어요'] }
     case 'date':
       return { slot: 'date', text: '언제 가세요?', choices: DATE_CHOICES }
+    case 'trip_length':
+      return { slot: 'trip_length', text: '며칠 다녀오세요?', choices: TRIP_LENGTH_CHOICES.map(c => c.label) }
     case 'time':
       return { slot: 'time', text: '몇 시쯤 출발해서 몇 시쯤 돌아오실까요?', choices: TIME_CHOICES.map(c => c.label) }
     case 'transport':
@@ -148,7 +159,15 @@ function applyAnswer(state: InterviewState, answer: { choiceIndex?: number; text
       const base = new Date()
       const toSaturday = (6 - base.getDay() + 7) % 7 || 7
       base.setDate(base.getDate() + toSaturday + pick * 7)
-      filled.date = `${base.getFullYear()}-${String(base.getMonth() + 1).padStart(2, '0')}-${String(base.getDate()).padStart(2, '0')}`
+      filled.date = ymd(base)
+      return go({ slot: 'trip_length', travelerIndex: 0, questionIndex: 0 })
+    }
+    case 'trip_length': {
+      const choice = pick === null ? undefined : TRIP_LENGTH_CHOICES[pick]
+      if (!choice || !filled.date) return retry()
+      const [year, month, day] = filled.date.split('-').map(Number)
+      if (choice.nights > 0) filled.endDate = ymd(new Date(year!, month! - 1, day! + choice.nights))
+      else delete filled.endDate
       return go({ slot: 'time', travelerIndex: 0, questionIndex: 0 })
     }
     case 'time': {
