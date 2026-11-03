@@ -16,3 +16,15 @@ export function dayHasArrived(startDate: string | null | undefined, day: number,
 export function feedbackQuestion(startDate: string | null | undefined, day: number, today: string): string {
   return dayDate(startDate, day) === today ? '오늘 어떠셨어요?' : `${day}일차는 어떠셨어요?`
 }
+
+type SavedFeedback = { score: number; comment?: string | null }
+
+// 서버에 저장된 값을 비교할 때 쓰는 표시. 값이 같으면 같은 글자다
+export function savedFeedbackKey(saved: SavedFeedback | undefined): string {
+  return saved ? `${saved.score}:${saved.comment ?? ''}` : ''
+}
+
+// 지금 입력이 저장된 값과 같은지. 저장은 앞뒤 공백을 자르므로 잘라서 비교한다
+export function matchesSaved(saved: SavedFeedback | undefined, score: number | null, comment: string): boolean {
+  return (saved?.score ?? null) === score && (saved?.comment ?? '') === comment.trim()
+}
