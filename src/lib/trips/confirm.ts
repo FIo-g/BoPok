@@ -6,7 +6,7 @@ import { HttpError } from '@/lib/auth/http'
 import type { Db } from '@/lib/db/client'
 import { getDb } from '@/lib/db/client'
 import { tripVersions, trips } from '@/lib/db/schema'
-import { judgeStops } from './judge-run'
+import { judgeDays } from './judge-run'
 import { buildShareText } from './share-text'
 import { listTravelers } from './travelers'
 import { getTrip } from './trips'
@@ -52,7 +52,7 @@ export async function getShareText(tripId: string, db: Db = getDb()): Promise<Sh
   const version = await getVersion({ tripId, versionId: trip.confirmedVersionId }, db)
   const travelers = await listTravelers(tripId, db)
   // 숫자는 전부 엔진 판정 결과에서 나온다 (AGENTS.md 6장).
-  const run = await judgeStops({ stops: version.stops, travelers })
+  const days = await judgeDays({ stops: version.stops, travelers })
 
-  return { text: buildShareText({ trip, version, run }) }
+  return { text: buildShareText({ trip, days }) }
 }
