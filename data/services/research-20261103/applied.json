@@ -767,12 +767,12 @@
   "imagesPublished": 0,
   "continuousAccessUnverified": 108,
   "records": 17468,
-  "backup": ".pglite/research-test-backups/research-test-backup-1793694965919.tar.gz",
+  "backup": "C:\\Users\\이동주\\dev\\26_SVC_Seoul\\.pglite\\research-test-backups\\research-test-backup-1793699391233.tar.gz",
   "first": {
-    "added": 72,
+    "added": 0,
     "updated": 0,
-    "recordsAdded": 17468,
-    "recordsUnchanged": 0
+    "recordsAdded": 0,
+    "recordsUnchanged": 17468
   },
   "second": {
     "added": 0,
@@ -780,8 +780,7 @@
     "recordsAdded": 0,
     "recordsUnchanged": 17468
   },
-  "databasePlaces": 75,
+  "databasePlaces": 20214,
   "detailsWithResearchNotice": 75,
-  "existingPreserved": true,
-  "note": "main 동기화 전 테스트 결과. 미머지 SQL은 최신 main 기준 0005_place-services-research로 재생성됨"
+  "existingPreserved": true
 }

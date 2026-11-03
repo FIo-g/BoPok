@@ -3,7 +3,7 @@ import { and, asc, eq, ilike, sql, type SQL } from 'drizzle-orm'
 import { PlaceRecommendationRequestSchema, PlaceRecommendationResponseSchema, type Coord,
   type PlaceRecommendationResponse } from '@/lib/contracts'
 import { getDb, type Db } from '@/lib/db/client'
-import { placeCatalog, places } from '@/lib/db/schema/places'
+import { placeCatalog, places, placeSegments } from '@/lib/db/schema/places'
 import { embedPlaceTexts, PlaceEmbeddingSchema, PLACE_PASSAGE_MODEL } from '@/lib/ai/place-embeddings'
 import { straightLineDistanceM } from '@/lib/geo/straight-line'
 import { hasPlaceCatalog, placeSummaryColumns, toPlaceSummary } from './index'
@@ -31,11 +31,15 @@ export async function recommendServicePlaces(input: unknown, options: {
   const columns = { ...placeSummaryColumns, menus: placeCatalog.menus,
     distanceM: distance.as('distance_m'), detourM: detour.as('detour_m') }
   const kind = sql`coalesce(to_jsonb(${places})->>'kind', 'attraction') = ${query.kind}`
+  // 후보 수를 자른 뒤 재정렬하면 계단 미기록 후보가 처음부터 누락될 수 있다.
+  // 기존 계약대로 present만 뒤로 보내며 unknown을 접근 가능으로 판정하지 않는다.
+  const stairsOrder = query.avoidStairs ? [asc(sql`case when exists (select 1 from ${placeSegments}
+    where ${placeSegments.placeId} = ${places.id} and ${placeSegments.stairsStatus} = 'present') then 1 else 0 end`)] : []
   const order = [...(route ? [asc(detour)] : []), ...(query.near ? [asc(distance)] : []), asc(places.name), asc(places.id)]
   let method: 'vector' | 'keyword' = 'keyword'
   const keyword = () => db.select(columns).from(places).innerJoin(placeCatalog, eq(placeCatalog.placeId, places.id))
     .where(and(kind, query.query ? ilike(placeCatalog.searchText, `%${query.query.replace(/[\\%_]/g, '\\$&')}%`) : undefined))
-    .orderBy(...order).limit(query.limit)
+    .orderBy(...stairsOrder, ...order).limit(query.limit)
   let found: Awaited<ReturnType<typeof keyword>> | undefined
   if (query.query && (options.embedQuery || process.env.UPSTAGE_API_KEY)) {
     const state = await db.select({ ready: sql<boolean>`to_regclass('public.place_embeddings') is not null` }).from(places).limit(1)
@@ -46,7 +50,7 @@ export async function recommendServicePlaces(input: unknown, options: {
         const result = await db.select(columns).from(places).innerJoin(placeCatalog, eq(placeCatalog.placeId, places.id))
           .innerJoin(sql`place_embeddings`, sql`place_embeddings.place_id = ${places.id}
             and place_embeddings.content_hash = ${placeCatalog.contentHash} and place_embeddings.model = ${PLACE_PASSAGE_MODEL}`)
-          .where(kind).orderBy(asc(similarity), ...order).limit(query.limit)
+          .where(kind).orderBy(...stairsOrder, asc(similarity), ...order).limit(query.limit)
         if (result.length) { found = result; method = 'vector' }
       } catch {
         // 키·DB 내부 정보·외부 오류는 돌려주지 않고, 응답에 실제 검색 방식을 명시한다.

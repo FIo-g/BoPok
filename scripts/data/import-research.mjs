@@ -15,7 +15,8 @@ const { drizzle } = require('drizzle-orm/pglite')
 const { migrate } = require('drizzle-orm/pglite/migrator')
 const schema = require('../../src/lib/db/schema/index.ts')
 const { insertPilotPlaces } = require('../../src/lib/places/seed.ts')
-const { getPlaceDetails, listPlaces } = require('../../src/lib/places/index.ts')
+const { getPlaceDetails } = require('../../src/lib/places/index.ts')
+const { sql } = require('drizzle-orm')
 const source = resolve(values.source)
 const read = async name => JSON.parse(await readFile(join(source, name), 'utf8'))
 const inputName = '보폭_대전108_출처별정리_20261103.json'
@@ -50,9 +51,11 @@ if (values['apply-test']) {
     await insertPilotPlaces(db, pilots)
     report.first = await applyResearch(db, plan)
     report.second = await applyResearch(db, plan)
-    const summaries = await listPlaces({ limit: 100 }, db)
-    const details = await getPlaceDetails(summaries.slice(0, 100).map(p => p.id), db)
-    report.databasePlaces = summaries.length
+    // 카탈로그를 함께 넣은 뒤에는 이름순 첫 100곳에 시범 장소가 없을 수 있다.
+    const ids = [...new Set(plan.mapping.flatMap(item => item.dbId ? [item.dbId] : []))]
+    const details = await getPlaceDetails(ids, db)
+    const [{ count }] = await db.select({ count: sql`count(*)`.mapWith(Number) }).from(schema.places)
+    report.databasePlaces = count
     report.detailsWithResearchNotice = details.filter(p => p.research).length
     report.existingPreserved = pilots.every(p => details.some(row => row.id === p.id && JSON.stringify(row.coord) === JSON.stringify(p.coord)))
     if (!report.existingPreserved || report.second.added || report.second.recordsAdded) throw Error('기존 자료 보존/중복 검사 실패')

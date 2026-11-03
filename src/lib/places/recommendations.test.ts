@@ -27,6 +27,34 @@ beforeEach(async () => { await db.execute(sql`truncate places cascade`) })
 afterAll(async () => { await client.close() })
 
 describe('실제 pgvector와 후보 추천', () => {
+  it('계단 피하기는 벡터·키워드의 개수 제한 전에 적용하며 미기록을 안전으로 확정하지 않는다', async () => {
+    await importPreparedCatalog(db, [item(1, '국수 계단 기록 있음'), item(2, '국수 내부 미기록')])
+    const placeId = 'daejeon-food-1'
+    await db.insert(schema.placeNodes).values([
+      { placeId, id: 'a', kind: 'entrance', name: '가상 입구', lng: 127.38, lat: 36.35 },
+      { placeId, id: 'b', kind: 'sight', name: '가상 볼거리', lng: 127.381, lat: 36.35 },
+    ])
+    await db.insert(schema.placeSegments).values({
+      placeId, id: 'steps', fromNodeId: 'a', toNodeId: 'b', order: 0, distanceM: 10,
+      path: [[127.38, 36.35], [127.381, 36.35]], stairsStatus: 'present', stairsCount: 12,
+      slope: false, optional: false, source: '테스트 가상 계단', checkedAt: '2026-11-03', confidence: 'C',
+    })
+    await indexPlaceEmbeddings(db, { embed: async texts => texts.map(text => text.includes('기록 있음') ? firstVector : secondVector) })
+    const options = { db, embedQuery: async () => firstVector }
+    const request = { kind: 'restaurant', query: '국수', limit: 1 }
+    expect((await recommendServicePlaces(request, options)).items[0].place.id).toBe('daejeon-food-1')
+    const avoided = await recommendServicePlaces({ ...request, avoidStairs: true }, options)
+    expect(avoided.method).toBe('vector')
+    expect(avoided.items.map(item => item.place.id)).toEqual(['daejeon-food-2'])
+    const fallback = await recommendServicePlaces({ ...request, avoidStairs: true }, {
+      db, embedQuery: async () => { throw Error('가상 장애') },
+    })
+    expect(fallback.method).toBe('keyword')
+    expect(fallback.items.map(item => item.place.id)).toEqual(['daejeon-food-2'])
+    expect((await recommendServicePlaces({ ...request, avoidStairs: true, limit: 2 }, options)).items.map(item => item.place.id))
+      .toEqual(['daejeon-food-2', 'daejeon-food-1'])
+  })
+
   it('같은 종류를 SQL로 거르고 가까운 의미 순으로 돌려준다', async () => {
     await importPreparedCatalog(db, [item(1, '가상 국수'), item(2, '가상 밥집'), item(3, '가상 커피', '카페')])
     let calls = 0

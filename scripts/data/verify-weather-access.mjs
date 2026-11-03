@@ -1,4 +1,4 @@
-// 팀 요청: 기존 공공데이터포털 키로 두 날씨 서비스의 실제 이용권한만 확인한다.
+// 팀 요청: 기존 공공데이터포털 키로 세 날씨 서비스의 실제 이용권한만 확인한다.
 // 키·요청 URL·예보 원문은 출력하거나 저장하지 않는다. 호출은 서비스별 1회다.
 import { mkdir, writeFile } from 'node:fs/promises'
 const rawKey = process.env.TOURAPI_SERVICE_KEY?.trim()
@@ -17,8 +17,9 @@ const mid = latest([6, 18])
 const services = [
   { name: '단기예보', path: 'VilageFcstInfoService_2.0/getVilageFcst', params: { base_date: short.date, base_time: short.time, nx: '67', ny: '100' } },
   { name: '중기예보', path: 'MidFcstInfoService/getMidFcst', params: { tmFc: mid.date + mid.time, stnId: '108' } },
+  { name: '기상특보', path: 'WthrWrnInfoService/getPwnStatus', params: { fromTmFc: short.date, toTmFc: short.date } },
 ]
-const result = { checkedAt: now.toISOString(), purpose: '서비스 이용권한 확인: 단기는 검증 격자, 중기는 전국 전망', services: [] }
+const result = { checkedAt: now.toISOString(), purpose: '서비스 이용권한 확인: 단기는 검증 격자, 중기는 전국 전망, 특보는 당일 현황', services: [] }
 for (const service of services) {
   const url = new URL(`https://apis.data.go.kr/1360000/${service.path}`)
   url.search = new URLSearchParams({ serviceKey: key, dataType: 'JSON', pageNo: '1', numOfRows: '1', ...service.params }).toString()

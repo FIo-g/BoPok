@@ -1,12 +1,13 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { PlaceCostChoicesResponseSchema, TaxiCostResponseSchema, legKey, type CostItemKind, type PlaceCostChoices } from '@/lib/contracts'
 import { estimateCosts } from '@/lib/engine/cost'
 import { requiredLegs } from '@/lib/engine/required-legs'
 import { api, USE_MOCKS } from '@/lib/api-client'
 import { Card, Button } from '@/components/ui'
 import type { TripSlotProps } from './types'
+import { applyUneditedQuotes, costScope, placeCostKey, taxiCostKey } from './cost-drafts'
 
 type Draft = { amount: string; unit: '' | 'per_person' | 'shared'; quantity: number; kind: CostItemKind; option: string; source?: string }
 const emptyDraft = (): Draft => ({ amount: '', unit: '', quantity: 1, kind: 'other', option: '' })
@@ -14,13 +15,18 @@ const labels: Record<CostItemKind, string> = { admission: '입장료', meal: '�
 const inputClass = 'min-h-12 w-full rounded-xl border border-line bg-white px-3 py-2 text-base'
 const won = (amount: number) => `${amount.toLocaleString('ko-KR')}원`
 
-export function CostSlot({ tripId, day, stops, travelers }: TripSlotProps) {
+export function CostSlot({ tripId, versionId, day, stops, travelers }: TripSlotProps) {
   const [drafts, setDrafts] = useState<Record<string, Draft>>({})
   const [extras, setExtras] = useState<Record<string, number>>({})
   const [prices, setPrices] = useState<{ scope: string; data: PlaceCostChoices; error: boolean }>({ scope: '', data: [], error: false })
-  const [taxiBusy, setTaxiBusy] = useState(false)
-  const [taxiMessage, setTaxiMessage] = useState('')
-  const scope = `${tripId}:${day}`
+  const [taxiStatus, setTaxiStatus] = useState({ scope: '', busy: false, message: '' })
+  const taxiController = useRef<AbortController | null>(null)
+  const scope = costScope(tripId, versionId, day)
+  const taxiScope = JSON.stringify([scope, travelers.length, stops.map((stop, index) => index > 0
+    ? [stop.arriveBy, taxiCostKey(scope, stops[index - 1], stop, travelers.length)] : placeCostKey(scope, stop))])
+  const taxiBusy = taxiStatus.scope === taxiScope && taxiStatus.busy
+  const taxiMessage = taxiStatus.scope === taxiScope ? taxiStatus.message : ''
+  useEffect(() => () => { taxiController.current?.abort() }, [taxiScope])
   const idsKey = JSON.stringify([...new Set(stops.flatMap(stop => stop.placeId ? [stop.placeId] : []))])
   useEffect(() => {
     const controller = new AbortController()
@@ -37,13 +43,13 @@ export function CostSlot({ tripId, day, stops, travelers }: TripSlotProps) {
   }, [idsKey])
   const rows = useMemo(() => [
     ...stops.flatMap((stop, index) => [
-      { id: `${scope}:${stop.key}`, stopKey: stop.key, placeId: stop.placeId, label: stop.name, taxi: false },
-      ...(index > 0 && stop.arriveBy === 'taxi' ? [{ id: `${scope}:${stop.key}:taxi`, stopKey: stop.key, placeId: null, label: `${stop.name}까지 택시`, taxi: true }] : []),
+      { id: placeCostKey(scope, stop), stopKey: stop.key, placeId: stop.placeId, label: stop.name, taxi: false },
+      ...(index > 0 && stop.arriveBy === 'taxi' ? [{ id: taxiCostKey(scope, stops[index - 1], stop, travelers.length), stopKey: stop.key, placeId: null, label: `${stop.name}까지 택시`, taxi: true }] : []),
     ]),
     ...Array.from({ length: extras[scope] ?? 0 }, (_, index) => ({
       id: `${scope}:extra-${index}`, stopKey: null, placeId: null, label: `기타 비용 ${index + 1}`, taxi: false,
     })),
-  ], [scope, stops, extras])
+  ], [scope, stops, extras, travelers.length])
   const calculation = useMemo(() => {
     const charges = rows.flatMap(row => {
       const draft = drafts[row.id]
@@ -60,29 +66,36 @@ export function CostSlot({ tripId, day, stops, travelers }: TripSlotProps) {
     setDrafts(previous => ({ ...previous, [id]: { ...emptyDraft(), ...previous[id], ...patch } }))
   }
   async function loadTaxiPrices() {
-    setTaxiBusy(true)
-    setTaxiMessage('')
+    taxiController.current?.abort()
+    const controller = new AbortController()
+    taxiController.current = controller
+    const requestedDrafts = drafts
+    const message = (text: string) => {
+      if (!controller.signal.aborted) setTaxiStatus({ scope: taxiScope, busy: false, message: text })
+    }
+    setTaxiStatus({ scope: taxiScope, busy: true, message: '' })
     try {
       const details = await api.places.details(JSON.parse(idsKey))
+      if (controller.signal.aborted) return
       const byId = Object.fromEntries(details.map(place => [place.id, place]))
       const requests = requiredLegs(stops, byId).filter(request => request.mode === 'taxi')
-      if (!requests.length) { setTaxiMessage('좌표가 있는 택시 구간이 아직 없어요.'); return }
-      if (USE_MOCKS) { setTaxiMessage('연습 화면에서는 택시 요금을 직접 입력해 주세요.'); return }
-      const response = await fetch('/api/places/taxi-costs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requests }) })
+      if (!requests.length) { message('좌표가 있는 택시 구간이 아직 없어요.'); return }
+      if (USE_MOCKS) { message('연습 화면에서는 택시 요금을 직접 입력해 주세요.'); return }
+      const response = await fetch('/api/places/taxi-costs', { method: 'POST', signal: controller.signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requests }) })
       if (!response.ok) throw new Error('택시 조회 실패')
       const quotes = TaxiCostResponseSchema.parse(await response.json())
+      if (controller.signal.aborted) return
       const changes: Record<string, Draft> = {}
       stops.forEach((stop, index) => {
         if (!index || stop.arriveBy !== 'taxi') return
         const request = requests.find(request => request.from.placeId === stops[index - 1].placeId && request.to.placeId === stop.placeId)
         const quote = request ? quotes.find(quote => quote.key === legKey(request)) : undefined
-        if (quote) changes[`${scope}:${stop.key}:taxi`] = { amount: String(quote.fareKrw), unit: 'shared',
+        if (quote) changes[taxiCostKey(scope, stops[index - 1], stop, travelers.length)] = { amount: String(quote.fareKrw), unit: 'shared',
           quantity: Math.max(1, Math.ceil(travelers.length / 4)), kind: 'taxi', option: '', source: quote.source }
       })
-      setDrafts(previous => ({ ...previous, ...changes }))
-      setTaxiMessage('거리 기준 추정치예요. 정체·심야·시외 할증·통행료는 포함하지 않았어요.')
-    } catch { setTaxiMessage('택시 요금을 받지 못했어요. 로그인·장소·경로 정보를 확인하거나 직접 입력해 주세요.') }
-    finally { setTaxiBusy(false) }
+      setDrafts(previous => applyUneditedQuotes(previous, requestedDrafts, changes))
+      message('거리 기준 추정치예요. 정체·심야·시외 할증·통행료는 포함하지 않았어요.')
+    } catch { message('택시 요금을 받지 못했어요. 로그인·장소·경로 정보를 확인하거나 직접 입력해 주세요.') }
   }
   if (!stops.length) return null
   return (

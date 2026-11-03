@@ -1,0 +1,73 @@
+{
+  "branch": "geo/services-after-trip-schema",
+  "sharedDatabaseWritten": false,
+  "migration": "0005_place-services-research.sql",
+  "testDatabase": ".pglite/daejeon-20261103-main-test",
+  "data": {
+    "totalPlaces": 20214,
+    "catalogEntries": 20206,
+    "menus": 90313,
+    "researchCandidates": 108,
+    "researchPlacesInitiallyAdded": 72,
+    "researchRecords": 17468,
+    "researchPending": 33,
+    "quarantinedObservations": 39,
+    "catalogReimportAdded": 0,
+    "researchReimportAdded": 0,
+    "researchReimportUpdated": 0,
+    "researchRecordsReimportAdded": 0,
+    "pilotCoordinatesPreserved": true
+  },
+  "checks": {
+    "diffCheck": "passed",
+    "actualSecretMatches": 0,
+    "lint": "passed: pnpm lint",
+    "tests": {
+      "command": "pnpm test --maxWorkers=2",
+      "files": 112,
+      "cases": 1741,
+      "status": "passed"
+    },
+    "build": {
+      "defaultCommand": "pnpm build",
+      "defaultResult": "Turbopack CSS child process exited before connecting",
+      "passedCommands": [
+        "node node_modules/next/dist/bin/next build",
+        "pnpm --config.shell-emulator=false build"
+      ],
+      "typecheck": "passed",
+      "repositoryConfigChanged": false
+    },
+    "browser": {
+      "target": "http://127.0.0.1:3001",
+      "testAccountOnly": true,
+      "menuAmountKrw": 5000,
+      "perPersonWithBufferKrw": [
+        5000,
+        6000
+      ],
+      "differentVersionDoesNotInheritAmount": true,
+      "originalVersionRetainsDraft": true,
+      "screenshot": "research-20261103/cost-version-verification.png"
+    },
+    "weatherRegression": {
+      "files": 15,
+      "cases": 223,
+      "status": "passed"
+    },
+    "weatherApi": {
+      "httpStatus": 200,
+      "days": 11,
+      "allAvailable": true,
+      "report": "weather-api-check.json"
+    }
+  },
+  "externalConditions": {
+    "weatherShortMidAlerts": "resolved after approval: all three HTTP 200 / 00; real app parsing passed; see weather-integration-check.json",
+    "upstageActualEmbedding": "not verified: UPSTAGE_API_KEY absent",
+    "pr29": "open; no reviews; not merged"
+  },
+  "basePublishedHead": "bedda08972c431eb49553b75b157906b5493c3e8",
+  "publicationScope": "PR #29 추가 커밋의 검증 결과; 머지와 공유 DB 적용 제외",
+  "validatedAt": "2026-11-03T10:39:10.308Z"
+}

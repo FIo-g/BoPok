@@ -8,6 +8,7 @@ export const PlaceRecommendationRequestSchema = z.object({
   near: CoordSchema.optional(),
   route: z.tuple([CoordSchema, CoordSchema]).optional(),
   limit: z.number().int().min(1).max(20).default(10),
+  avoidStairs: z.boolean().optional(),
 }).strict()
 export type PlaceRecommendationRequest = z.infer<typeof PlaceRecommendationRequestSchema>
 

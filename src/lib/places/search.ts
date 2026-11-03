@@ -69,7 +69,7 @@ export async function searchCandidates(query: PlaceCandidateQuery, database?: Db
   const all: PlaceSummary[] = []
   for (const [kind, limit] of quotas) {
     if (!limit) continue
-    const semantic = input.query ? (await recommendServicePlaces({ kind, query: input.query, limit: Math.min(limit, 20) }, { db, embedQuery })).items.map(item => item.place) : []
+    const semantic = input.query ? (await recommendServicePlaces({ kind, query: input.query, avoidStairs: input.avoidStairs, limit: Math.min(limit, 20) }, { db, embedQuery })).items.map(item => item.place) : []
     all.push(...semantic, ...await structured(kind, limit - semantic.length, semantic.map(place => place.id)))
   }
   if (all.length < input.limit) all.push(...await structured(input.kind, input.limit - all.length, all.map(place => place.id)))
