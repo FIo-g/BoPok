@@ -28,6 +28,7 @@ import {
   TripListItemSchema,
   TripSchema,
   TripVersionSchema,
+  TripWeatherResponseSchema,
   UserSchema,
   type User,
 } from '@/lib/contracts'
@@ -88,6 +89,9 @@ export const realApi: Api = {
     remove: async (tripId, travelerId) => {
       await request(`/api/trips/${enc(tripId)}/travelers/${enc(travelerId)}/health`, { method: 'DELETE' })
     },
+  },
+  weather: {
+    get: tripId => request(`/api/trips/${enc(tripId)}/weather`, { schema: TripWeatherResponseSchema }),
   },
   opinions: {
     list: versionId => request(`/api/versions/${enc(versionId)}/opinions`, { schema: z.array(OpinionSchema) }),

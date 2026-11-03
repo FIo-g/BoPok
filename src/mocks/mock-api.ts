@@ -11,6 +11,7 @@ import { mockPlaceDetails, mockPlaces, toSummary } from './places'
 import { buildShareText } from './share-text'
 import { getDb, nextId, saveDb, type MockDb } from './store'
 import { replaceMockTravelers } from './travelers'
+import { mockTripWeather } from './weather'
 
 const LATENCY_MS = 120
 
@@ -257,6 +258,10 @@ export const mockApi: Api = {
       const { user } = requireTrip(db, tripId)
       deleteMockHealth(db, { tripId, travelerId, actorUserId: user.id })
     }),
+  },
+
+  weather: {
+    get: tripId => call(db => mockTripWeather(requireTrip(db, tripId).trip)),
   },
 
   opinions: {

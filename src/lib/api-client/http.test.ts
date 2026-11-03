@@ -100,6 +100,15 @@ describe('realApi 경로', () => {
     expect(delInit.method).toBe('DELETE')
   })
 
+  it('날씨는 여행 주소 아래에서 받고, 모양이 다르면 막는다', async () => {
+    const weather = { checkedAt: '2026-11-03T01:00:00.000Z', days: [{ day: 1, date: '2026-11-04', status: 'too_far', forecast: null }] }
+    const fn = stubFetch(200, weather)
+    expect(await realApi.weather.get('t 1')).toEqual(weather)
+    expect(fn).toHaveBeenCalledWith('/api/trips/t%201/weather', expect.objectContaining({ credentials: 'same-origin' }))
+    stubFetch(200, { days: [{ day: 1, status: 'sunny' }] })
+    await expect(realApi.weather.get('t')).rejects.toMatchObject({ code: 'internal_error' })
+  })
+
   it('건강 정보 목록 응답의 모양이 다르면 에러로 막는다', async () => {
     stubFetch(200, [])
     await expect(realApi.health.list('t')).rejects.toMatchObject({ code: 'internal_error' })

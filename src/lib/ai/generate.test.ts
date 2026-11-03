@@ -7,6 +7,8 @@ import {
   PlanResponseSchema,
   type InterviewFilled,
   type InterviewState,
+  type TripWeatherDay,
+  type WeatherForecast,
 } from '@/lib/contracts'
 import { AiCallError } from './client'
 import { createDevDeps } from './dev-deps'
@@ -905,5 +907,79 @@ describe('POST /api/ai/generate 와 같은 처리 (개발용 가짜 연결)', ()
     // 실제 dev-deps에는 인터뷰 상태가 없으므로 400이다
     const noInterview = await POST(makeRequest({ tripId: 'trip-dev' }))
     expect(noInterview.status).toBe(400)
+  })
+})
+
+// 날씨 예보 한 날 (기상청 단기예보 모양). 비·눈·폭염인 날만 AI 참고 줄에 들어간다
+const weatherDay = (day: number, patch: Partial<WeatherForecast> = {}): TripWeatherDay => ({
+  day,
+  date: `2026-11-${String(13 + day).padStart(2, '0')}`,
+  status: 'ok',
+  forecast: {
+    source: 'short',
+    issuedAt: '2026-11-13T05:00+09:00',
+    sky: 'clear',
+    precip: 'none',
+    popMaxPct: 10,
+    rainLevel: null,
+    snowLevel: null,
+    windLevel: 'weak',
+    tempMaxC: 15,
+    tempMinC: 5,
+    feelsMaxC: null,
+    ...patch,
+  },
+})
+
+describe('handleGenerate: 날씨 참고 줄', () => {
+  const planBody = { stops: [{ placeId: 'science', name: '국립중앙과학관' }] }
+
+  it('비 오는 날이면 "실내 위주" 줄이 들어가고, 인터뷰가 정한 날짜로 예보를 묻는다', async () => {
+    const { deps, calls } = depsWithAi([planBody])
+    await deps.interviews.save('trip-dev', doneState({ transport: 'car', date: '2026-11-14' }))
+    const getWeather = vi.fn<AiDeps['getWeather']>(async () => [weatherDay(1, { precip: 'rain', popMaxPct: 80 })])
+
+    const response = await handleGenerate(makeRequest({ tripId: 'trip-dev' }), { ...deps, getWeather })
+    expect(response.status).toBe(200)
+    expect(getWeather).toHaveBeenCalledWith({ date: '2026-11-14', endDate: null })
+    expect(calls[0]).toContain('날씨 예보(기상청): 여행 날 비 — 그날은 실내 장소를 많이 넣고 야외 장소는 짧게 잡아라.')
+  })
+
+  it('여러 날이면 날마다 적고, 맑은 날은 적지 않는다', async () => {
+    const { deps, calls } = depsWithAi([planBody])
+    await deps.interviews.save('trip-dev', doneState({ transport: 'car', date: '2026-11-14', endDate: '2026-11-16' }))
+    const days = [weatherDay(1, { precip: 'rain' }), weatherDay(2), weatherDay(3, { feelsMaxC: 34 })]
+
+    await handleGenerate(makeRequest({ tripId: 'trip-dev' }), { ...deps, getWeather: async () => days })
+    expect(calls[0]).toContain('날씨 예보(기상청): 1일차 비, 3일차 폭염')
+    expect(calls[0]).toContain('폭염인 날은 한낮(12~17시)에 야외 장소를 넣지 마라.')
+  })
+
+  it('특별한 날씨가 없거나 날짜가 없으면 줄이 없다', async () => {
+    const { deps, calls } = depsWithAi([planBody, planBody])
+    await deps.interviews.save('trip-dev', doneState({ transport: 'car', date: '2026-11-14' }))
+    await handleGenerate(makeRequest({ tripId: 'trip-dev' }), { ...deps, getWeather: async () => [weatherDay(1)] })
+    expect(calls[0]).not.toContain('날씨 예보')
+
+    const getWeather = vi.fn<AiDeps['getWeather']>(async () => [weatherDay(1, { precip: 'snow' })])
+    await deps.interviews.save('trip-dev', doneState({ transport: 'car' }))
+    await handleGenerate(makeRequest({ tripId: 'trip-dev' }), { ...deps, getWeather })
+    expect(getWeather).not.toHaveBeenCalled()
+    expect(calls[1]).not.toContain('날씨 예보')
+  })
+
+  it('예보를 못 읽어도 일정은 만들어진다', async () => {
+    const { deps, calls } = depsWithAi([planBody])
+    await deps.interviews.save('trip-dev', doneState({ transport: 'car', date: '2026-11-14' }))
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    try {
+      const failing: AiDeps = { ...deps, getWeather: async () => { throw new Error('기상청 503') } }
+      const response = await handleGenerate(makeRequest({ tripId: 'trip-dev' }), failing)
+      expect(response.status).toBe(200)
+      expect(calls[0]).not.toContain('날씨 예보')
+      expect(warn).toHaveBeenCalledWith('[ai] 날씨 예보를 못 읽었어요')
+    } finally {
+      warn.mockRestore()
+    }
   })
 })

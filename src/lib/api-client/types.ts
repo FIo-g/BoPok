@@ -42,6 +42,7 @@ import type {
   TripVersion,
   UpdateTripRequest,
   User,
+  TripWeatherResponse,
 } from '@/lib/contracts'
 
 export type { Budget }
@@ -90,6 +91,10 @@ export interface Api {
     put(tripId: string, travelerId: string, input: TravelerHealthInput): Promise<TravelerHealth>
     // 지우기 = 동의 철회. 바로 삭제하고 본문 없이 끝난다 (204). 고칠 수 있는 사람만 (아니면 403)
     remove(tripId: string, travelerId: string): Promise<void>
+  }
+  // 여행 날짜별 날씨 예보 (기상청, 대전 기준). 예보를 못 받은 날은 status가 unavailable로 온다
+  weather: {
+    get(tripId: string): Promise<TripWeatherResponse>
   }
   opinions: {
     list(versionId: string): Promise<Opinion[]>

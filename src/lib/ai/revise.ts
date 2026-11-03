@@ -20,6 +20,7 @@ import { AiCallError } from './client'
 import type { AiDeps } from './deps'
 import { HttpError, handle, readJson, requireVersionInTrip } from './http'
 import { partyNoteLines, readAvoidFoodTags } from './party-notes'
+import { readWeatherLine } from './weather-notes'
 import { planJudgeSave, type PlanAttempt, type PlanAttemptResult } from './plan-and-save'
 import {
   arrangeDraftsByDay,
@@ -306,14 +307,18 @@ export async function handleRevise(
         }
       }
 
-      // 피할 음식(병·약에서 나온 태그만)과 운동 참고 줄. 병·약 이름은 어디에도 가지 않는다 (AGENTS 6장).
-      const avoidTags = await readAvoidFoodTags(deps, input.tripId)
-      const partyBlock = partyNoteLines(avoidTags, ctx.travelers)
-        .map(line => `${line}\n`)
-        .join('')
-
       const lastDay = Math.max(1, ...tripDays(version.stops))
       const multiDay = lastDay > 1
+
+      // 피할 음식(병·약에서 나온 태그만)과 운동 참고 줄. 병·약 이름은 어디에도 가지 않는다 (AGENTS 6장).
+      // 비·눈·폭염인 날은 실내 위주로 하라는 날씨 줄도 붙인다 (판정은 바꾸지 않는다)
+      const [avoidTags, weatherLine] = await Promise.all([
+        readAvoidFoodTags(deps, input.tripId),
+        readWeatherLine(deps, { date: ctx.trip.date ?? null, endDate: ctx.trip.endDate ?? null }, lastDay),
+      ])
+      const partyBlock = [...partyNoteLines(avoidTags, ctx.travelers), ...(weatherLine ? [weatherLine] : [])]
+        .map(line => `${line}\n`)
+        .join('')
       const systemPrompt = multiDay ? `${SYSTEM_PROMPT} ${MULTI_DAY_PROMPT}` : SYSTEM_PROMPT
       const originalDays = tripDays(version.stops).map(day => ({
         day,

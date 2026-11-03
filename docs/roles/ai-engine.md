@@ -13,12 +13,12 @@
 1. ✅ (11/2 main) **일정 화면 뼈대 — 가장 먼저** (설계 6.5): 날짜 탭, 고른 날 기준 판정·지도·목록·빠른 수정안, 직접 고치기 순서 번호 바꾸기, 빠른 수정안은 그날만 바꿔 끼우기, 기능별 빈 자리 `src/components/trip/slots/` 4개. 리뷰어 오하연
 2. ✅ (11/3 main) **② 건강 정보·식단 주의** (설계 4.4 "만든 것"): 주의 규칙 표 조사(질병관리청·식약처 근거 구절), 엔진 `dietCautions`, 건강 정보 저장 API·DB(키는 tripId+travelerId, cascade 금지), 동의 화면, `HealthSlot`, AI 일정 짜기에 반영, 공용 문장에 병·약·식단 이유 금지(`text-guard`). 리뷰어 김경선(API·DB), 오하연(화면)
 3. ✅ (11/3 main, 콜드 스타트는 한국에서 다시 잴 것, Vercel에 `ANTHROPIC_API_KEY` 넣어야 배포에서 켜짐) **⑦ Claude 먼저** (설계 4.7): 공급자 순서 Claude → Upstage → opencode, `.env.example`에 키 이름. **콜드 스타트 측정**: 배포 응답 헤더 `x-vercel-id`가 sin1인지, 첫 로그인 시간
-4. **⑧ 피로도·체력** (설계 6.2): ✅ 인터뷰에 "일주일에 운동 몇 번"(근거 찾기 전까지 판정 숫자에 안 씀) · ✅ (11/3 main) 계단·경사·키 보정을 논문 값으로(근거 노트 `docs/superpowers/specs/evidence/2026-11-03-engine-evidence.md`, 75세 이상 기본 조건은 결정 대기) · ⬜ 폭염 주의(날씨 API를 정한 뒤)
+4. **⑧ 피로도·체력** (설계 6.2): ✅ 인터뷰에 "일주일에 운동 몇 번"(근거 찾기 전까지 판정 숫자에 안 씀) · ✅ (11/3 main) 계단·경사·키 보정을 논문 값으로(근거 노트 `docs/superpowers/specs/evidence/2026-11-03-engine-evidence.md`, 75세 이상 기본 조건은 결정 대기) · ✅ (11/3) 폭염 주의 → 날씨 전체로 넓힘(설계 4.8: 기상청 단기·중기예보, 폭염은 경고·비·눈·추위·바람은 여행 준비, 판정은 그대로, AI는 실내 위주 참고 줄. 근거 노트 `docs/superpowers/specs/evidence/2026-11-03-weather.md`)
 5. ✅ (11/3) **여러 날 일정 처음 짜기**(인터뷰 기간으로 날마다 3~5곳, 앞 7일까지)와 **새 안 바로 고르기**(slot의 `onNewVersion`, 대화 → AI 뒤 새로 고침 없이)
 
 ## 맡는 폴더
 
-`src/lib/engine`, `src/lib/ai`, `src/app/api/ai/**`
+`src/lib/engine`, `src/lib/ai`, `src/app/api/ai/**`, `src/lib/weather`, `src/app/api/trips/[id]/weather`
 
 ## 설계 가이드 — 엔진 (`src/lib/engine`)
 

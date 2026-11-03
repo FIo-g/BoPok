@@ -59,6 +59,9 @@ export const lazyMockApi: Api = {
     put: async (tripId, travelerId, input) => (await mock()).health.put(tripId, travelerId, input),
     remove: async (tripId, travelerId) => (await mock()).health.remove(tripId, travelerId),
   },
+  weather: {
+    get: async tripId => (await mock()).weather.get(tripId),
+  },
   opinions: {
     list: async versionId => (await mock()).opinions.list(versionId),
     add: async (versionId, input) => (await mock()).opinions.add(versionId, input),

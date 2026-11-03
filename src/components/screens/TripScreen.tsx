@@ -18,6 +18,7 @@ import { ChatSlot } from '@/components/trip/slots/ChatSlot'
 import { CostSlot } from '@/components/trip/slots/CostSlot'
 import { HealthSlot } from '@/components/trip/slots/HealthSlot'
 import { SatisfactionSlot } from '@/components/trip/slots/SatisfactionSlot'
+import { WeatherSlot } from '@/components/trip/slots/WeatherSlot'
 import type { TripSlotProps } from '@/components/trip/slots/types'
 import { StopList, type StopEditing } from '@/components/trip/StopList'
 import { TripMap } from '@/components/trip/TripMap'
@@ -279,6 +280,7 @@ export function TripScreen({ tripId }: { tripId: string }) {
           )}
 
           <DayTabs days={days} day={day} startDate={trip.date} onSelect={chooseDay} disabled={busy !== null} />
+          <WeatherSlot {...slotProps} />
 
           {version.error && <ErrorNotice message={errorMessage(version.error)} onRetry={version.reload} />}
           {!canJudge && versions && versions.length > 0 && (

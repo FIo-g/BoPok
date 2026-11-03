@@ -8,6 +8,8 @@ import {
   type ChatMessage,
   type Opinion,
   type Stop,
+  type TripWeatherDay,
+  type WeatherForecast,
 } from '@/lib/contracts'
 import { AiCallError } from './client'
 import { createDevDeps } from './dev-deps'
@@ -1100,5 +1102,62 @@ describe('AI에게 전달하기 (includeChat)', () => {
     const { response } = await run({ opinions: [], chat: [chatMessage('안녕')] })
     expect(response.status).toBe(400)
     expect(ApiErrorSchema.parse(await response.json()).error.message).toBe('반영할 의견이 없어요')
+  })
+})
+
+// 날씨 예보 한 날 (기상청 단기예보 모양). 비·눈·폭염인 날만 AI 참고 줄에 들어간다
+const weatherDay = (day: number, patch: Partial<WeatherForecast> = {}): TripWeatherDay => ({
+  day,
+  date: `2026-11-${String(13 + day).padStart(2, '0')}`,
+  status: 'ok',
+  forecast: {
+    source: 'short',
+    issuedAt: '2026-11-13T05:00+09:00',
+    sky: 'clear',
+    precip: 'none',
+    popMaxPct: 10,
+    rainLevel: null,
+    snowLevel: null,
+    windLevel: 'weak',
+    tempMaxC: 15,
+    tempMinC: 5,
+    feelsMaxC: null,
+    ...patch,
+  },
+})
+
+describe('handleRevise: 날씨 참고 줄', () => {
+  it('여행 날짜의 예보에 비·눈이 있으면 "실내 위주" 줄이 들어간다', async () => {
+    const { deps, versionId, calls } = await setup({
+      versionStops: [scienceStop()],
+      opinions: [opinion({ id: 'o1', versionId: 'v1' })],
+      ai: [{ stops: [{ placeId: 'science', name: '국립중앙과학관' }], appliedOpinionIds: ['o1'] }],
+    })
+    const getWeather = vi.fn<AiDeps['getWeather']>(async () => [weatherDay(1, { precip: 'sleet' })])
+    const dated: AiDeps = {
+      ...deps,
+      getTripContext: async tripId => {
+        const ctx = await deps.getTripContext(tripId)
+        return { ...ctx, trip: { ...ctx.trip, date: '2026-11-14', endDate: null } }
+      },
+      getWeather,
+    }
+
+    const response = await handleRevise(makeRequest({ tripId: 'trip-dev', versionId }), dated)
+    expect(response.status).toBe(200)
+    expect(getWeather).toHaveBeenCalledWith({ date: '2026-11-14', endDate: null })
+    expect(calls[0]).toContain('날씨 예보(기상청): 여행 날 비 또는 눈 —')
+  })
+
+  it('여행 날짜가 없으면 예보를 묻지 않는다', async () => {
+    const { deps, versionId, calls } = await setup({
+      versionStops: [scienceStop()],
+      opinions: [opinion({ id: 'o1', versionId: 'v1' })],
+      ai: [{ stops: [{ placeId: 'science', name: '국립중앙과학관' }], appliedOpinionIds: ['o1'] }],
+    })
+    const getWeather = vi.fn<AiDeps['getWeather']>(async () => [weatherDay(1, { precip: 'rain' })])
+    await handleRevise(makeRequest({ tripId: 'trip-dev', versionId }), { ...deps, getWeather })
+    expect(getWeather).not.toHaveBeenCalled()
+    expect(calls[0]).not.toContain('날씨 예보')
   })
 })

@@ -47,11 +47,11 @@ async function tripFor(mode: 'paste' | 'scratch' = 'scratch') {
 }
 
 describe('getTripContext', () => {
-  it('AI가 필요한 칸만 돌려준다 (id, groupId, startMode)', async () => {
+  it('AI가 필요한 칸만 돌려준다 (id, groupId, startMode, 날씨 참고용 날짜)', async () => {
     const { groupId, tripId } = await tripFor('paste')
 
     const context = await getTripContext(tripId)
-    expect(context.trip).toEqual({ id: tripId, groupId, startMode: 'paste' })
+    expect(context.trip).toEqual({ id: tripId, groupId, startMode: 'paste', date: null, endDate: null })
     expect(Object.keys(context).sort()).toEqual(['travelers', 'trip', 'versions'])
   })
 

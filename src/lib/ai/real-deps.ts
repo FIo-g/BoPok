@@ -4,6 +4,7 @@
 import 'server-only'
 import { getLegsPartial } from '@/lib/geo/legs'
 import { avoidFoodTagsForTrip } from '@/lib/health'
+import { tripWeather } from '@/lib/weather'
 import {
   createVersion,
   getOpinions,
@@ -30,6 +31,8 @@ export function createRealDeps(overrides: Partial<AiDeps> = {}): AiDeps {
     saveTravelers: (tripId, travelers) => saveTravelers(tripId, travelers),
     // 김태형 health: 일행 전체의 병·약에서 음식 태그만 모은다 (db 인자가 새어 들어가지 않게 감싼다)
     getAvoidFoodTags: tripId => avoidFoodTagsForTrip(tripId),
+    // 김태형 weather: 기상청 단기·중기예보 (키 TOURAPI_SERVICE_KEY). 부른 결과는 발표 단위로 캐시된다
+    getWeather: async dates => (await tripWeather(dates)).days,
     interviews: {
       get: tripId => interviews.get(tripId),
       save: (tripId, state) => interviews.save(tripId, state),
