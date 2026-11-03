@@ -28,6 +28,7 @@ import type {
   ParseScheduleResponse,
   PlaceDetail,
   PlaceSummary,
+  PlaceKind,
   PlanResponse,
   ReviseRequest,
   ReviseResponse,
@@ -49,7 +50,7 @@ export type { Budget }
 
 export type SignUpInput = { name: string; email: string; password: string }
 export type SignInInput = { email: string; password: string }
-export type PlaceQuery = { q?: string; styles?: string[] }
+export type PlaceQuery = { q?: string; styles?: string[]; kind?: PlaceKind; limit?: number }
 
 export interface Api {
   auth: {

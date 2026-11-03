@@ -321,6 +321,8 @@ export const mockApi: Api = {
       mockPlaceDetails
         .filter(p => !query.q || p.name.includes(query.q))
         .filter(p => !query.styles?.length || p.styles.some(s => query.styles?.includes(s)))
+        .filter(p => !query.kind || (p.kind ?? 'attraction') === query.kind)
+        .slice(0, query.limit ?? 100)
         .map(toSummary),
     ),
     get: placeId => call(() => mockPlaces[placeId] ?? fail(404, 'not_found', '장소를 찾을 수 없어요')),

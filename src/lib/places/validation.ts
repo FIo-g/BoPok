@@ -1,6 +1,6 @@
 import 'server-only'
 import { z } from 'zod'
-import { BudgetSchema, PlaceDetailsRequestSchema, PlaceIdInputSchema, TransportSchema } from '@/lib/contracts'
+import { BudgetSchema, PlaceDetailsRequestSchema, PlaceIdInputSchema, PlaceKindSchema, TransportSchema } from '@/lib/contracts'
 
 // 기존 요청 계약에 서버의 크기 제한과 ID 검사를 더한다.
 export const BoundedPlaceDetailsRequestSchema = PlaceDetailsRequestSchema.extend({
@@ -15,5 +15,7 @@ export const PlaceCandidateQuerySchema = z.object({
   transport: TransportSchema,
   avoidStairs: z.boolean(),
   limit: z.number().int().min(0).max(100),
+  query: z.string().trim().max(100).optional(),
+  kind: PlaceKindSchema.optional(),
 })
 export type PlaceCandidateQuery = z.infer<typeof PlaceCandidateQuerySchema>

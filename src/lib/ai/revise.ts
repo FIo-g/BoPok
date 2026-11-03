@@ -52,7 +52,7 @@ const AiReviseSchema = z.object({
 })
 
 const SYSTEM_PROMPT =
-  '가족 여행 일정을 의견에 맞게 다시 짠다. 후보 목록의 id로만 골라라. 식사 자리는 placeId null + 이름으로 넣는다. ' +
+  '가족 여행 일정을 의견에 맞게 다시 짠다. 관광지·식당·카페·숙박 모두 후보 목록의 id로만 골라라. 식사 장소가 미정일 때만 placeId null + 식사 자리로 넣는다. ' +
   '꼭 갈 곳·예약된 장소는 손대지 마라(이미 정해진 표시를 그대로 쓴다). 의견이 서로 부딪히면 [부모님] 의견을 따르라(부모님을 위한 서비스). ' +
   '반영한 의견 id를 appliedOpinionIds에 넣어라. 걷는 시간·거리·계단 수는 쓰지 마라. 메모와 식사 자리 이름에 건강·식단 이야기를 쓰지 마라. ' +
   '반드시 JSON으로만 답하라. 모양: {"stops":[{"placeId":"장소 id 또는 null","name":"장소 이름","startTime":"HH:mm","visitMin":60,"seated":false}],"appliedOpinionIds":["의견 id"],"note":"한 줄 메모"}'
@@ -75,8 +75,9 @@ function candidateLine(place: PlaceSummary): string {
   const parts = [`id: ${place.id}`, `이름: ${place.name}`, `분류: ${place.category}`]
   if (place.styles.length > 0) parts.push(`스타일: ${place.styles.join(', ')}`)
   parts.push(place.visitMin !== undefined ? `머무는 시간 약 ${place.visitMin}분` : '머무는 시간 미정')
-  parts.push(place.seated ? '앉는 곳' : '앉는 곳 아님')
-  parts.push(place.indoor ? '실내' : '실외')
+  parts.push(`종류: ${place.kind ?? 'attraction'}`)
+  parts.push(place.seated ? '앉는 곳' : '착석 여부 확인 필요')
+  parts.push(place.indoor ? '실내' : '실내 여부 확인 필요')
   return `- ${parts.join(', ')}`
 }
 
@@ -269,6 +270,7 @@ export async function handleRevise(
       const transport = interview?.filled.transport ?? 'car'
 
       const candidates = await deps.searchCandidates({
+        query: (interview?.filled.styles ?? []).join(' ').slice(0, 100),
         styles: interview?.filled.styles ?? [],
         ...(interview?.filled.budget !== undefined ? { budget: interview.filled.budget } : {}),
         // 장소 사이 이동수단 고르기용이라 대중교통은 버스로 찾는다 (설계 7.3.1)

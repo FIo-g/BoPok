@@ -3,11 +3,13 @@
 // 숫자(걷는 시간·거리·계단 수)는 만들지 않는다 — 계단은 장소 구간에 기록된 상태(present)만 본다.
 // index.ts가 이 파일을 다시 내보내면 순환 import가 되므로, 쓰는 쪽은 '@/lib/places/search'에서 가져온다.
 import 'server-only'
-import { eq } from 'drizzle-orm'
-import type { PlaceSummary } from '@/lib/contracts'
+import { and, asc, eq, notInArray, sql } from 'drizzle-orm'
+import type { PlaceKind, PlaceSummary } from '@/lib/contracts'
 import { getDb, type Db } from '@/lib/db/client'
-import { placeSegments } from '@/lib/db/schema/places'
-import { listPlaces } from './index'
+import { places, placeSegments } from '@/lib/db/schema/places'
+import { placeSummaryColumns, toPlaceSummary } from './index'
+import { recommendServicePlaces } from './recommendations'
+import { embedPlaceTexts } from '@/lib/ai/place-embeddings'
 import { PlaceCandidateQuerySchema, type PlaceCandidateQuery } from './validation'
 
 // ---------- 후보 추리기 ----------
@@ -42,9 +44,35 @@ async function placeIdsWithStairs(db: Db): Promise<Set<string>> {
 
 export async function searchCandidates(query: PlaceCandidateQuery, database?: Db): Promise<PlaceSummary[]> {
   const input = PlaceCandidateQuerySchema.parse(query)
+  if (!input.limit) return []
   const db = database ?? getDb()
-  // 장소가 수백 곳을 넘으면 DB에서 거르도록 바꾼다(지금은 시범 장소뿐). PGlite는 한 연결이라 조회를 순서대로 한다.
-  const all = await listPlaces({}, db)
+  const kindColumn = sql<string>`coalesce(to_jsonb(${places})->>'kind', 'attraction')`
+  const styles = input.styles.map(style => style.trim()).filter(Boolean)
+  const score = styles.length ? sql<number>`(select count(*) from unnest(${places.styles}) style where style = any(${sql`ARRAY[${sql.join(styles.map(style => sql`${style}`), sql`, `)}]::text[]`}))` : sql<number>`0`
+  const stairs = input.avoidStairs ? sql<number>`case when exists (select 1 from ${placeSegments}
+    where ${placeSegments.placeId} = ${places.id} and ${placeSegments.stairsStatus} = 'present') then 1 else 0 end` : sql<number>`0`
+  async function structured(kind: PlaceKind | undefined, limit: number, excluded: string[] = []) {
+    if (!limit) return []
+    const rows = await db.select(placeSummaryColumns).from(places).where(and(
+      kind ? eq(kindColumn, kind) : undefined, excluded.length ? notInArray(places.id, excluded) : undefined,
+    )).orderBy(...(input.avoidStairs ? [asc(stairs)] : []), ...(styles.length ? [sql`${score} desc`] : []), asc(places.name), asc(places.id)).limit(limit)
+    return rows.map(toPlaceSummary)
+  }
+  // 음식점 2만 곳이 관광지 후보를 밀어내지 않도록 종류별로 먼저 확보한다.
+  const quotas: [PlaceKind, number][] = input.kind ? [[input.kind, input.limit]] : [
+    ['attraction', input.limit - Math.floor(input.limit * .2) - Math.floor(input.limit * .15) - Math.floor(input.limit * .05)],
+    ['restaurant', Math.floor(input.limit * .2)], ['cafe', Math.floor(input.limit * .15)], ['lodging', Math.floor(input.limit * .05)],
+  ]
+  let embedding: Promise<number[]> | undefined
+  const embedQuery = process.env.UPSTAGE_API_KEY
+    ? async (text: string) => embedding ??= embedPlaceTexts([text], 'query').then(vectors => vectors[0]) : undefined
+  const all: PlaceSummary[] = []
+  for (const [kind, limit] of quotas) {
+    if (!limit) continue
+    const semantic = input.query ? (await recommendServicePlaces({ kind, query: input.query, limit: Math.min(limit, 20) }, { db, embedQuery })).items.map(item => item.place) : []
+    all.push(...semantic, ...await structured(kind, limit - semantic.length, semantic.map(place => place.id)))
+  }
+  if (all.length < input.limit) all.push(...await structured(input.kind, input.limit - all.length, all.map(place => place.id)))
   const stairsPresentIds = input.avoidStairs ? await placeIdsWithStairs(db) : new Set<string>()
   return rankPlaces(all, input, stairsPresentIds)
 }
@@ -102,7 +130,12 @@ export function findPlaceByName<T extends NamedPlace>(all: readonly T[], name: s
 }
 
 export async function matchPlaceByName(name: string, database?: Db): Promise<PlaceSummary | null> {
-  if (normalizePlaceName(name).length === 0) return null
+  const normalized = normalizePlaceName(name)
+  if (!normalized.length) return null
   const db = database ?? getDb()
-  return findPlaceByName(await listPlaces({}, db), name)
+  const key = sql<string>`regexp_replace(lower(${places.name}), '[^[:alnum:]]', '', 'g')`
+  const rows = await db.select(placeSummaryColumns).from(places)
+    .where(sql`length(${key}) >= 2 and position(${key} in ${normalized}) > 0`)
+    .orderBy(asc(places.name), asc(places.id))
+  return findPlaceByName(rows.map(toPlaceSummary), name)
 }

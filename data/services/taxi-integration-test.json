@@ -1,0 +1,11 @@
+{
+  "checkedAt": "2026-11-03T08:23:44.109Z",
+  "sharedDbWritten": false,
+  "distanceM": 112,
+  "fareKrw": 4800,
+  "perPersonKrw": {
+    "low": 1600,
+    "high": 1920
+  },
+  "basis": "distance_only"
+}

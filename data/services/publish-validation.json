@@ -1,0 +1,19 @@
+{
+  "baseCommit": "bb06259",
+  "branch": "geo/services-after-trip-schema",
+  "sharedDatabaseWritten": false,
+  "checks": {
+    "lint": "passed",
+    "tests": {
+      "command": "pnpm test --maxWorkers=2",
+      "files": 111,
+      "cases": 1734,
+      "status": "passed"
+    },
+    "build": "passed",
+    "diffCheck": "passed",
+    "actualSecretMatches": 0
+  },
+  "migration": "0005_place-services-research.sql",
+  "migrationAppliedToSharedDatabase": false
+}

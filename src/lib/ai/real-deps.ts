@@ -5,6 +5,8 @@ import 'server-only'
 import { getLegsPartial } from '@/lib/geo/legs'
 import { avoidFoodTagsForTrip } from '@/lib/health'
 import { tripWeather } from '@/lib/weather'
+import { searchPoi } from '@/lib/geo/poi'
+import { matchPlaceByName, searchCandidates } from '@/lib/places/search'
 import {
   createVersion,
   getOpinions,
@@ -16,7 +18,7 @@ import {
 } from '@/lib/trips'
 import { callJson } from './client'
 import type { AiDeps } from './deps'
-import { createLegsAdapter, createPlaceAdapters, createPlaceDetailsAdapter } from './place-adapters'
+import { createLegsAdapter, createPlaceDetailsAdapter } from './place-adapters'
 
 // overrides는 테스트에서 일부만 바꿔 끼울 때 쓴다 (예: 진짜 DB는 두고 callJson만 가짜로).
 export function createRealDeps(overrides: Partial<AiDeps> = {}): AiDeps {
@@ -37,8 +39,9 @@ export function createRealDeps(overrides: Partial<AiDeps> = {}): AiDeps {
       get: tripId => interviews.get(tripId),
       save: (tripId, state) => interviews.save(tripId, state),
     },
-    // 이동주: 장소 조회와 경로. 후보 검색·이름 맞추기·POI는 아직 없어 어댑터가 채운다.
-    ...createPlaceAdapters(),
+    searchCandidates: query => searchCandidates(query),
+    matchPlaceByName: name => matchPlaceByName(name),
+    searchPoi: name => searchPoi(name),
     getPlaceDetails: createPlaceDetailsAdapter(),
     getLegs: createLegsAdapter(getLegsPartial),
     callJson,
