@@ -7,6 +7,8 @@ import Map, { Layer, Marker, Source, type LayerProps, type MapRef } from 'react-
 import type { Feature, FeatureCollection, Polygon } from 'geojson'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import type { TreesLayer } from './treesLayer'
+import type { LandmarksLayer } from './landmarksLayer'
+import { LANDMARKS, LANDMARK_FADE_ZOOM, LANDMARK_HIDDEN_LAYER_ID, LANDMARK_HIDDEN_SHADOW_LAYER_ID, hiddenFids, landmarkCenter, type Landmark } from './landmarks'
 import { maxPitchForZoom } from './map-limits'
 import { crossingBearing, focusZone, nearBuildingIds, veilPolygon } from './map-focus'
 import type { Coord } from '@/lib/contracts'
@@ -63,6 +65,11 @@ const farLayer: FillExtrusionLayerSpecification = {
     'fill-extrusion-opacity': FAR_OPACITY,
   },
 }
+// 랜드마크 모형이 대신하는 원래 건물. near/far 에서는 빼고, 이 레이어가 줌에 따라 서서히 사라진다(모형이 나타나는 구간과 같은 줌 구간)
+const HIDDEN_FIDS = hiddenFids()
+const isHiddenFid: ExpressionSpecification = ['in', ['get', 'fid'], ['literal', HIDDEN_FIDS]]
+const notHiddenFid: ExpressionSpecification = ['!', isHiddenFid]
+const hiddenBuildingLayer: FillExtrusionLayerSpecification = { ...nearLayer, id: LANDMARK_HIDDEN_LAYER_ID, filter: isHiddenFid }
 // 그림자: 건물 바닥 옆으로 늘어진 연보라 도형. 범위 밖(far) 건물의 그림자는 같이 흐려진다
 const shadowNearLayer: FillLayerSpecification = {
   id: BUILDINGS_SHADOW_NEAR_LAYER_ID, type: 'fill', source: BUILDINGS_SOURCE_ID, 'source-layer': BUILDINGS_SHADOW_SOURCE_LAYER, minzoom: BUILDINGS_MIN_ZOOM,
@@ -72,6 +79,7 @@ const shadowFarLayer: FillLayerSpecification = {
   id: BUILDINGS_SHADOW_FAR_LAYER_ID, type: 'fill', source: BUILDINGS_SOURCE_ID, 'source-layer': BUILDINGS_SHADOW_SOURCE_LAYER, minzoom: BUILDINGS_MIN_ZOOM,
   paint: { 'fill-color': PALETTE.shadow, 'fill-opacity': SHADOW_FAR_OPACITY, 'fill-antialias': true },
 }
+const hiddenShadowLayer: FillLayerSpecification = { ...shadowNearLayer, id: LANDMARK_HIDDEN_SHADOW_LAYER_ID, filter: isHiddenFid }
 const veilLayer: FillLayerSpecification = { id: 'focus-veil', type: 'fill', source: VEIL_SOURCE_ID, paint: { 'fill-color': PALETTE.background, 'fill-opacity': VEIL_OPACITY } }
 // 건물 가장자리를 부드럽게(maplibre 기본값은 antialias: false)
 const CANVAS_ATTRIBUTES = { antialias: true }
@@ -146,11 +154,13 @@ type Props = {
   focusPath?: Coord[] | null
   // 지도에서 경로선이나 핀을 눌렀을 때. 목록 항목 id 가 온다
   onSelectItem?: (itemId: string) => void
+  // 랜드마크 모형을 눌렀을 때
+  onSelectLandmark?: (landmark: Landmark) => void
 }
 
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
-export default function MapView({ mode = 'plan', compact = false, interactive = false, initialView, onMapReady, deferExtras = false, flat = false, onFail, routes = null, pins = [], fit = null, focusPath = null, onSelectItem }: Props) {
+export default function MapView({ mode = 'plan', compact = false, interactive = false, initialView, onMapReady, deferExtras = false, flat = false, onFail, routes = null, pins = [], fit = null, focusPath = null, onSelectItem, onSelectLandmark }: Props) {
   const landing = mode === 'landing'
   // 처음 높이 배율(평면으로 시작하면 처음부터 0 으로 만들어 3D 가 번쩍 보이지 않게). 한 번 정하면 바꾸지 않는다
   const [initialFlat] = useState(flat)
@@ -158,6 +168,8 @@ export default function MapView({ mode = 'plan', compact = false, interactive = 
   // landing 그림자: 건물이 솟는 줌 구간에 맞춰 옅게 나타난다(visibility 를 바꾸지 않고 줌으로 보간)
   const shadowNearInit = useMemo<FillLayerSpecification>(() => (landing ? { ...shadowNearLayer, paint: { ...shadowNearLayer.paint, 'fill-opacity': ['interpolate', ['linear'], ['zoom'], RISE_ZOOM[0], 0, RISE_ZOOM[1], SHADOW_OPACITY] } } : shadowNearLayer), [landing])
   const shadowFarInit = useMemo<FillLayerSpecification>(() => (landing ? { ...shadowFarLayer, paint: { ...shadowFarLayer.paint, 'fill-opacity': ['interpolate', ['linear'], ['zoom'], RISE_ZOOM[0], 0, RISE_ZOOM[1], SHADOW_FAR_OPACITY] } } : shadowFarLayer), [landing])
+  const hiddenInit = useMemo<FillExtrusionLayerSpecification>(() => ({ ...hiddenBuildingLayer, paint: { ...hiddenBuildingLayer.paint, 'fill-extrusion-height': landing ? heightByZoom(1) : heightScaled(initialFlat ? 0 : 1) } }), [initialFlat, landing])
+  const hiddenShadowInit = useMemo<FillLayerSpecification>(() => (landing ? { ...hiddenShadowLayer, paint: { ...hiddenShadowLayer.paint, 'fill-opacity': ['interpolate', ['linear'], ['zoom'], RISE_ZOOM[0], 0, RISE_ZOOM[1], SHADOW_OPACITY] } } : hiddenShadowLayer), [landing])
   const farInit = useMemo<FillExtrusionLayerSpecification>(() => ({ ...farLayer, paint: { ...farLayer.paint, 'fill-extrusion-height': landing ? heightByZoom(FAR_HEIGHT_SCALE) : heightScaled(initialFlat ? 0 : FAR_HEIGHT_SCALE) } }), [initialFlat, landing])
   const mapRef = useRef<MapRef>(null)
   const firstFit = useRef(true)
@@ -165,6 +177,13 @@ export default function MapView({ mode = 'plan', compact = false, interactive = 
   const [failed, setFailed] = useState(() => !hasWebGL())
   const [cursor, setCursor] = useState('')
   const treesRef = useRef<TreesLayer | null>(null)
+  const landmarksRef = useRef<LandmarksLayer | null>(null)
+  const [landmarksReady, setLandmarksReady] = useState(false)
+  const overRoute = useRef(false)
+  const overLandmark = useRef(false)
+  // ?debug=landmarks: 숨긴 원래 건물 윤곽을 빨간 선으로, 모형은 반투명으로 보여 위치를 맞출 때 쓴다(&lm=id 면 그 곳을 위에서 내려다본다, &lmopacity=1 이면 불투명)
+  const [debug] = useState(() => typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('debug') === 'landmarks')
+  const [debugOpacity] = useState(() => (typeof window !== 'undefined' ? Number(new URLSearchParams(window.location.search).get('lmopacity') ?? 0.5) || 0.5 : 0.5))
   const flatRef = useRef(flat)
   const [nearIds, setNearIds] = useState<number[] | null>(null)
 
@@ -201,9 +220,52 @@ export default function MapView({ mode = 'plan', compact = false, interactive = 
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loaded, compact, deferExtras])
+  // 랜드마크 3D 모형: 나무와 같은 시점(소개 연출이 끝난 뒤)에 불러온다. 휴대폰도 표시한다. 못 불러오면 원래 건물이 그대로 남는다
+  useEffect(() => {
+    const map = mapRef.current?.getMap()
+    if (!map || !loaded || deferExtras) return
+    let cancelled = false
+    let added: LandmarksLayer | null = null
+    ;(async () => {
+      try {
+        const { createLandmarksLayer } = await import('./landmarksLayer')
+        const layer = await createLandmarksLayer(LANDMARKS, { riseZoom: landing ? RISE_ZOOM : undefined, compact, opacity: debug ? debugOpacity : undefined })
+        if (cancelled) return
+        layer.setVisible(landing || !flatRef.current)
+        map.addLayer(layer, BUILDINGS_BEFORE_ID)
+        landmarksRef.current = layer
+        added = layer
+        setLandmarksReady(true)
+      } catch {
+        // 모형이 없어도 지도는 정상(원래 건물이 그대로 보인다)
+      }
+    })()
+    return () => {
+      cancelled = true
+      if (added && map.getLayer(added.id)) map.removeLayer(added.id)
+      landmarksRef.current = null
+      setLandmarksReady(false)
+    }
+  }, [loaded, deferExtras, landing, compact, debug, debugOpacity])
+  // 모형이 나타나는 줌 구간에서 원래 건물(과 그림자)이 같이 사라진다. 모형을 못 불러왔거나 2D 보기면 원래 건물을 그대로 둔다
+  useEffect(() => {
+    const map = mapRef.current?.getMap()
+    if (!map || !loaded) return
+    const [z0, z1] = LANDMARK_FADE_ZOOM
+    const crossfade = landmarksReady && (landing || !flat)
+    if (map.getLayer(LANDMARK_HIDDEN_LAYER_ID)) map.setPaintProperty(LANDMARK_HIDDEN_LAYER_ID, 'fill-extrusion-opacity', crossfade ? ['interpolate', ['linear'], ['zoom'], z0, 1, z1, 0] : 1)
+    if (map.getLayer(LANDMARK_HIDDEN_SHADOW_LAYER_ID)) {
+      // landing 의 그림자는 건물이 솟는 줌 구간에 맞춰 나타나는 식이라, 사라지는 식과 합쳐 중간에 잠깐 옅게 보였다 사라진다
+      const rise: ExpressionSpecification = ['interpolate', ['linear'], ['zoom'], RISE_ZOOM[0], 0, RISE_ZOOM[1], SHADOW_OPACITY]
+      const bump: ExpressionSpecification = ['interpolate', ['linear'], ['zoom'], RISE_ZOOM[0], 0, (RISE_ZOOM[0] + z1) / 2, SHADOW_OPACITY * 0.5, z1, 0]
+      const fadeOut: ExpressionSpecification = ['interpolate', ['linear'], ['zoom'], z0, SHADOW_OPACITY, z1, 0]
+      map.setPaintProperty(LANDMARK_HIDDEN_SHADOW_LAYER_ID, 'fill-opacity', landing ? (crossfade ? bump : rise) : crossfade ? fadeOut : SHADOW_OPACITY)
+    }
+  }, [landmarksReady, flat, landing, loaded])
   // 2D 보기에서는 나무를 숨긴다
   useEffect(() => {
     flatRef.current = flat
+    landmarksRef.current?.setVisible(landing || !flat)
     // landing 은 나무가 줌에 따라 자라서(treesLayer 의 riseZoom) 보이고 숨기는 것을 따로 하지 않는다
     treesRef.current?.setVisible(landing || !flat)
   }, [flat, landing])
@@ -228,11 +290,11 @@ export default function MapView({ mode = 'plan', compact = false, interactive = 
   }, [zone, loaded])
 
   const nearFilter = useMemo<ExpressionSpecification>(
-    () => (nearIds ? ['in', ['get', 'fid'], ['literal', nearIds]] : ['has', 'fid']),
+    () => ['all', nearIds ? ['in', ['get', 'fid'], ['literal', nearIds]] : ['has', 'fid'], notHiddenFid],
     [nearIds],
   )
   const farFilter = useMemo<ExpressionSpecification>(
-    () => (nearIds ? ['!', ['in', ['get', 'fid'], ['literal', nearIds]]] : ['==', ['get', 'fid'], -1]),
+    () => ['all', nearIds ? ['!', ['in', ['get', 'fid'], ['literal', nearIds]]] : ['==', ['get', 'fid'], -1], notHiddenFid],
     [nearIds],
   )
 
@@ -242,6 +304,7 @@ export default function MapView({ mode = 'plan', compact = false, interactive = 
     // landing 은 줌으로 보간하는 식(heightByZoom)이 높이를 정하므로 건드리지 않는다
     if (!map || !loaded || landing || !map.getLayer(BUILDINGS_NEAR_LAYER_ID)) return
     const setScale = (near: number, far: number) => {
+      if (map.getLayer(LANDMARK_HIDDEN_LAYER_ID)) map.setPaintProperty(LANDMARK_HIDDEN_LAYER_ID, 'fill-extrusion-height', heightScaled(near))
       map.setPaintProperty(BUILDINGS_NEAR_LAYER_ID, 'fill-extrusion-height', heightScaled(near))
       map.setPaintProperty(BUILDINGS_FAR_LAYER_ID, 'fill-extrusion-height', heightScaled(far))
     }
@@ -312,9 +375,21 @@ export default function MapView({ mode = 'plan', compact = false, interactive = 
         canvasContextAttributes={CANVAS_ATTRIBUTES}
         interactiveLayerIds={routes ? ['route-hit'] : []}
         cursor={cursor}
-        onMouseEnter={() => setCursor('pointer')}
-        onMouseLeave={() => setCursor('')}
+        onMouseEnter={() => { overRoute.current = true; setCursor('pointer') }}
+        onMouseLeave={() => { overRoute.current = false; setCursor(overLandmark.current ? 'pointer' : '') }}
+        onMouseMove={e => {
+          // 모형 위에서는 손 모양 커서, 빛이 강해진다
+          const landmark = landmarksRef.current?.pick(e.point) ?? null
+          landmarksRef.current?.setHover(landmark?.id ?? null)
+          const hit = landmark != null
+          if (hit === overLandmark.current) return
+          overLandmark.current = hit
+          setCursor(hit || overRoute.current ? 'pointer' : '')
+        }}
         onClick={e => {
+          const landmark = landmarksRef.current?.pick(e.point)
+          landmarksRef.current?.setSelected(landmark?.id ?? null)
+          if (landmark) { onSelectLandmark?.(landmark); return }
           const id = e.features?.[0]?.properties?.itemId
           if (typeof id === 'string') onSelectItem?.(id)
         }}
@@ -322,6 +397,11 @@ export default function MapView({ mode = 'plan', compact = false, interactive = 
           e.target.setMaxPitch(maxPitchForZoom(e.target.getZoom()))
           // landing 은 화면 전체를 매 프레임 다시 그려서 해상도를 낮춘다(고해상도 휴대폰 보호)
           if (landing) e.target.setPixelRatio(Math.min(window.devicePixelRatio || 1, compact ? PIXEL_RATIO_MAX_COMPACT : PIXEL_RATIO_MAX))
+          if (debug) {
+            ;(window as unknown as { __map?: unknown }).__map = e.target
+            const lm = LANDMARKS.find(l => l.id === new URLSearchParams(window.location.search).get('lm'))
+            if (lm) e.target.jumpTo({ center: landmarkCenter({ ...lm, offsetM: [0, 0] }), zoom: 17.5, pitch: 0, bearing: 0 })
+          }
           setLoaded(true)
           onMapReady?.(e.target)
         }}
@@ -333,9 +413,17 @@ export default function MapView({ mode = 'plan', compact = false, interactive = 
           {/* 그림자는 건물 레이어보다 아래. 2D 에서는 건물이 평면이라 그림자도 숨긴다 */}
           <Layer {...shadowNearInit} filter={nearFilter} layout={{ visibility: (!landing && flat) || compact ? 'none' : 'visible' }} beforeId={BUILDINGS_BEFORE_ID} />
           <Layer {...shadowFarInit} filter={farFilter} layout={{ visibility: (!landing && flat) || compact ? 'none' : 'visible' }} beforeId={BUILDINGS_BEFORE_ID} />
+          <Layer {...hiddenShadowInit} layout={{ visibility: (!landing && flat) || compact ? 'none' : 'visible' }} beforeId={BUILDINGS_BEFORE_ID} />
+          <Layer {...hiddenInit} beforeId={BUILDINGS_BEFORE_ID} />
           <Layer {...nearInit} filter={nearFilter} beforeId={BUILDINGS_BEFORE_ID} />
           <Layer {...farInit} filter={farFilter} beforeId={BUILDINGS_BEFORE_ID} />
         </Source>
+        {/* 디버그: 숨긴 원래 건물 윤곽 */}
+        {debug && (
+          <Source id="landmark-debug" type="vector" tiles={[BUILDINGS_TILES]} minzoom={BUILDINGS_MIN_ZOOM} maxzoom={BUILDINGS_MAX_ZOOM}>
+            <Layer id="landmark-debug-outline" type="line" source-layer={BUILDINGS_SOURCE_LAYER} filter={isHiddenFid} paint={{ 'line-color': '#ff0000', 'line-width': 2.5 }} />
+          </Source>
+        )}
         {/* 구간 범위 밖을 흐리게 덮는 덮개. 범위 모양만 뚫려 있다 */}
         <Source id={VEIL_SOURCE_ID} type="geojson" data={veil}>
           <Layer {...veilLayer} beforeId={ROUTE_BEFORE_ID} />
