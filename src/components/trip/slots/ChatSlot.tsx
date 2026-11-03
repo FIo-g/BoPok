@@ -7,7 +7,7 @@ import { Button, Card, ErrorNotice, Spinner, TextInput } from '@/components/ui'
 import { api } from '@/lib/api-client'
 import { CHAT_TEXT_MAX, type ChatMessage } from '@/lib/contracts'
 import { errorMessage } from '@/lib/use-async'
-import { advanceCursor, chatTime, mergeMessages } from './chat-state'
+import { advanceCursor, chatTime, mergeMessages, pollAfter } from './chat-state'
 import type { TripSlotProps } from './types'
 
 const CHAT_REFRESH_MS = 10_000
@@ -16,8 +16,11 @@ export function ChatSlot({ tripId, userId }: TripSlotProps) {
   const [messages, setMessages] = useState<ChatMessage[] | null>(null)
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [sendError, setSendError] = useState<string | null>(null)
   const listRef = useRef<HTMLOListElement>(null)
+  // 글을 보낸 직후에도 새 글을 받으려고 갱신 함수를 밖에서 부를 수 있게 둔다 (설계 6.3)
+  const refreshNow = useRef<() => void>(() => {})
   useEffect(() => {
     if (!userId) return
     let cancelled = false
@@ -29,15 +32,17 @@ export function ChatSlot({ tripId, userId }: TripSlotProps) {
         .then(res => {
           if (cancelled) return
           cursor = advanceCursor(cursor, res.messages)
+          setLoadError(null)
           setMessages(current => mergeMessages(current ?? [], res.messages))
         })
         .catch((e: unknown) => {
           // 처음 불러오기만 알린다. 주기적 갱신은 다음 차례에 다시 시도하면 된다
-          if (!cancelled && after === undefined) setError(errorMessage(e))
+          if (!cancelled && after === undefined) setLoadError(errorMessage(e))
         })
     const refreshIfVisible = () => {
-      if (document.visibilityState === 'visible') void refresh(cursor)
+      if (document.visibilityState === 'visible') void refresh(pollAfter(cursor))
     }
+    refreshNow.current = () => void refresh(pollAfter(cursor))
 
     void refresh()
     const timer = setInterval(refreshIfVisible, CHAT_REFRESH_MS)
@@ -59,17 +64,20 @@ export function ChatSlot({ tripId, userId }: TripSlotProps) {
 
   async function send(event: FormEvent) {
     event.preventDefault()
-    const body = text.trim()
+    const sentText = text
+    const body = sentText.trim()
     if (!body || sending) return
     setSending(true)
-    setError(null)
+    setSendError(null)
     try {
       const saved = await api.chat.post(tripId, body)
       setMessages(current => mergeMessages(current ?? [], [saved]))
-      setText('')
+      // 보내는 동안 이어 쓴 글은 지우지 않는다
+      setText(current => (current === sentText ? '' : current))
+      refreshNow.current()
     } catch (e) {
       // 쓴 글은 지우지 않는다 — 다시 보낼 수 있게
-      setError(errorMessage(e))
+      setSendError(errorMessage(e))
     } finally {
       setSending(false)
     }
@@ -78,7 +86,7 @@ export function ChatSlot({ tripId, userId }: TripSlotProps) {
   return (
     <Card className="flex flex-col gap-3">
       <h2 className="text-xl font-extrabold">가족 대화</h2>
-      {messages === null && !error && <Spinner label="대화를 불러오는 중이에요" />}
+      {messages === null && !loadError && <Spinner label="대화를 불러오는 중이에요" />}
       {messages?.length === 0 && <p className="text-muted">아직 대화가 없어요. 일정에 대해 먼저 이야기해 보세요.</p>}
       {messages !== null && messages.length > 0 && (
         <ol ref={listRef} role="log" aria-label="가족 대화" className="flex max-h-96 flex-col gap-3 overflow-y-auto">
@@ -95,7 +103,8 @@ export function ChatSlot({ tripId, userId }: TripSlotProps) {
           })}
         </ol>
       )}
-      {error && <ErrorNotice message={error} />}
+      {loadError && <ErrorNotice message={loadError} />}
+      {sendError && <ErrorNotice message={sendError} />}
       <form onSubmit={send} className="flex gap-2">
         <TextInput
           value={text}

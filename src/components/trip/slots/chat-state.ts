@@ -16,6 +16,14 @@ export function advanceCursor(cursor: string | undefined, received: ChatMessage[
   return received.at(-1)?.createdAt ?? cursor
 }
 
+// 서버에 물을 시각. 커서보다 조금 앞에서 묻는다 — 저장이 몇 초 늦게 끝난 글은 시각이 커서보다
+// 앞설 수 있어서다. 겹쳐 받은 글은 mergeMessages가 id로 거른다
+export const CHAT_OVERLAP_MS = 5_000
+
+export function pollAfter(cursor: string | undefined): string | undefined {
+  return cursor === undefined ? undefined : new Date(new Date(cursor).getTime() - CHAT_OVERLAP_MS).toISOString()
+}
+
 // '2026-11-03T05:07:00.000Z' → 기기 시간대의 '14:07'
 export function chatTime(createdAt: string): string {
   const date = new Date(createdAt)

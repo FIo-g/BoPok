@@ -8,7 +8,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const { id } = await params
     await requireTripMember(request, id)
     const query = ChatListQuerySchema.safeParse(Object.fromEntries(new URL(request.url).searchParams))
-    if (!query.success) throw new HttpError(400, 'invalid_request', '요청 내용이 형식에 맞지 않아요')
+    // 0000년처럼 형식은 맞아도 DB가 못 받는 시각도 잘못된 요청이다
+    const tooOld = query.data?.after !== undefined && new Date(query.data.after).getUTCFullYear() < 2000
+    if (!query.success || tooOld) throw new HttpError(400, 'invalid_request', '요청 내용이 형식에 맞지 않아요')
     return { messages: await listChatMessages({ tripId: id, ...query.data }) }
   })
 }

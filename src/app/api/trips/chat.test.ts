@@ -126,7 +126,7 @@ describe('GET /api/trips/:id/chat', () => {
     expect(messages.at(-1)!.text).toBe('글 104')
   })
 
-  it.each(['?after=어제', '?aftr=2026-11-03T01:00:00.000Z'])('잘못된 쿼리 %s는 400', async query => {
+  it.each(['?after=어제', '?aftr=2026-11-03T01:00:00.000Z', '?after=0000-01-01T00:00:00Z'])('잘못된 쿼리 %s는 400', async query => {
     const { owner, tripId } = await tripFor()
     expect((await list(owner.cookie, tripId, query)).status).toBe(400)
   })
