@@ -23,7 +23,7 @@ const SCORES = [
 
 const scoreText = (score: number) => SCORES.find(one => one.score === score)?.text ?? `${score}점`
 
-function FeedbackForm({ tripId, day, mine, onSaved }: { tripId: string; day: number; mine?: DayFeedbackItem; onSaved: () => void }) {
+function FeedbackForm({ tripId, day, mine, onSaved }: { tripId: string; day: number; mine?: DayFeedbackItem; onSaved: (saved: DayFeedbackItem) => void }) {
   const [score, setScore] = useState<number | null>(mine?.score ?? null)
   const [comment, setComment] = useState(mine?.comment ?? '')
   const [busy, setBusy] = useState(false)
@@ -37,9 +37,9 @@ function FeedbackForm({ tripId, day, mine, onSaved }: { tripId: string; day: num
     setSaved(false)
     try {
       const text = comment.trim()
-      await api.feedback.save(tripId, { day, score, ...(text ? { comment: text } : {}) })
+      const item = await api.feedback.save(tripId, { day, score, ...(text ? { comment: text } : {}) })
       setSaved(true)
-      onSaved()
+      onSaved(item)
     } catch (e) {
       setError(errorMessage(e))
     } finally {
@@ -51,13 +51,23 @@ function FeedbackForm({ tripId, day, mine, onSaved }: { tripId: string; day: num
     <>
       <div className="flex flex-wrap gap-2" role="group" aria-label="만족도">
         {SCORES.map(one => (
-          <Chip key={one.score} selected={score === one.score} onClick={() => setScore(one.score)}>
+          <Chip
+            key={one.score}
+            selected={score === one.score}
+            onClick={() => {
+              setScore(one.score)
+              setSaved(false)
+            }}
+          >
             {one.score}점 · {one.text}
           </Chip>
         ))}
       </div>
       <div>
-        <TextInput value={comment} maxLength={COMMENT_MAX} onChange={e => setComment(e.target.value)} placeholder="한 줄 남기기 (선택, 100자까지)" aria-label="한 줄 남기기" />
+        <TextInput value={comment} maxLength={COMMENT_MAX} onChange={e => {
+            setComment(e.target.value)
+            setSaved(false)
+          }} placeholder="한 줄 남기기 (선택, 100자까지)" aria-label="한 줄 남기기" />
         <p className="mt-1 text-right text-sm text-muted">{comment.length}/{COMMENT_MAX}</p>
       </div>
       {error && <ErrorNotice message={error} />}
@@ -77,6 +87,12 @@ export function SatisfactionSlot({ tripId, day, userId }: TripSlotProps) {
   // 이 칸은 없어도 일정을 보는 데 지장이 없어서, 못 불러오면 조용히 숨긴다
   if (!data || !dayHasArrived(data.tripDate, day, today)) return null
 
+  // 다시 받지 않고 저장 응답을 바로 반영한다 — 저장 직후 날을 바꿔 돌아와도 옛 값이 채워지지 않게
+  const applySaved = (saved: DayFeedbackItem) => {
+    const others = data.feedback.filter(item => !(item.day === saved.day && item.userId === saved.userId))
+    feedback.mutate({ ...data, feedback: [...others, saved] })
+  }
+
   const ofDay = data.feedback.filter(item => item.day === day)
   const mine = ofDay.find(item => item.userId === userId)
   const others = ofDay.filter(item => item.userId !== userId)
@@ -85,7 +101,7 @@ export function SatisfactionSlot({ tripId, day, userId }: TripSlotProps) {
     <Card className="flex flex-col gap-3">
       <h2 className="text-xl font-extrabold">{feedbackQuestion(data.tripDate, day, today)}</h2>
       {/* 날을 바꾸면 입력을 그날 값으로 다시 채운다. 저장 뒤에는 '남겼어요'가 남도록 날만 key로 쓴다 */}
-      <FeedbackForm key={day} tripId={tripId} day={day} mine={mine} onSaved={feedback.reload} />
+      <FeedbackForm key={day} tripId={tripId} day={day} mine={mine} onSaved={applySaved} />
       {others.length > 0 && (
         <ul className="space-y-2 border-t border-line pt-3">
           {others.map(item => (

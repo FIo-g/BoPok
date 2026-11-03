@@ -7,8 +7,8 @@ import { HttpError } from '@/lib/auth/http'
 import type { Db } from '@/lib/db/client'
 import { getDb } from '@/lib/db/client'
 import { dayFeedbacks, user } from '@/lib/db/schema'
-import { TRIP_DAY_TABS_MAX } from '@/lib/plan/trip-days'
-import { getTrip } from './trips'
+import { tripDayList } from '@/lib/plan/trip-days'
+import { getTrip, getTripDetail } from './trips'
 
 type Row = typeof dayFeedbacks.$inferSelect
 
@@ -44,7 +44,11 @@ export async function saveDayFeedback(
   db: Db = getDb(),
 ): Promise<DayFeedbackItem> {
   const { day, score, comment } = args.input
-  if (day > TRIP_DAY_TABS_MAX) throw new HttpError(400, 'invalid_request', '없는 날이에요')
+  // 여행 기간과 지금 일정에 있는 날만 받는다 (날짜 탭과 같은 기준)
+  const { trip, initialVersion } = await getTripDetail(args.tripId, db)
+  if (!tripDayList(trip, initialVersion?.stops ?? []).includes(day)) {
+    throw new HttpError(400, 'invalid_request', '없는 날이에요')
+  }
 
   const [row] = await db
     .insert(dayFeedbacks)

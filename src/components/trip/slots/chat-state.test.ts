@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ChatMessage } from '@/lib/contracts'
-import { advanceCursor, chatTime, mergeMessages } from './chat-state'
+import { advanceCursor, chatTime, mergeMessages, pollAfter } from './chat-state'
 
 const message = (id: string, createdAt: string): ChatMessage => ({ id, tripId: 't', userId: 'u', userName: '엄마', text: '안녕', createdAt })
 
@@ -50,6 +50,16 @@ describe('advanceCursor', () => {
     shown = mergeMessages(shown, received)
 
     expect(shown.map(one => one.id)).toEqual(['a', 'theirs', 'mine'])
+  })
+})
+
+describe('pollAfter', () => {
+  it('커서보다 5초 앞에서 묻는다', () => {
+    expect(pollAfter('2026-11-03T01:00:10.000Z')).toBe('2026-11-03T01:00:05.000Z')
+  })
+
+  it('커서가 없으면 처음부터 묻는다', () => {
+    expect(pollAfter(undefined)).toBeUndefined()
   })
 })
 
