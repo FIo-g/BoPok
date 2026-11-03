@@ -125,6 +125,7 @@ export function judge(input: JudgeInput): JudgeResult {
       const baseMin = walkMinutes(segment.distanceM, speedMps, {
         stairs: segment.stairsStatus === 'present',
         slope: segment.slope,
+        stairsCount: segment.stairsCount,
       })
       const stairViolation = segment.stairsStatus === 'present' && condition.avoidStairs
       const result: SegmentResult = {
@@ -193,6 +194,7 @@ export function judge(input: JudgeInput): JudgeResult {
           const baseMin = walkMinutes(leg.distanceM, speedMps, {
             stairs: leg.stairsStatus === 'present',
             slope: false,
+            stairsCount: leg.stairsCount,
           })
           const stairViolation = leg.stairsStatus === 'present' && condition.avoidStairs
           const result: LegResult = {

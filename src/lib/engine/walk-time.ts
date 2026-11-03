@@ -1,18 +1,33 @@
 // 구간 하나의 걷는 시간과 범위 (설계 7.2). 숫자는 constants.ts만 쓴다.
 import type { Minutes, Transport } from '@/lib/contracts'
-import { MARGIN_RATE, SLOPE_WEIGHT, STAIRS_WEIGHT } from './constants'
+import {
+  MARGIN_RATE,
+  SLOPE_WEIGHT,
+  SLOW_CAP_MPS,
+  STAIR_STEP_SEC,
+  STAIR_STEP_SEC_SLOW,
+  STAIR_TREAD_M,
+  STAIRS_WEIGHT,
+} from './constants'
 
-// 계단·경사가 함께 있으면 두 가중치를 곱한다 (설계 7.2 식 그대로).
+const EPS = 1e-9
+
+// 계단 칸 수를 알면 칸마다 시간을 더하고(계단 실측), 나머지 거리는 평지 속도로 센다. 경사 배수는 평지 부분에만 곱한다.
+// 칸 수 기록이 없으면 예전처럼 거리 전체에 임시 배수를 곱한다 — 칸 수를 지어내지 않기 위해서다.
 export function walkMinutes(
   distanceM: number,
   speedMps: number,
-  opts: { stairs: boolean; slope: boolean },
+  opts: { stairs: boolean; slope: boolean; stairsCount?: number },
 ): number {
-  return (
-    (distanceM / (speedMps * 60)) *
-    (opts.stairs ? STAIRS_WEIGHT : 1) *
-    (opts.slope ? SLOPE_WEIGHT : 1)
-  )
+  const slopeWeight = opts.slope ? SLOPE_WEIGHT : 1
+  const perMeterMin = 1 / (speedMps * 60)
+  if (opts.stairs && opts.stairsCount !== undefined) {
+    const flatM = Math.max(0, distanceM - opts.stairsCount * STAIR_TREAD_M)
+    // 느린 사람(천천히·보조기구 상한 이하)은 계단 칸 시간도 느린 쪽 값을 쓴다
+    const stepSec = speedMps <= SLOW_CAP_MPS + EPS ? STAIR_STEP_SEC_SLOW : STAIR_STEP_SEC
+    return flatM * perMeterMin * slopeWeight + (opts.stairsCount * stepSec) / 60
+  }
+  return distanceM * perMeterMin * (opts.stairs ? STAIRS_WEIGHT : 1) * slopeWeight
 }
 
 // 화면에는 늘 범위로 보여 준다 (설계 2.3·7.2).

@@ -11,7 +11,15 @@ import type {
 import { JudgeResultSchema, legKey } from '@/lib/contracts'
 import { judge } from './judge'
 import { requiredLegs } from './required-legs'
-import { places as fixtures } from './test-fixtures'
+import { places as fixtures, SPEED_MPS } from './test-fixtures'
+import { formatRange, toRange, walkMinutes } from './walk-time'
+
+// 한밭수목원 s3(204 m, 계단 24칸)의 걷는 시간. 노션 4-2 예시는 계단을 거리 × 2배(8분)로 셌고,
+// 지금은 칸마다 시간을 더한다(Oh-Park 2011, constants STAIR_STEP_SEC). 아래 기대 숫자는 예시 숫자에서
+// 그 차이(STAIRS_DELTA ≈ 3.54분)를 뺀다 — 이 파일은 묶음·문장 규칙을 보고, 계단 시간 자체는 walk-time.test.ts가 본다.
+const S3_MIN = walkMinutes(204, SPEED_MPS, { stairs: true, slope: false, stairsCount: 24 })
+const STAIRS_DELTA = 8 - S3_MIN
+const range = (base: number) => formatRange(toRange(base))
 
 // Task 2A 픽스처에는 museum이 없다(2A에서는 '상세가 아직 없는 장소'로 쓰기 때문).
 // 2B 테스트에만 필요한 museum 상세를 여기서 따로 만든다 — 다른 작업자 파일은 고치지 않는다.
@@ -163,7 +171,7 @@ describe('judge', () => {
 
     expect(result.verdict).toBe('adjust')
     expect(result.reason).toBe('한밭수목원 안에 계단 구간이 있어요')
-    expect(result.longest.base).toBeCloseTo(28, 6)
+    expect(result.longest.base).toBeCloseTo(28 - STAIRS_DELTA, 6)
     expect(result.longest.fromStopKey).toBe('k1')
     expect(result.longest.toStopKey).toBe('k1')
     expect(result.violations).toHaveLength(2)
@@ -173,7 +181,7 @@ describe('judge', () => {
     if (continuous.kind !== 'continuous') throw new Error('연속 걷기 위반이어야 해요')
     expect(continuous.fromStopKey).toBe('k1')
     expect(continuous.toStopKey).toBe('k1')
-    expect(continuous.over).toBeCloseTo(33.6 - 23, 9)
+    expect(continuous.over).toBeCloseTo((28 - STAIRS_DELTA) * 1.2 - 23, 9)
   })
 
   it('걸어서 이어지면 묶음도 이어짐', () => {
@@ -182,11 +190,11 @@ describe('judge', () => {
 
     const result = judge(input)
 
-    expect(result.longest.base).toBeCloseTo(38.196, 3)
+    expect(result.longest.base).toBeCloseTo(38.196 - STAIRS_DELTA, 3)
     expect(result.longest.fromStopKey).toBe('k1')
     expect(result.longest.toStopKey).toBe('k2')
     expect(result.reason).toBe(
-      '한밭수목원에서 국립중앙과학관까지 쉬지 않고 약 38~46분을 걸어야 해요 (조건 20분)',
+      `한밭수목원에서 국립중앙과학관까지 쉬지 않고 ${range(result.longest.base)}을 걸어야 해요 (조건 20분)`,
     )
   })
 
@@ -194,7 +202,7 @@ describe('judge', () => {
     const stops = [makeStop('k1', 'hanbat'), makeStop('k2', 'science')]
     const result = judge({ travelers: [mom], stops, places, legs: {} })
 
-    expect(result.longest.base).toBeCloseTo(33, 6)
+    expect(result.longest.base).toBeCloseTo(33 - STAIRS_DELTA, 6)
     expect(result.longest.fromStopKey).toBe('k1')
     expect(result.longest.toStopKey).toBe('k1')
   })
@@ -218,7 +226,7 @@ describe('judge', () => {
     const stops = [makeStop('k1', 'hanbat', { restNodeIds: ['R'] })]
     const result = judge({ travelers: [mom], stops, places, legs: {} })
 
-    expect(result.longest.base).toBeCloseTo(17, 6)
+    expect(result.longest.base).toBeCloseTo(17 - STAIRS_DELTA, 6)
     expect(result.longest.fromStopKey).toBe('k1')
     expect(result.longest.toStopKey).toBe('k1')
     expect(result.restTotalMin).toBe(10)
@@ -315,18 +323,18 @@ describe('judge', () => {
   it('하루 총 위반 문장', () => {
     const result = judge({
       travelers: [stairsOk],
-      tuned: { continuousMin: 60, dayMin: 30 },
+      tuned: { continuousMin: 60, dayMin: 25 },
       stops: [makeStop('k1', 'hanbat')],
       places,
       legs: {},
     })
 
-    expect(result.reason).toBe('하루 동안 모두 약 28~34분을 걸어야 해요 (조건 30분)')
+    expect(result.reason).toBe(`하루 동안 모두 ${range(28 - STAIRS_DELTA)}을 걸어야 해요 (조건 25분)`)
     expect(result.violations).toHaveLength(1)
     const day = result.violations[0]
     expect(day.kind).toBe('day')
     if (day.kind !== 'day') throw new Error('하루 총 위반이어야 해요')
-    expect(day.over).toBeCloseTo(3.6, 9)
+    expect(day.over).toBeCloseTo((28 - STAIRS_DELTA) * 1.2 - 25, 9)
   })
 
   it('같은 장소 두 번', () => {
@@ -352,8 +360,8 @@ describe('judge', () => {
       's5',
     ])
     expect(result.stops[0].segments).not.toBe(result.stops[2].segments)
-    expect(result.stops[0].walk.base).toBeCloseTo(33, 6)
-    expect(result.stops[2].walk.base).toBeCloseTo(28, 6)
+    expect(result.stops[0].walk.base).toBeCloseTo(33 - STAIRS_DELTA, 6)
+    expect(result.stops[2].walk.base).toBeCloseTo(28 - STAIRS_DELTA, 6)
     // 돌아가는 줄은 거꾸로 걷는 줄이다.
     const returning = result.stops[0].segments.at(-1)
     expect(returning?.reverse).toBe(true)
@@ -442,7 +450,7 @@ describe('judge', () => {
     // 걷기 경로 뒤에서 묶음이 닫히므로 한밭 쪽(6+8+9=23분)이 가장 긴 묶음이다.
     expect(result.longest.fromStopKey).toBe('k2')
     expect(result.longest.toStopKey).toBe('k2')
-    expect(result.longest.base).toBeCloseTo(23, 6)
+    expect(result.longest.base).toBeCloseTo(23 - STAIRS_DELTA, 6)
   })
 
   it('placeId가 원형 이름이어도 멈추지 않음', () => {
@@ -473,9 +481,9 @@ describe('judge', () => {
 
   it('묶음이 조건을 넘으면 그 묶음만 warn', () => {
     const stops = [makeStop('k1', 'hanbat', { restNodeIds: ['R'] })]
-    const result = judge({ travelers: [mom], stops, places, legs: {} })
+    const result = judge({ travelers: [mom], tuned: { continuousMin: 15 }, stops, places, legs: {} })
 
-    // s1+s2 묶음(11분, 최댓값 13.2분)은 조건 20분 안에, s3+s4+s5 묶음(17분, 최댓값 20.4분)은 넘는다.
+    // s1+s2 묶음(11분, 최댓값 13.2분)은 조건 15분 안에, s3+s4+s5 묶음(약 13.5분, 최댓값 약 16.2분)은 넘는다.
     const first = result.stops[0].segments.filter(segment => ['s1', 's2'].includes(segment.segmentId))
     const second = result.stops[0].segments.filter(segment => ['s3', 's4', 's5'].includes(segment.segmentId))
     expect(first.every(segment => segment.status === 'ok')).toBe(true)
@@ -522,19 +530,21 @@ describe('judge', () => {
       legs: {},
     })
 
-    expect(result.reason).toBe('한밭수목원 안에서 쉬지 않고 약 28~34분을 걸어야 해요 (조건 20분)')
+    expect(result.reason).toBe(`한밭수목원 안에서 쉬지 않고 ${range(28 - STAIRS_DELTA)}을 걸어야 해요 (조건 20분)`)
   })
 
   it('하루 넘은 분이 더 크면 하루 문장', () => {
     const result = judge({
       travelers: [stairsOk],
-      tuned: { continuousMin: 30, dayMin: 25 },
+      tuned: { continuousMin: 27, dayMin: 25 },
       stops: [makeStop('k1', 'hanbat')],
       places,
       legs: {},
     })
 
-    expect(result.reason).toBe('하루 동안 모두 약 28~34분을 걸어야 해요 (조건 25분)')
+    // 둘 다 넘고(최댓값 약 29.4분) 하루 쪽이 더 많이 넘는다
+    expect(result.violations.map(violation => violation.kind).sort()).toEqual(['continuous', 'day'])
+    expect(result.reason).toBe(`하루 동안 모두 ${range(28 - STAIRS_DELTA)}을 걸어야 해요 (조건 25분)`)
   })
 
   it('넘은 분이 같으면 연속 문장', () => {
@@ -546,7 +556,7 @@ describe('judge', () => {
       legs: {},
     })
 
-    expect(result.reason).toBe('한밭수목원 안에서 쉬지 않고 약 28~34분을 걸어야 해요 (조건 25분)')
+    expect(result.reason).toBe(`한밭수목원 안에서 쉬지 않고 ${range(28 - STAIRS_DELTA)}을 걸어야 해요 (조건 25분)`)
   })
 
   it('탈것 경로 데이터가 있으면 rideMin', () => {

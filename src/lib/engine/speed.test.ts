@@ -35,8 +35,11 @@ describe('travelerSpeedMps', () => {
     expect(speed({ age: 120, sex: 'female' })).toBeCloseTo(0.97, 5)
   })
 
+  // 기준 키는 한국 노인 평균 남 165·여 152 cm (constants HEIGHT_REF_CM)
   it('키 10 cm 크면 0.07 빠름', () => {
-    expect(speed({ age: 70, sex: 'male', heightCm: 181 })).toBeCloseTo(1.27, 5)
+    expect(speed({ age: 70, sex: 'male', heightCm: 175 })).toBeCloseTo(1.27, 5)
+    // 예전 기준(남 171)이면 1.23이 되었을 키: 기준이 6 cm 내려가 0.042 m/s 빨라진다
+    expect(speed({ age: 70, sex: 'male', heightCm: 171 })).toBeCloseTo(1.242, 5)
   })
 
   it('키 보정은 +0.10에서 멈춤', () => {
@@ -48,12 +51,12 @@ describe('travelerSpeedMps', () => {
   })
 
   it('성별 모르면 더 느린 쪽 (20대는 남성)', () => {
-    expect(speed({ age: 25, heightCm: 171 })).toBeCloseTo(1.36, 5)
-    expect(speed({ age: 25, heightCm: 181 })).toBeCloseTo(1.43, 5)
+    expect(speed({ age: 25, heightCm: 165 })).toBeCloseTo(1.36, 5)
+    expect(speed({ age: 25, heightCm: 175 })).toBeCloseTo(1.43, 5)
   })
 
   it('성별 모르면 더 느린 쪽 (70대는 여성)', () => {
-    expect(speed({ age: 75, heightCm: 158 })).toBeCloseTo(1.13, 5)
+    expect(speed({ age: 75, heightCm: 152 })).toBeCloseTo(1.13, 5)
   })
 
   it('나이 모르면 0.85, 키 무시', () => {
