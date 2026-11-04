@@ -229,7 +229,7 @@ export default function MapView({ mode = 'plan', compact = false, interactive = 
     ;(async () => {
       try {
         const { createLandmarksLayer } = await import('./landmarksLayer')
-        const layer = await createLandmarksLayer(LANDMARKS, { riseZoom: landing ? RISE_ZOOM : undefined, compact, opacity: debug ? debugOpacity : undefined })
+        const layer = await createLandmarksLayer(LANDMARKS, { riseZoom: landing ? RISE_ZOOM : undefined, compact, breathe: landing, opacity: debug ? debugOpacity : undefined })
         if (cancelled) return
         layer.setVisible(landing || !flatRef.current)
         map.addLayer(layer, BUILDINGS_BEFORE_ID)
@@ -378,7 +378,8 @@ export default function MapView({ mode = 'plan', compact = false, interactive = 
         onMouseEnter={() => { overRoute.current = true; setCursor('pointer') }}
         onMouseLeave={() => { overRoute.current = false; setCursor(overLandmark.current ? 'pointer' : '') }}
         onMouseMove={e => {
-          // 모형 위에서는 손 모양 커서, 빛이 강해진다
+          // 모형을 누를 수 있는 지도(onSelectLandmark 가 있을 때)에서만: 모형 위에서 손 모양 커서, 빛이 강해진다
+          if (!onSelectLandmark) return
           const landmark = landmarksRef.current?.pick(e.point) ?? null
           landmarksRef.current?.setHover(landmark?.id ?? null)
           const hit = landmark != null
@@ -387,9 +388,12 @@ export default function MapView({ mode = 'plan', compact = false, interactive = 
           setCursor(hit || overRoute.current ? 'pointer' : '')
         }}
         onClick={e => {
-          const landmark = landmarksRef.current?.pick(e.point)
-          landmarksRef.current?.setSelected(landmark?.id ?? null)
-          if (landmark) { onSelectLandmark?.(landmark); return }
+          // 모형 클릭은 onSelectLandmark 가 있을 때만 가로챈다. 없으면(일정 지도) 모형 위 경로도 그대로 선택된다
+          if (onSelectLandmark) {
+            const landmark = landmarksRef.current?.pick(e.point)
+            landmarksRef.current?.setSelected(landmark?.id ?? null)
+            if (landmark) { onSelectLandmark(landmark); return }
+          }
           const id = e.features?.[0]?.properties?.itemId
           if (typeof id === 'string') onSelectItem?.(id)
         }}

@@ -28,6 +28,9 @@ export type LandmarksLayerOptions = {
   riseZoom?: [number, number]
   // 휴대폰: 바닥 글로우와 림 라이트만 쓴다(emissive·숨쉬기 없음)
   compact?: boolean
+  // 숨쉬기(emissive 가 3초 주기로 오르내림). 계속 다시 그려야 해서 첫 화면 같은 장식 지도에서만 켠다 — 일정 지도에서 켜면 idle 이벤트가
+  // 쉬지 않고 나와 idle 에 묶인 계산(구간 주변 건물)이 매 프레임 돈다
+  breathe?: boolean
   // ?debug=landmarks: 모형을 반투명(0.5)으로. &lmopacity=1 처럼 값을 주면 그 값으로
   opacity?: number
 }
@@ -222,7 +225,7 @@ export async function createLandmarksLayer(landmarks: Landmark[], opts: Landmark
       let grow = 1
       if (opts.riseZoom) grow = Math.min(1, Math.max(0, (zoom - opts.riseZoom[0]) / (opts.riseZoom[1] - opts.riseZoom[0])))
       // 숨쉬기: 움직임 줄이기·휴대폰은 고정값
-      const breathing = !opts.compact && !reducedMotion()
+      const breathing = !!opts.breathe && !opts.compact && !reducedMotion()
       const breath = breathing
         ? style.emissiveMin + ((style.emissiveMax - style.emissiveMin) * (1 + Math.sin((performance.now() / style.breathMs) * Math.PI * 2))) / 2
         : style.emissiveFixed
