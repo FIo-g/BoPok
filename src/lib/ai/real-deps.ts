@@ -7,6 +7,7 @@ import { avoidFoodTagsForTrip } from '@/lib/health'
 import { tripWeather } from '@/lib/weather'
 import { searchPoi } from '@/lib/geo/poi'
 import { matchPlaceByName, searchCandidates } from '@/lib/places/search'
+import { recommendServicePlaces } from '@/lib/places/recommendations'
 import {
   createVersion,
   getOpinions,
@@ -44,6 +45,7 @@ export function createRealDeps(overrides: Partial<AiDeps> = {}): AiDeps {
     searchPoi: name => searchPoi(name),
     getPlaceDetails: createPlaceDetailsAdapter(),
     getLegs: createLegsAdapter(getLegsPartial),
+    recommendServicePlaces: input => recommendServicePlaces(input),
     callJson,
     ...overrides,
   }

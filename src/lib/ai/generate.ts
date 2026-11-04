@@ -9,6 +9,7 @@ import {
   nonNegative,
   placeKindOf,
   type Coord,
+  type FoodTag,
   type PlaceKind,
   type PlaceSummary,
   type Stop,
@@ -346,6 +347,8 @@ export async function handleGenerate(
       parentId: string | null
       madeByUserId: string
       shouldTrySecond: () => boolean
+      overnightDays: number[]
+      avoidFoodTags: FoodTag[]
     } = {
       tripId: input.tripId,
       travelers: ctx.travelers,
@@ -405,6 +408,8 @@ export async function handleGenerate(
       parentId,
       madeByUserId: user.userId,
       shouldTrySecond,
+      overnightDays: !isPaste ? Array.from({ length: Math.max(0, dayCount - 1) }, (_, index) => index + 1) : [],
+      avoidFoodTags: avoidTags,
     }
 
       const { version, summary } = await planJudgeSave(args, deps)

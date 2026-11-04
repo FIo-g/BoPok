@@ -6,6 +6,7 @@ import {
   stopsOfDay,
   tripDays,
   type JudgeResult,
+  type FoodTag,
   type JudgeSummary,
   type Leg,
   type PlaceDetail,
@@ -17,6 +18,7 @@ import { formatRange, judge, requiredLegs } from '@/lib/engine'
 import { AiCallError } from './client'
 import type { AiDeps } from './deps'
 import { draftsToStops, type DraftStop } from './stops'
+import { fillRouteServices } from './route-services'
 
 // feedback이 null이면 처음 초안, 문자열이면 앞 판정의 위반을 알려 주고 다시 고른 초안.
 // 초안과 함께 그 시도의 메모·반영 의견도 돌려줄 수 있다 — 저장된 시도(첫 번째나 두 번째)의 것을 쓴다 (설계 6.4).
@@ -41,6 +43,8 @@ type JudgeArgs = {
   now?: () => number
   // 다시 짜기에서 앞뒤가 그대로인 구간의 이동수단을 지키는 데 쓴다.
   originalStops?: Stop[]
+  overnightDays?: number[]
+  avoidFoodTags?: FoodTag[]
 }
 
 type Run = { stops: Stop[]; result: JudgeResult }
@@ -65,8 +69,15 @@ async function runAttempt(drafts: DraftStop[], args: JudgeArgs, deps: AiDeps): P
     console.error('[ai]', '장소·경로 조회 실패', error instanceof Error ? error.name : typeof error)
     details = []
   }
+  const filled = await fillRouteServices(drafts, { details, transport: args.transport, overnightDays: args.overnightDays,
+    avoidFoodTags: args.avoidFoodTags,
+    avoidStairs: args.travelers.some(traveler => traveler.condition.avoidStairs === true) }, deps.recommendServicePlaces)
+  const added = [...new Set(filled.flatMap(draft => draft.placeId && !placeIds.includes(draft.placeId) ? [draft.placeId] : []))]
+  if (added.length) {
+    try { details.push(...await deps.getPlaceDetails(added)) } catch {}
+  }
   const places = placeRecords(details)
-  const stops = preserveArriveBy(draftsToStops(drafts, args.transport, places), args.originalStops)
+  const stops = preserveArriveBy(draftsToStops(filled, args.transport, places), args.originalStops)
   // 걷기 조건은 하루 기준이라 날마다 따로 판정한다. 날을 넘어가는 경로도 묻지 않는다 (설계 2026-11-02 4.2)
   const days = tripDays(stops)
   const dayStops = days.length > 1 ? days.map(day => stopsOfDay(stops, day)) : [stops]

@@ -27,6 +27,23 @@ beforeEach(async () => { await db.execute(sql`truncate places cascade`) })
 afterAll(async () => { await client.close() })
 
 describe('실제 pgvector와 후보 추천', () => {
+  it('종류별로 색인하며 완료한 종류만 의미 검색을 켠다', async () => {
+    await importPreparedCatalog(db, [item(1, '가상 식당'), item(2, '가상 카페', '카페')])
+    const embed = vi.fn(async (texts: string[]) => texts.map(() => firstVector))
+    expect(await indexPlaceEmbeddings(db, { kind: 'cafe', embed })).toMatchObject({ indexed: 1, requests: 1 })
+    const options = { db, embedQuery: async () => firstVector }
+    expect((await recommendServicePlaces({ kind: 'cafe', query: '조용히 쉬기' }, options)).method).toBe('vector')
+    expect((await recommendServicePlaces({ kind: 'restaurant', query: '식당' }, options)).method).toBe('keyword')
+    expect(await indexPlaceEmbeddings(db, { kind: 'cafe', embed })).toMatchObject({ indexed: 0, requests: 0 })
+    expect(embed).toHaveBeenCalledTimes(1)
+  })
+  it('종류가 비어 있는 기존 장소도 관광지 색인에 포함한다', async () => {
+    await importPreparedCatalog(db, [item(1, '기존 장소')])
+    await db.execute(sql`update places set kind = null where id = 'daejeon-food-1'`)
+    expect(await indexPlaceEmbeddings(db, { kind: 'attraction', embed: async texts => texts.map(() => firstVector) }))
+      .toMatchObject({ indexed: 1, requests: 1 })
+    expect((await recommendServicePlaces({ kind: 'attraction', query: '관광' }, { db, embedQuery: async () => firstVector })).method).toBe('vector')
+  })
   it('계단 피하기는 벡터·키워드의 개수 제한 전에 적용하며 미기록을 안전으로 확정하지 않는다', async () => {
     await importPreparedCatalog(db, [item(1, '국수 계단 기록 있음'), item(2, '국수 내부 미기록')])
     const placeId = 'daejeon-food-1'

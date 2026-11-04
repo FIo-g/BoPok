@@ -12,6 +12,7 @@ import {
   tripDays,
   placeKindOf,
   type PlaceKind,
+  type FoodTag,
   type PlaceSummary,
   type Reaction,
   type Stop,
@@ -370,12 +371,14 @@ export async function handleRevise(
         parentId: string | null
         originalStops: Stop[]
         shouldTrySecond: () => boolean
+        avoidFoodTags: FoodTag[]
       } = {
         tripId: input.tripId,
         travelers: ctx.travelers,
         transport,
         originalStops: version.stops,
         shouldTrySecond,
+        avoidFoodTags: avoidTags,
         attempt: async feedback => {
           const withFeedback =
             feedback === null
