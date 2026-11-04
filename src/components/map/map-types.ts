@@ -25,7 +25,7 @@ export type RouteProps = {
 
 export type RouteCollection = FeatureCollection<LineString, RouteProps>
 
-export type MapPinKind = 'start' | 'rest' | 'stairs' | 'toilet' | 'place' | 'stop'
+export type MapPinKind = 'start' | 'rest' | 'stairs' | 'toilet' | 'place' | 'stop' | 'link' | 'guide'
 
 export type MapPin = {
   id: string

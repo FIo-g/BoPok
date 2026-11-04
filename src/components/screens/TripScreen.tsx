@@ -28,10 +28,11 @@ import { VersionBar, VersionCompare } from '@/components/trip/VersionBar'
 import { Button, Card, ErrorNotice, Notice, PageTitle, Spinner } from '@/components/ui'
 import { api } from '@/lib/api-client'
 import { aiFailure } from '@/lib/ai-fallback'
-import { stopsOfDay, type Condition, type OpinionInput, type PlaceSummary, type QuickFix, type QuickFixChange, type Stop } from '@/lib/contracts'
+import { stopsOfDay, type OpinionInput, type PlaceSummary, type QuickFix, type QuickFixChange, type Stop } from '@/lib/contracts'
 import { fixedChangeSentence } from '@/lib/engine'
-import { formatDate } from '@/lib/format'
+import { formatDateRange } from '@/lib/format'
 import { removeStop, replaceStopPlace, sameStops, updateStop } from '@/lib/plan/stop-edit'
+import { applyTuned, type Tuned } from '@/lib/plan/tuned'
 import { addStopToDay, moveStopInDay, newStopForDay, replaceDayStops, tripDayList } from '@/lib/plan/trip-days'
 import { errorMessage, useAsync } from '@/lib/use-async'
 
@@ -60,7 +61,7 @@ export function TripScreen({ tripId }: { tripId: string }) {
 
   // 직접 고치는 중이면 draft 가 있다. 저장하기 전에는 새 버전이 아니다
   const [draft, setDraft] = useState<Stop[] | null>(null)
-  const [tuned, setTuned] = useState<Partial<Condition> | undefined>(undefined)
+  const [tuned, setTuned] = useState<Tuned | undefined>(undefined)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [picker, setPicker] = useState<Picker>(null)
   const [showQuickFix, setShowQuickFix] = useState(false)
@@ -77,6 +78,8 @@ export function TripScreen({ tripId }: { tripId: string }) {
   const day = days.includes(pickedDay) ? pickedDay : days[0]
   const stops = useMemo(() => (allStops ? stopsOfDay(allStops, day) : undefined), [allStops, day])
   const parentDayStops = useMemo(() => (parent.data ? stopsOfDay(parent.data.stops, day) : undefined), [parent.data, day])
+  // 빠른 수정안은 바꿔 본 속도·보조기구로 계산한다. 이동수단을 바꿔 본 경우는 저장될 일정과 달라져 쓸 수 없다
+  const quickFixTravelers = useMemo(() => (travelers ? applyTuned(travelers, [], tuned).travelers : []), [travelers, tuned])
   const judged = useJudged(stops, travelers, tuned)
   const prevJudged = useJudged(parentDayStops, travelers, tuned)
   // 빠른 수정안으로 만든 버전의 바뀐 내용(고정 문장의 재료). 새로고침하면 사라지고, 그때는 비교 숫자로만 설명한다
@@ -247,7 +250,7 @@ export function TripScreen({ tripId }: { tripId: string }) {
     <div className="mx-auto w-full max-w-[96rem] px-5 py-6">
       <PageTitle
         title={trip.title}
-        sub={`${formatDate(trip.date)}${trip.endDate && trip.endDate !== trip.date ? ` ~ ${formatDate(trip.endDate)}` : ''}${trip.confirmedVersionId ? ' · 확정된 여행' : ' · 작성 중'}`}
+        sub={`${formatDateRange(trip.date, trip.endDate)}${trip.confirmedVersionId ? ' · 확정된 여행' : ' · 작성 중'}`}
         actions={
           <>
             <Link href={`/groups/${trip.groupId}`} className="inline-flex min-h-12 items-center rounded-xl px-4 font-bold text-muted hover:bg-black/5">← 그룹으로</Link>
@@ -306,15 +309,18 @@ export function TripScreen({ tripId }: { tripId: string }) {
                 ) : (
                   <>
                     <Button onClick={revise} disabled={busy !== null}>{busy === 'revise' ? 'AI가 다시 짜는 중…' : `의견 반영해서 다시 짜기${unapplied > 0 ? ` (${unapplied})` : ''}`}</Button>
-                    <Button variant="secondary" onClick={() => setShowQuickFix(v => !v)} disabled={busy !== null}>빠른 수정안 보기</Button>
-                    <Button variant="secondary" onClick={() => setDraft(versionData?.stops ?? null)} disabled={busy !== null || !versionData}>직접 고치기</Button>
+                    <Button variant="secondary" onClick={() => setShowQuickFix(v => !v)} disabled={busy !== null || tuned?.transport !== undefined}>빠른 수정안 보기</Button>
+                    <Button variant="secondary" className="border-2 bg-brand-soft" onClick={() => setDraft(versionData?.stops ?? null)} disabled={busy !== null || !versionData}>
+                      <span aria-hidden="true">✎</span> 직접 고치기
+                    </Button>
                     {confirmedHere ? (
                       <Button variant="danger" onClick={unconfirm} disabled={busy !== null}>확정 풀기</Button>
                     ) : (
                       <Button onClick={confirmVersion} disabled={busy !== null || !!tuned}>이 안으로 확정</Button>
                     )}
                     {confirmedHere && <Link href={`/trips/${tripId}/final`} className="inline-flex min-h-12 items-center rounded-xl bg-ok-soft px-5 font-bold text-ok">확정 일정 보기</Link>}
-                    {tuned && <p className="w-full text-sm text-muted">조건 바꿔 보기 중에는 확정할 수 없어요. “원래대로”를 눌러 주세요.</p>}
+                    <p className="w-full text-sm text-muted">AI 말고 직접 장소를 바꾸거나 더하고 순서도 옮길 수 있어요. “직접 고치기”를 눌러 보세요.</p>
+                    {tuned && <p className="w-full text-sm text-muted">조건 바꿔 보기 중에는 확정할 수 없어요. “원래대로”를 눌러 주세요.{tuned.transport !== undefined && ' 이동수단을 바꿔 본 동안은 빠른 수정안도 쓸 수 없어요.'}</p>}
                   </>
                 )}
               </Card>
@@ -323,7 +329,7 @@ export function TripScreen({ tripId }: { tripId: string }) {
 
               {showQuickFix && !draft && (
                 <QuickFixPanel
-                  input={{ travelers: detail.data.travelers, tuned, stops, places: judged.places, legs: judged.legs }}
+                  input={{ travelers: quickFixTravelers, tuned: tuned?.condition, stops, places: judged.places, legs: judged.legs }}
                   onApply={applyQuickFix}
                   onClose={() => setShowQuickFix(false)}
                 />

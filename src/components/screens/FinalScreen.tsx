@@ -9,7 +9,7 @@ import { useJudged } from '@/components/trip/useJudged'
 import { Badge, Button, ButtonLink, Card, ErrorNotice, Notice, PageTitle, Spinner, VerdictBadge } from '@/components/ui'
 import { api } from '@/lib/api-client'
 import { formatRange } from '@/lib/engine'
-import { TRANSPORT_TEXT, copyText, formatDate, formatRideMin, formatWalk, isWalkInfoMissing, madeByText, shareOrCopy, versionLabel } from '@/lib/format'
+import { TRANSPORT_TEXT, copyText, formatDateRange, formatRideMin, formatWalk, isWalkInfoMissing, madeByText, shareOrCopy, versionLabel } from '@/lib/format'
 import { errorMessage, useAsync } from '@/lib/use-async'
 
 export function FinalScreen({ tripId }: { tripId: string }) {
@@ -52,7 +52,7 @@ export function FinalScreen({ tripId }: { tripId: string }) {
     <div className="mx-auto w-full max-w-[96rem] px-5 py-6">
       <PageTitle
         title={trip.title}
-        sub={`${formatDate(trip.date)} · ${summary ? `${versionLabel(summary)} · ${madeByText(summary)}` : ''}${trip.confirmedByName ? ` · ${trip.confirmedByName}님이 확정했어요` : ''}`}
+        sub={`${formatDateRange(trip.date, trip.endDate)} · ${summary ? `${versionLabel(summary)} · ${madeByText(summary)}` : ''}${trip.confirmedByName ? ` · ${trip.confirmedByName}님이 확정했어요` : ''}`}
         actions={
           <>
             <Link href={`/groups/${trip.groupId}`} className="inline-flex min-h-12 items-center rounded-xl px-4 font-bold text-muted hover:bg-black/5">← 그룹으로</Link>

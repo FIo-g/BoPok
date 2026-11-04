@@ -62,7 +62,7 @@ export function OpinionForm({ stopKey, onSubmit, label }: { stopKey: string | nu
 
   if (!open) {
     return (
-      <Button variant="secondary" className="mt-3 min-h-11" onClick={() => setOpen(true)}>
+      <Button variant="secondary" className="mt-2 min-h-10 px-3 text-sm" onClick={() => setOpen(true)}>
         {label}
       </Button>
     )

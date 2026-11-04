@@ -5,7 +5,7 @@
 import { useEffect, useRef } from 'react'
 import type { JudgeResult, Leg, Opinion, OpinionInput, PlaceDetail, Stop, StopResult, Transport } from '@/lib/contracts'
 import { formatRange } from '@/lib/engine'
-import { CONFIDENCE_TEXT, TRANSPORT_TEXT, formatRideMin, sourceLine, stairsText, stopStairsState } from '@/lib/format'
+import { CONFIDENCE_TEXT, TRANSPORT_TEXT, formatRideMin, placeWalkDistanceText, sourceLine, stairsText, stopStairsState } from '@/lib/format'
 import { legItemId, segmentItemId, stopItemId } from '@/components/map'
 import { isLegModeSupported } from '@/lib/plan/plan-cache'
 import { Badge, Button, cx } from '@/components/ui'
@@ -203,6 +203,12 @@ export function StopList(props: Props) {
                 </p>
               )}
 
+              {open && stopResult && stopResult.segments.length > 0 && (
+                <p className="mt-3 font-semibold">
+                  {placeWalkDistanceText(stopResult.segments, Object.fromEntries((place?.segments ?? []).map(seg => [seg.id, seg.distanceM]))) ?? '거리 정보 없음'}
+                  {' '}<span className="font-normal text-muted">장소 안에서 걷는 길 (지도 데이터 기준)</span>
+                </p>
+              )}
               {open && stopResult && stopResult.segments.length > 0 && (
                 <ul className="mt-3 space-y-2" aria-label={`${stop.name} 구간별 근거`}>
                   {stopResult.segments.map((r, i) => (

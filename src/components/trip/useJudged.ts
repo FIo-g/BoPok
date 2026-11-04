@@ -4,11 +4,13 @@
 //  1) 장소 상세를 받는다(없는 것만)  2) engine.requiredLegs 로 필요한 경로를 구해 없는 것만 서버에서 받는다(디바운스 250ms)
 //  3) engine.judge 로 결과를 낸다. 판정·걷는 시간·계단 수는 항상 엔진 결과이고 여기서 따로 계산하지 않는다.
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
-import { legKey, type Condition, type JudgeResult, type Leg, type PlaceDetail, type Stop, type Traveler } from '@/lib/contracts'
+import { legKey, type JudgeResult, type Leg, type PlaceDetail, type Stop, type Traveler } from '@/lib/contracts'
 import { judge, requiredLegs } from '@/lib/engine'
 import {
   ensureLegs, ensurePlaces, isLegModeSupported, getLegsRecord, getPlacesRecord, getPlanRevision, legFailed, placeFailed, resetFailures, subscribePlan,
 } from '@/lib/plan/plan-cache'
+
+import { applyTuned, type Tuned } from '@/lib/plan/tuned'
 
 const LEG_DEBOUNCE_MS = 250
 const EMPTY_PLACES: Record<string, PlaceDetail> = {}
@@ -25,7 +27,11 @@ export type Judged = {
   retry: () => void
 }
 
-export function useJudged(stops: Stop[] | undefined, travelers: Traveler[] | undefined, tuned?: Partial<Condition>): Judged | null {
+export function useJudged(baseStops: Stop[] | undefined, baseTravelers: Traveler[] | undefined, tuned?: Tuned): Judged | null {
+  // 조건 바꿔 보기의 속도·보조기구·이동수단은 여행자·일정 값을 바꿔서 판정한다(필요한 경로도 바뀐 이동수단으로 받는다)
+  const applied = useMemo(() => (baseStops && baseTravelers ? applyTuned(baseTravelers, baseStops, tuned) : null), [baseStops, baseTravelers, tuned])
+  const stops = applied?.stops
+  const travelers = applied?.travelers
   useSyncExternalStore(subscribePlan, getPlanRevision, () => 0)
   const places = useSyncExternalStore(subscribePlan, getPlacesRecord, () => EMPTY_PLACES)
   const legs = useSyncExternalStore(subscribePlan, getLegsRecord, () => EMPTY_LEGS)
@@ -46,7 +52,7 @@ export function useJudged(stops: Stop[] | undefined, travelers: Traveler[] | und
   }, [missing])
 
   const result = useMemo(
-    () => (stops && travelers && travelers.length > 0 ? judge({ travelers, tuned, stops, places, legs }) : null),
+    () => (stops && travelers && travelers.length > 0 ? judge({ travelers, tuned: tuned?.condition, stops, places, legs }) : null),
     [stops, travelers, tuned, places, legs],
   )
   const settled = placesReady && missing.every(req => legFailed(legKey(req)))

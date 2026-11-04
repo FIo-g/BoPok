@@ -12,6 +12,14 @@ export function formatDate(date: string | null | undefined): string {
   return `${m[1]}년 ${Number(m[2])}월 ${Number(m[3])}일 (${weekday})`
 }
 
+// 여러 날 여행이면 "2026년 11월 14일 (토) ~ 2026년 11월 16일 (월) · 2박 3일", 하루짜리·끝 날짜 없음이면 시작일만
+export function formatDateRange(date: string | null | undefined, endDate: string | null | undefined): string {
+  if (!date || !endDate || endDate <= date) return formatDate(date)
+  const [a, b] = [date, endDate].map(d => Date.UTC(Number(d.slice(0, 4)), Number(d.slice(5, 7)) - 1, Number(d.slice(8, 10))))
+  const nights = Math.round((b - a) / 86_400_000)
+  return `${formatDate(date)} ~ ${formatDate(endDate)} · ${nights}박 ${nights + 1}일`
+}
+
 // "YYYY-MM" 또는 "YYYY-MM-DD" 를 "YYYY.MM" 으로. 형식이 맞지 않으면 null
 function checkedMonth(checkedAt?: string | null): string | null {
   const m = checkedAt?.trim().match(/^(\d{4})-(0[1-9]|1[0-2])(?:-(0[1-9]|[12]\d|3[01]))?$/)
@@ -125,6 +133,15 @@ export function countRideLegsWithoutTime(legs: Pick<LegResult, 'mode' | 'rideMin
 // 받지 못한 걷는 경로나 길 정보 없는 장소가 있으면 걷는 시간 합계는 일부만 계산한 값이다 → "조건 안"이라고 말하면 안 된다
 export function hasWalkInfoGap(result: Pick<JudgeResult, 'missingLegs' | 'unknownStopKeys'>): boolean {
   return result.missingLegs.length > 0 || result.unknownStopKeys.length > 0
+}
+
+// 장소 안에서 걷는 길의 총 거리 문장. 돌아가는 길(reverse)은 오는 길과 같은 선이라 한 번만 센다.
+// 거리는 장소 데이터의 구간 길이를 더한 값일 뿐이고 걷는 시간·판정은 엔진 결과를 쓴다. 구간 데이터가 없으면 null
+export function placeWalkDistanceText(segments: Pick<SegmentResult, 'segmentId' | 'reverse'>[], lengthsM: Record<string, number>): string | null {
+  const ids = [...new Set(segments.filter(s => !s.reverse).map(s => s.segmentId))]
+  const totalM = ids.reduce((sum, id) => sum + (lengthsM[id] ?? 0), 0)
+  if (ids.length === 0 || totalM <= 0) return null
+  return totalM < 1000 ? `약 ${Math.round(totalM / 10) * 10}m` : `약 ${(totalM / 1000).toFixed(1)}km`
 }
 
 // 클립보드에 복사. 막혀 있으면 false (화면이 직접 복사하라고 안내한다)

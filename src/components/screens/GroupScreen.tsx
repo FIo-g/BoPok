@@ -7,7 +7,7 @@ import { useRequireUser } from '@/components/AuthProvider'
 import { Badge, Button, ButtonLink, Card, ErrorNotice, Notice, PageShell, PageTitle, Spinner, VerdictBadge } from '@/components/ui'
 import { api } from '@/lib/api-client'
 import type { GroupDetail, Invite, TripListItem } from '@/lib/contracts'
-import { copyText, formatDate, formatWalk, madeByText, versionLabel } from '@/lib/format'
+import { copyText, formatDate, formatDateRange, formatWalk, madeByText, versionLabel } from '@/lib/format'
 import { errorMessage, useAsync } from '@/lib/use-async'
 
 function TripCard({ item }: { item: TripListItem }) {
@@ -24,7 +24,7 @@ function TripCard({ item }: { item: TripListItem }) {
           <h3 className="text-xl font-extrabold">{trip.title}</h3>
           {confirmed ? <Badge tone="ok">✓ 확정</Badge> : <Badge tone="neutral">작성 중</Badge>}
         </div>
-        <p className="mt-1 text-muted">{formatDate(trip.date)}</p>
+        <p className="mt-1 text-muted">{formatDateRange(trip.date, trip.endDate)}</p>
         {shown?.summary ? (
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <VerdictBadge verdict={shown.summary.verdict} />
