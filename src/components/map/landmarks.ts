@@ -110,10 +110,11 @@ export const LANDMARKS: Landmark[] = [
     area: '갑천 · 엑스포과학공원 앞', tags: ['갑천', '다리'], detailZoom: 16.6, miniShapeM: [204, 10],
   },
   // 대전엑스포 시민광장: 한빛탑 앞에서 엑스포다리까지 이어지는 엑스포과학공원 안의 광장 구역(물빛광장 음악분수·야외공연장·무빙쉘터).
-  // 엑스포로 북쪽, 한빛탑(36.3766, 127.3881)과 엑스포다리 북쪽 끝(36.3741) 사이의 남북으로 긴 포장 광장에 놓는다. 지도에 이 광장의 이름·바닥 윤곽이 없어 위치는 추정이라 확인이 필요하다
+  // 위치: 한밭수목원·둔산대공원 사이를 남북으로 가로지르는 긴 광장 띠(대전시립미술관 북쪽). 지도 화면으로 확인한 자리를 시립미술관·예술의전당 위치를
+  // 기준점 삼아 좌표로 옮긴 값이라 수십 m 어긋날 수 있다. 지도에 이 광장의 이름·바닥 윤곽이 없어 위치는 추정이라 확인이 필요하다
   {
     id: 'expo-plaza', name: '대전엑스포 시민광장', model: 'expo-plaza.glb',
-    lng: 127.38807, lat: 36.3753, offsetM: [0, 0], footprintLongM: 147, bearingDeg: 0, scale: 1.1, heightScale: 1,
+    lng: 127.38822, lat: 36.36827, offsetM: [0, 0], footprintLongM: 147, bearingDeg: 0, scale: 1.1, heightScale: 1,
     hideFids: [],
     image: '/images/landmarks/expo-plaza.webp', imageAlt: '대전엑스포 시민광장 이미지',
     summary: '엑스포과학공원 안의 광장 구역이에요. 한빛탑 앞에서 엑스포다리까지 이어지고, 음악분수와 야외공연장이 있다고 소개돼 있어요.',
