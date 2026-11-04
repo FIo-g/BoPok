@@ -66,4 +66,30 @@ describe('국립중앙과학관 실제 데이터의 엔진 계산', () => {
     const sights = scYard.nodes.filter(node => node.kind === 'sight' && node.guideNo !== undefined)
     expect(sights.length).toBeGreaterThan(0)
   })
+
+  it('모든 구간의 신뢰 등급은 C다 (안내도 맞춤 지점과 출입 제한 길에 닿는 구간)', () => {
+    expect(scYard.segments.length).toBeGreaterThan(0)
+    expect(scYard.segments.every(segment => segment.confidence === 'C')).toBe(true)
+  })
+
+  it('모든 구간에 출처·확인 날짜·신뢰 등급이 있고 계단이 확인되었다는 표시(confirmed_none)가 없다', () => {
+    for (const segment of scYard.segments) {
+      expect(segment.source).toBeTruthy()
+      expect(segment.checkedAt).toBeTruthy()
+      expect(segment.confidence).toBeDefined()
+      expect(segment.stairsStatus).not.toBe('confirmed_none')
+    }
+  })
+
+  it('관람 주 경로 합계는 빌드 값 1784m와 1m 안이다 (선택 구간·우회 구간 제외)', () => {
+    const total = scYard.segments
+      .filter(segment => segment.courseId !== undefined && segment.detourOf === undefined && !segment.optional)
+      .reduce((sum, segment) => sum + segment.distanceM, 0)
+    expect(Math.abs(total - 1784)).toBeLessThanOrEqual(1)
+  })
+
+  it('안내도 번호(guideNo)는 2·3·4·5다', () => {
+    const guideNos = scYard.nodes.flatMap(node => (node.guideNo === undefined ? [] : [node.guideNo])).sort((a, b) => a - b)
+    expect(guideNos).toEqual([2, 3, 4, 5])
+  })
 })
