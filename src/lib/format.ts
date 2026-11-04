@@ -135,10 +135,10 @@ export function hasWalkInfoGap(result: Pick<JudgeResult, 'missingLegs' | 'unknow
   return result.missingLegs.length > 0 || result.unknownStopKeys.length > 0
 }
 
-// 장소 안에서 걷는 길의 총 거리 문장. 돌아가는 길(reverse)은 오는 길과 같은 선이라 한 번만 센다.
+// 장소 안에서 걷는 길의 총 거리 문장. 걷는 시간이 돌아오는 길(reverse)까지 세므로 거리도 왕복을 모두 더한다.
 // 거리는 장소 데이터의 구간 길이를 더한 값일 뿐이고 걷는 시간·판정은 엔진 결과를 쓴다. 구간 데이터가 없으면 null
 export function placeWalkDistanceText(segments: Pick<SegmentResult, 'segmentId' | 'reverse'>[], lengthsM: Record<string, number>): string | null {
-  const ids = [...new Set(segments.filter(s => !s.reverse).map(s => s.segmentId))]
+  const ids = segments.map(s => s.segmentId)
   const totalM = ids.reduce((sum, id) => sum + (lengthsM[id] ?? 0), 0)
   if (ids.length === 0 || totalM <= 0) return null
   return totalM < 1000 ? `약 ${Math.round(totalM / 10) * 10}m` : `약 ${(totalM / 1000).toFixed(1)}km`

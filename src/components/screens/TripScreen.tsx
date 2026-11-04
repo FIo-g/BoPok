@@ -104,7 +104,7 @@ export function TripScreen({ tripId }: { tripId: string }) {
   }, [reloadOpinions])
 
   const stopNames = useMemo(() => Object.fromEntries((stops ?? []).map(stop => [stop.key, stop.name])), [stops])
-  const mapData = useMemo(() => (judged && stops ? { stops, places: judged.places, legs: judged.legs, result: judged.result } : null), [judged, stops])
+  const mapData = useMemo(() => (judged && stops ? { stops: judged.stops, places: judged.places, legs: judged.legs, result: judged.result } : null), [judged, stops])
 
   function chooseDay(next: number) {
     setSelectedId(null)
@@ -306,7 +306,15 @@ export function TripScreen({ tripId }: { tripId: string }) {
                 incomplete={judged.incomplete}
                 onRetry={judged.retry}
               />
-              <ConditionTuner base={judged.result.condition} tuned={tuned} onChange={setTuned} />
+              <ConditionTuner
+                base={judged.result.condition}
+                tuned={tuned}
+                onChange={next => {
+                  // 이동수단을 바꾸면 저장될 일정과 달라지므로 열어 둔 빠른 수정안 창은 닫는다
+                  if (next?.transport !== tuned?.transport) setShowQuickFix(false)
+                  setTuned(next)
+                }}
+              />
               <HealthSlot {...slotProps} />
               <CostSlot {...slotProps} />
 
@@ -339,7 +347,7 @@ export function TripScreen({ tripId }: { tripId: string }) {
 
               <SatisfactionSlot {...slotProps} />
 
-              {showQuickFix && !draft && (
+              {showQuickFix && !draft && tuned?.transport === undefined && (
                 <QuickFixPanel
                   input={{ travelers: quickFixTravelers, tuned: tuned?.condition, stops, places: judged.places, legs: judged.legs }}
                   onApply={applyQuickFix}
@@ -348,7 +356,7 @@ export function TripScreen({ tripId }: { tripId: string }) {
               )}
 
               <StopList
-                stops={stops}
+                stops={judged.stops}
                 result={judged.result}
                 places={judged.places}
                 legs={judged.legs}

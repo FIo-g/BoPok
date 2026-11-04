@@ -17,6 +17,8 @@ const EMPTY_PLACES: Record<string, PlaceDetail> = {}
 const EMPTY_LEGS: Record<string, Leg> = {}
 
 export type Judged = {
+  // 판정에 쓴 일정: 조건 바꿔 보기로 이동수단을 바꿨으면 바뀐 값이다. 지도·목록은 이것을 써야 판정과 같은 이동수단을 보여 준다
+  stops: Stop[]
   result: JudgeResult
   places: Record<string, PlaceDetail>
   legs: Record<string, Leg>
@@ -65,5 +67,5 @@ export function useJudged(baseStops: Stop[] | undefined, baseTravelers: Traveler
 
   const retry = useCallback(() => resetFailures(), [])
   const shown = settled ? result : (held ?? result)
-  return shown ? { result: shown, places, legs, settled, incomplete, retry } : null
+  return shown && stops ? { stops, result: shown, places, legs, settled, incomplete, retry } : null
 }

@@ -75,7 +75,7 @@ const GAP_MODE_TEXT: Record<Transport, string> = { walk: '걸어서', car: '자�
 
 type Gap = { id: string; from: Coord; to: Coord; mode: Transport }
 
-// 경로선을 못 받은 장소 사이. 순서대로 이웃한 두 장소 가운데 경로선이 없는 곳을 곧은 선으로라도 잇는다.
+// 경로선을 못 받은 장소 사이. 좌표 없는 자리(식사 자리 등)는 건너뛰고, 앞뒤로 좌표 있는 장소 가운데 경로선이 없는 사이를 곧은 선으로라도 잇는다.
 // 이 선은 실제 길이 아니라 "여기 사이를 이동해요"라는 표시라, 거리나 시간을 만들지 않는다 (AGENTS.md 6장)
 function gapsOf(data: MapData): Gap[] {
   const drawn = new Set<string>()
@@ -84,12 +84,14 @@ function gapsOf(data: MapData): Gap[] {
     if (leg && leg.path.length >= 2) drawn.add(`${legResult.fromStopKey}>${legResult.toStopKey}`)
   }
   const gaps: Gap[] = []
-  for (let i = 1; i < data.stops.length; i++) {
-    const [a, b] = [data.stops[i - 1], data.stops[i]]
-    if (drawn.has(`${a.key}>${b.key}`)) continue
-    const from = a.coord ?? placeOf(data.places, a.placeId)?.coord
-    const to = b.coord ?? placeOf(data.places, b.placeId)?.coord
-    if (from && to) gaps.push({ id: gapItemId(a.key, b.key), from, to, mode: b.arriveBy })
+  const located = data.stops.flatMap(stop => {
+    const coord = stop.coord ?? placeOf(data.places, stop.placeId)?.coord
+    return coord ? [{ stop, coord }] : []
+  })
+  for (let i = 1; i < located.length; i++) {
+    const [a, b] = [located[i - 1], located[i]]
+    if (drawn.has(`${a.stop.key}>${b.stop.key}`)) continue
+    gaps.push({ id: gapItemId(a.stop.key, b.stop.key), from: a.coord, to: b.coord, mode: b.stop.arriveBy })
   }
   return gaps
 }

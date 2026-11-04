@@ -162,8 +162,9 @@ describe('로그인이 필요한 화면에서 보낼 곳', () => {
 
 describe('placeWalkDistanceText', () => {
   const lengths = { a: 420, b: 800, c: 100 }
-  it('돌아가는 길과 같은 구간은 한 번만 더한다', () => {
-    expect(placeWalkDistanceText([{ segmentId: 'a', reverse: false }, { segmentId: 'b', reverse: false }, { segmentId: 'b', reverse: true }], lengths)).toBe('약 1.2km')
+  it('돌아가는 길(reverse)도 걷는 거리이므로 왕복을 모두 더한다', () => {
+    // a 420 + b 800 + 돌아오는 b 800 = 2,020m
+    expect(placeWalkDistanceText([{ segmentId: 'a', reverse: false }, { segmentId: 'b', reverse: false }, { segmentId: 'b', reverse: true }], lengths)).toBe('약 2.0km')
   })
   it('1km 보다 짧으면 m 로 보여 준다', () => {
     expect(placeWalkDistanceText([{ segmentId: 'a', reverse: false }], lengths)).toBe('약 420m')
