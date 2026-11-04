@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { TripVersion } from '@/lib/contracts'
-import { preloadedVersion, showScheduleSpinner } from './trip-screen-state'
+import type { ExplainResponse, TripVersion } from '@/lib/contracts'
+import { explainTextToShow, preloadedVersion, showScheduleSpinner } from './trip-screen-state'
 
 const version = (id: string): TripVersion => ({
   id, tripId: 't-1', number: 1, parentId: null, madeBy: 'user', stops: [], createdAt: '2026-11-02T00:00:00+09:00',
@@ -53,5 +53,26 @@ describe('preloadedVersion', () => {
 
   it('고른 안이 없으면 처음 안이 있어도 null', () => {
     expect(preloadedVersion(version('v-1'), null)).toBeNull()
+  })
+})
+
+describe('explainTextToShow', () => {
+  const fixedNone: ExplainResponse = { text: '바뀐 점 없음', source: 'fixed' }
+
+  it('일정 칸에서 바뀐 곳이 있으면 "바뀐 점 없음"은 숨긴다', () => {
+    expect(explainTextToShow(fixedNone, ['새로 넣은 곳: 점심 후 휴식'])).toBeNull()
+  })
+
+  it('정말 아무것도 안 바뀌었으면 "바뀐 점 없음"을 그대로 둔다', () => {
+    expect(explainTextToShow(fixedNone, [])).toBe('바뀐 점 없음')
+  })
+
+  it('AI 문장이나 다른 고정 문장은 일정 칸 변화와 상관없이 그대로 둔다', () => {
+    expect(explainTextToShow({ text: '점심이 30분 늦어져요', source: 'ai' }, ['시간 바뀜: 점심 식사 12:30 → 12:00'])).toBe('점심이 30분 늦어져요')
+    expect(explainTextToShow({ text: '계단 구간 1곳을 우회로로 변경', source: 'fixed' }, ['뺀 곳: 이응노미술관'])).toBe('계단 구간 1곳을 우회로로 변경')
+  })
+
+  it('설명이 아직 없으면 null', () => {
+    expect(explainTextToShow(null, ['뺀 곳: 이응노미술관'])).toBeNull()
   })
 })

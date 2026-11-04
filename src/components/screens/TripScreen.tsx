@@ -22,7 +22,7 @@ import { WeatherSlot } from '@/components/trip/slots/WeatherSlot'
 import type { TripSlotProps } from '@/components/trip/slots/types'
 import { StopList, type StopEditing } from '@/components/trip/StopList'
 import { TripMap } from '@/components/trip/TripMap'
-import { preloadedVersion, showScheduleSpinner } from '@/components/trip/trip-screen-state'
+import { explainTextToShow, preloadedVersion, showScheduleSpinner } from '@/components/trip/trip-screen-state'
 import { useExplain } from '@/components/trip/useExplain'
 import { useJudged } from '@/components/trip/useJudged'
 import { VersionBar, VersionCompare } from '@/components/trip/VersionBar'
@@ -30,7 +30,7 @@ import { Button, Card, ErrorNotice, Notice, PageTitle, Spinner } from '@/compone
 import { api } from '@/lib/api-client'
 import { aiFailure } from '@/lib/ai-fallback'
 import { stopsOfDay, type OpinionInput, type PlaceSummary, type QuickFix, type QuickFixChange, type Stop } from '@/lib/contracts'
-import { fixedChangeSentence } from '@/lib/engine'
+import { diffStops, fixedChangeSentence, formatStopDiff } from '@/lib/engine'
 import { formatDateRange } from '@/lib/format'
 import { removeStop, replaceStopPlace, sameStops, updateStop } from '@/lib/plan/stop-edit'
 import { applyTuned, type Tuned } from '@/lib/plan/tuned'
@@ -79,6 +79,8 @@ export function TripScreen({ tripId }: { tripId: string }) {
   const day = days.includes(pickedDay) ? pickedDay : days[0]
   const stops = useMemo(() => (allStops ? stopsOfDay(allStops, day) : undefined), [allStops, day])
   const parentDayStops = useMemo(() => (parent.data ? stopsOfDay(parent.data.stops, day) : undefined), [parent.data, day])
+  // 일정 칸에서 바뀐 곳 (새로 넣은 곳·뺀 곳·시각 바뀐 곳). 걷는 구간이 같아도 바뀐 일정은 말해 준다
+  const stopChanges = useMemo(() => (parentDayStops && stops ? formatStopDiff(diffStops(parentDayStops, stops)) : []), [parentDayStops, stops])
   // 빠른 수정안은 바꿔 본 속도·보조기구로 계산한다. 이동수단을 바꿔 본 경우는 저장될 일정과 달라져 쓸 수 없다
   const quickFixTravelers = useMemo(() => (travelers ? applyTuned(travelers, [], tuned).travelers : []), [travelers, tuned])
   const judged = useJudged(stops, travelers, tuned)
@@ -297,7 +299,8 @@ export function TripScreen({ tripId }: { tripId: string }) {
               <JudgePanel
                 result={judged.result}
                 prev={parent.data && prevJudged ? prevJudged.result : null}
-                explainText={explain?.text ?? null}
+                explainText={explainTextToShow(explain, stopChanges)}
+                stopChanges={stopChanges}
                 explainFromAi={explain?.source === 'ai'}
                 travelers={detail.data.travelers}
                 tripId={tripId}

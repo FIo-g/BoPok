@@ -30,11 +30,13 @@ function SummaryCard({ title, value, sub, over, unknown = false, partial = false
 const PARTIAL_COMPARE_TEXT = '정보 부족: 일부 길 정보가 없어서 조건 안인지 아직 몰라요'
 
 export function JudgePanel({
-  result, prev, travelers, tripId, stopNames, settled, incomplete, onRetry, explainText = null, explainFromAi = false,
+  result, prev, travelers, tripId, stopNames, settled, incomplete, onRetry, explainText = null, explainFromAi = false, stopChanges = [],
 }: {
   // 바뀐 점 한 줄 (화면에만 보여 주고 저장하지 않는다)
   explainText?: string | null
   explainFromAi?: boolean
+  // 일정 칸에서 바뀐 곳 (새로 넣은 곳·뺀 곳·시각 바뀐 곳). 엔진 비교가 비어도 보인다
+  stopChanges?: string[]
   result: JudgeResult
   prev: JudgeResult | null
   travelers: Traveler[]
@@ -139,7 +141,7 @@ export function JudgePanel({
         </Notice>
       )}
 
-      {(diff.length > 0 || explainText) && (
+      {(diff.length > 0 || explainText || stopChanges.length > 0) && (
         <div className="rounded-xl bg-brand-soft px-4 py-3 text-brand-strong">
           {explainText && (
             <p className="text-lg font-extrabold">
@@ -147,6 +149,7 @@ export function JudgePanel({
               {explainFromAi && <span className="ml-2 text-sm font-semibold text-muted">AI가 풀어 쓴 한 줄</span>}
             </p>
           )}
+          {stopChanges.length > 0 && <p className="font-semibold">일정에서 바뀐 곳: {stopChanges.join(' · ')}</p>}
           {diff.length > 0 && <p className="font-semibold">이전 안과 달라진 점(추정치): {diff.join(' · ')}</p>}
         </div>
       )}

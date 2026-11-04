@@ -1,5 +1,5 @@
 // 버전 비교 카드 (설계 7.3·7.4). 바뀐 항목만 정해진 순서로 만든다.
-import type { DiffItem, JudgeResult, Minutes, QuickFixChange, Verdict } from '@/lib/contracts'
+import type { DiffItem, JudgeResult, Minutes, QuickFixChange, Stop, Verdict } from '@/lib/contracts'
 import { formatRange } from './walk-time'
 
 const VERDICT_LABEL: Record<Verdict, string> = {
@@ -78,4 +78,65 @@ export function fixedChangeSentence(changes: QuickFixChange[]): string {
   if (counts.taxi > 0) parts.push(`장소 사이 ${counts.taxi}곳을 택시로`)
 
   return parts.join(', ')
+}
+
+// 일정 칸 비교 (버전 간 일정이 바뀌었는데 걷는 구간이 같을 때도 무엇이 바뀌었는지 말하려고 둔다).
+// 시각은 Stop 에 저장된 값 그대로 쓴다. 숫자를 새로 만들지 않는다.
+export type StopDiffItem =
+  | { kind: 'added'; name: string }
+  | { kind: 'removed'; name: string }
+  | { kind: 'time'; name: string; before: string; after: string }
+
+// 같은 장소 판별: placeId 가 있으면 placeId, 없으면(점심 같은 식사 자리) 이름
+function stopIdentity(stop: Stop): string {
+  return stop.placeId !== null ? `place:${stop.placeId}` : `name:${stop.name}`
+}
+
+// 순서만 바뀐 것은 다루지 않는다. 새 안 순서대로 추가·시각 변경을 적고, 뺀 곳은 뒤에 붙인다.
+export function diffStops(prev: Stop[], next: Stop[]): StopDiffItem[] {
+  // 이전 안의 같은 장소는 한 번만 짝짓는다 (같은 이름이 여럿이면 앞에서부터)
+  const used = new Set<number>()
+  const matches = next.map(stop => {
+    const index = prev.findIndex((before, i) => !used.has(i) && stopIdentity(before) === stopIdentity(stop))
+    if (index === -1) return null
+    used.add(index)
+    return prev[index]
+  })
+
+  const items: StopDiffItem[] = []
+  next.forEach((stop, i) => {
+    const before = matches[i]
+    if (before === null) {
+      items.push({ kind: 'added', name: stop.name })
+      return
+    }
+    // 시각은 양쪽에 다 있을 때만 비교한다 (한쪽만 비었으면 바뀌었다고 말하지 않는다)
+    if (before.startTime !== undefined && stop.startTime !== undefined && before.startTime !== stop.startTime) {
+      items.push({ kind: 'time', name: stop.name, before: before.startTime, after: stop.startTime })
+    }
+  })
+  prev.forEach((stop, i) => {
+    if (!used.has(i)) items.push({ kind: 'removed', name: stop.name })
+  })
+  return items
+}
+
+export function formatStopDiffItem(item: StopDiffItem): string {
+  switch (item.kind) {
+    case 'added':
+      return `새로 넣은 곳: ${item.name}`
+    case 'removed':
+      return `뺀 곳: ${item.name}`
+    case 'time':
+      return `시간 바뀜: ${item.name} ${item.before} → ${item.after}`
+  }
+}
+
+// 화면 한 줄에 다 들어가도록 4개까지만 쓰고 나머지는 "외 n곳"으로 센다.
+const STOP_DIFF_SHOWN = 4
+
+export function formatStopDiff(items: StopDiffItem[]): string[] {
+  const sentences = items.map(formatStopDiffItem)
+  if (sentences.length <= STOP_DIFF_SHOWN) return sentences
+  return [...sentences.slice(0, STOP_DIFF_SHOWN), `외 ${sentences.length - STOP_DIFF_SHOWN}곳`]
 }
