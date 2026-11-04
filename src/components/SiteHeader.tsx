@@ -23,7 +23,7 @@ export function FontSizeToggle() {
     </button>
   )
   return (
-    <div role="group" aria-label="글자 크기" className="flex rounded-xl border border-line bg-white p-0.5">
+    <div role="group" aria-label="글자 크기" data-font-toggle className="flex rounded-xl border border-line bg-white p-0.5">
       {option('normal', '가', '글자 보통')}
       {option('large', '가+', '글자 크게')}
     </div>

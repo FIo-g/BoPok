@@ -336,3 +336,18 @@
   font-weight: 700;
   z-index: 50;
 }
+
+/* 랜드마크 상세 화면이 열려 있는 동안 지도 위 버튼·안내·소개 글자를 숨긴다 */
+.hero-root[data-detail='true'] .hero-back,
+.hero-root[data-detail='true'] .hero-start-pill,
+.hero-root[data-detail='true'] .hero-hint {
+  animation: none;
+  opacity: 0;
+  pointer-events: none;
+}
+.hero-root[data-detail='true'] .hero-copy,
+.hero-root[data-detail='true'] .hero-veil {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 300ms ease;
+}

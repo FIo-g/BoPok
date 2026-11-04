@@ -6,5 +6,6 @@ export { buildPins, buildRouteGeoJSON, coordsBounds, legItemId, routeBounds, seg
 export type { MapData, RouteOptions } from './map-geojson'
 export type { Bounds, CameraView, MapInstance, MapPin, MapPinKind, RouteCollection, RouteProps, RouteRole, RouteStatus } from './map-types'
 export { BUILDINGS_TILES, MAP_BG_COLOR, PALETTE } from './map-config'
-export { LANDMARKS } from './landmarks'
+export { LANDMARKS, landmarkById, landmarkCenter, landmarkViewBearing } from './landmarks'
 export type { Landmark } from './landmarks'
+export { LazyLandmarkMiniMap } from './LazyLandmarkMiniMap'

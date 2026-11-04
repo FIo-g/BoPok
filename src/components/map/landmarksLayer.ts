@@ -15,12 +15,15 @@ export type LandmarksLayer = CustomLayerInterface & {
   setVisible: (visible: boolean) => void
   // 화면 좌표(지도 캔버스 기준 px)에서 눌린 모형. 없으면 null
   pick: (point: { x: number; y: number }) => Landmark | null
-  // 마우스를 올린/선택한 모형의 id (빛이 강해지고 바닥 글로우가 진해진다). null 이면 없음
+  // 마우스를 올린 모형의 id (빛이 강해지고 바닥 글로우가 진해진다). null 이면 없음
   setHover: (id: string | null) => void
-  setSelected: (id: string | null) => void
+  // 상세 화면을 연 모형의 id: 그 모형은 호버 때처럼 가장 강하게, 나머지 모형은 살짝 흐리게 한다. null 이면 모두 원래대로
+  setFocus: (id: string | null) => void
 }
 
 // 지도와 같은 빛 방향: style 의 light(position [1.5, 210, 30] = 남서쪽 위)에서 오는 약한 방향광 + 고른 주변광
+// 다른 모형이 선택되었을 때 나머지 모형을 얼마나 흐리게 할지(0~1, 1이면 완전히 사라짐)
+const DIM_AMOUNT = 0.5
 const LIGHT = { ambient: 0.58, hemisphere: 0.14, directional: 0.62, position: [-0.29, 0.5, 1] as const }
 
 export type LandmarksLayerOptions = {
@@ -28,7 +31,7 @@ export type LandmarksLayerOptions = {
   riseZoom?: [number, number]
   // 휴대폰: 바닥 글로우와 림 라이트만 쓴다(emissive·숨쉬기 없음)
   compact?: boolean
-  // 숨쉬기(emissive 가 3초 주기로 오르내림). 계속 다시 그려야 해서 첫 화면 같은 장식 지도에서만 켠다 — 일정 지도에서 켜면 idle 이벤트가
+  // 숨쉬기(emissive 가 3초 주기로 오르내림). 계속 다시 그려야 해서 첫 화면 같은 장식 지도에서만 켠다 — 결과 지도에서 켜면 idle 이벤트가
   // 쉬지 않고 나와 idle 에 묶인 계산(구간 주변 건물)이 매 프레임 돈다
   breathe?: boolean
   // ?debug=landmarks: 모형을 반투명(0.5)으로. &lmopacity=1 처럼 값을 주면 그 값으로
@@ -63,6 +66,8 @@ export async function createLandmarksLayer(landmarks: Landmark[], opts: Landmark
     radiusM: number
     // 호버·선택 강조 정도 0~1 (부드럽게 따라간다)
     level: number
+    // 다른 모형이 선택됐을 때 흐려진 정도 0~1
+    dim: number
   }
 
   // GLB 는 Y 가 위, 긴 변이 X, 앞이 +Z(남쪽). 지도 장면은 x 동쪽·y 남쪽·z 위라서 (X, Y, Z) → (X, Z, Y) 로 바꾼 뒤
@@ -174,14 +179,14 @@ export async function createLandmarksLayer(landmarks: Landmark[], opts: Landmark
     group.updateMatrixWorld(true)
     const sphere = new THREE.Box3().setFromObject(group).getBoundingSphere(new THREE.Sphere())
     const radiusM = Math.max(sphere.radius + Math.hypot(landmark.offsetM[0], landmark.offsetM[1]), radius)
-    items.push({ landmark, scene, group, solids, glasses, glowMaterial, rim, origin, unit: origin.meterInMercatorCoordinateUnits(), proj: new THREE.Matrix4(), drawn: false, radiusM, level: 0 })
+    items.push({ landmark, scene, group, solids, glasses, glowMaterial, rim, origin, unit: origin.meterInMercatorCoordinateUnits(), proj: new THREE.Matrix4(), drawn: false, radiusM, level: 0, dim: 0 })
   }
 
   let renderer: InstanceType<typeof THREE.WebGLRenderer> | null = null
   let map: MapLibreMap | null = null
   let visible = true
   let hoverId: string | null = null
-  let selectedId: string | null = null
+  let focusId: string | null = null
   const camera = new THREE.Camera()
   const main = new THREE.Matrix4()
   const toMercator = new THREE.Matrix4()
@@ -205,9 +210,9 @@ export async function createLandmarksLayer(landmarks: Landmark[], opts: Landmark
       hoverId = id
       map?.triggerRepaint()
     },
-    setSelected(id) {
-      if (id === selectedId) return
-      selectedId = id
+    setFocus(id) {
+      if (id === focusId) return
+      focusId = id
       map?.triggerRepaint()
     },
     onAdd(mapInstance, gl) {
@@ -251,23 +256,28 @@ export async function createLandmarksLayer(landmarks: Landmark[], opts: Landmark
           continue
         }
         // 호버·선택 강조(부드럽게)
-        const target = item.landmark.id === hoverId || item.landmark.id === selectedId ? 1 : 0
+        const target = item.landmark.id === hoverId || item.landmark.id === focusId ? 1 : 0
         item.level += (target - item.level) * 0.25
         if (Math.abs(target - item.level) < 0.01) item.level = target
         else animating = true
+        const dimTarget = focusId !== null && item.landmark.id !== focusId ? 1 : 0
+        item.dim += (dimTarget - item.dim) * 0.25
+        if (Math.abs(dimTarget - item.dim) < 0.01) item.dim = dimTarget
+        else animating = true
+        const keep = 1 - DIM_AMOUNT * item.dim
         const emissive = opts.compact ? 0 : breath + (style.emissiveActive - breath) * item.level
         for (const material of item.solids) {
           material.emissiveIntensity = emissive
-          material.opacity = fade * baseOpacity
+          material.opacity = fade * baseOpacity * keep
           material.transparent = material.opacity < 0.999
         }
         for (const material of item.glasses) {
           material.emissiveIntensity = emissive
-          material.opacity = fade * baseOpacity * LANDMARK_GLASS_OPACITY
+          material.opacity = fade * baseOpacity * keep * LANDMARK_GLASS_OPACITY
           material.transparent = true
         }
         // 바닥 글로우도 같은 구간에서 같이 나타난다
-        item.glowMaterial.opacity = fade * (style.glowAlpha + (style.glowAlphaActive - style.glowAlpha) * item.level)
+        item.glowMaterial.opacity = fade * keep * (style.glowAlpha + (style.glowAlphaActive - style.glowAlpha) * item.level)
         // 시선 위치(장면 좌표): 투영 행렬에서 x=y=w=0 이 되는 점. 림 라이트 방향 계산용
         inverse.copy(item.proj).invert()
         eye.set(0, 0, 1, 0).applyMatrix4(inverse)

@@ -156,11 +156,13 @@ type Props = {
   onSelectItem?: (itemId: string) => void
   // 랜드마크 모형을 눌렀을 때
   onSelectLandmark?: (landmark: Landmark) => void
+  // 상세 화면이 열린 랜드마크 id. 그 모형은 가장 강하게, 나머지는 살짝 흐리게 한다
+  focusLandmarkId?: string | null
 }
 
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
-export default function MapView({ mode = 'plan', compact = false, interactive = false, initialView, onMapReady, deferExtras = false, flat = false, onFail, routes = null, pins = [], fit = null, focusPath = null, onSelectItem, onSelectLandmark }: Props) {
+export default function MapView({ mode = 'plan', compact = false, interactive = false, initialView, onMapReady, deferExtras = false, flat = false, onFail, routes = null, pins = [], fit = null, focusPath = null, onSelectItem, onSelectLandmark, focusLandmarkId = null }: Props) {
   const landing = mode === 'landing'
   // 처음 높이 배율(평면으로 시작하면 처음부터 0 으로 만들어 3D 가 번쩍 보이지 않게). 한 번 정하면 바꾸지 않는다
   const [initialFlat] = useState(flat)
@@ -247,6 +249,9 @@ export default function MapView({ mode = 'plan', compact = false, interactive = 
       setLandmarksReady(false)
     }
   }, [loaded, deferExtras, landing, compact, debug, debugOpacity])
+  useEffect(() => {
+    landmarksRef.current?.setFocus(focusLandmarkId)
+  }, [focusLandmarkId, landmarksReady])
   // 모형이 나타나는 줌 구간에서 원래 건물(과 그림자)이 같이 사라진다. 모형을 못 불러왔거나 2D 보기면 원래 건물을 그대로 둔다
   useEffect(() => {
     const map = mapRef.current?.getMap()
@@ -391,7 +396,6 @@ export default function MapView({ mode = 'plan', compact = false, interactive = 
           // 모형 클릭은 onSelectLandmark 가 있을 때만 가로챈다. 없으면(일정 지도) 모형 위 경로도 그대로 선택된다
           if (onSelectLandmark) {
             const landmark = landmarksRef.current?.pick(e.point)
-            landmarksRef.current?.setSelected(landmark?.id ?? null)
             if (landmark) { onSelectLandmark(landmark); return }
           }
           const id = e.features?.[0]?.properties?.itemId

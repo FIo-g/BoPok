@@ -179,3 +179,6 @@ button {
     transform: none;
   }
 }
+
+/* 랜드마크 상세 화면이 떠 있는 동안 글자 크기(가/가+) 토글을 숨긴다 */
+body[data-landmark-detail] [data-font-toggle] { display: none; }

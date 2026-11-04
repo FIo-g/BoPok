@@ -6,6 +6,9 @@ import {
   MAP_FILTER_MS, DRIFT_AFTER_EXTRAS_MS, EXTRAS_AFTER_INTRO_MS, prefetchTileUrls, MOBILE_MAX_WIDTH, READY_TIMEOUT_MS, PLACE_PINS, QUIET_MAP_FILTER, SEEN_KEY, TITLE_LINES, TITLE_TEXT, TOUR_MS, TOUR_RESUME_MS,
   TOUR_WAYPOINTS, VEIL, VEIL_FADE_MS, exitHalfMs, exitTotalMs, introTimeline,
 } from './landing-intro'
+import { LandmarkDetail } from '@/components/landmark/LandmarkDetail'
+import { useLandmarkDetail } from '@/components/landmark/useLandmarkDetail'
+import { rememberPlaceIntent } from '@/lib/place-intent'
 import { BUILDINGS_TILES, LANDMARKS, LazyMapView, PALETTE, createCameraLoop, metersToLon, type CameraLoop, type Landmark, type MapInstance, type MapPin } from '@/components/map'
 import './hero.css'
 
@@ -82,10 +85,22 @@ export function Hero({ onStart }: { onStart: () => void }) {
     m.once('idle', () => setReady(true))
   }, [])
   const onMapFail = useCallback(() => setMapFailed(true), [])
-  // 모형을 누르면 그 장소로 다가간다(둘러보기가 자리 잡은 뒤에만 눌린다)
-  const onSelectLandmark = useCallback((landmark: Landmark) => {
-    map?.easeTo({ center: [landmark.lng, landmark.lat], zoom: 17, pitch: 60, bearing: map.getBearing(), duration: reduced() ? 0 : 1200 })
-  }, [map])
+  // 모형을 누르면 카메라가 다가가고 상세 화면(사진·설명·위치 미니맵)이 올라온다. 닫으면 카메라가 돌아오고 자동 이동이 다시 이어진다
+  const detail = useLandmarkDetail({
+    map,
+    // 카메라가 다가가기 전에 둘러보기·흘러가기를 먼저 멈춘다(다가가는 이동을 나중에 끊지 않게)
+    onOpen: () => {
+      driftRef.current?.stop()
+      tourRef.current?.stop()
+    },
+  })
+  const detailActive = detail.state.phase !== 'closed' || detail.returning
+  const onSelectLandmark = detail.open
+  // "이 장소로 일정 만들기": 장소를 기억해 두고 시작 흐름(로그인·그룹)으로 보낸다. 새 여행의 붙여넣기 칸에 들어간다
+  const startPlanAt = useCallback((landmark: Landmark) => {
+    rememberPlaceIntent(landmark.name)
+    onStart()
+  }, [onStart])
   // 지도가 늦거나 실패해도 글자는 보여야 한다
   useEffect(() => {
     const id = window.setTimeout(() => setReady(true), READY_TIMEOUT_MS)
@@ -116,12 +131,12 @@ export function Hero({ onStart }: { onStart: () => void }) {
     const drift = driftRef.current
     if (!map || !drift) return
     // 글자가 내려오는 동안에는 지도를 가만히 둔다(카메라 이동과 글자 연출이 한꺼번에 일어나면 끊긴다)
-    if (phase === 'intro' && homeReady && driftOk && active && !reduced()) drift.start()
+    if (phase === 'intro' && homeReady && driftOk && active && !detailActive && !reduced()) drift.start()
     else drift.stop()
-  }, [map, phase, homeReady, driftOk, active])
+  }, [map, phase, homeReady, driftOk, active, detailActive])
 
   // 둘러보기: 도착한 뒤 천천히 미끄러지듯 이동. 만지면 멈추고 TOUR_RESUME_MS 동안 안 만지면 이어간다
-  const tourWanted = phase === 'exploring' && arrived && active && !showHint
+  const tourWanted = phase === 'exploring' && arrived && active && !showHint && !detailActive
   useEffect(() => {
     const tour = tourRef.current
     if (!map || !tour) return
@@ -240,7 +255,7 @@ export function Hero({ onStart }: { onStart: () => void }) {
   } as React.CSSProperties
 
   return (
-    <section ref={heroRef} className="hero-root" data-active={active} data-phase={phase} data-color={colorOn} data-ready={ready} style={cssVars}>
+    <section ref={heroRef} className="hero-root" data-active={active} data-phase={phase} data-color={colorOn} data-ready={ready} data-detail={detailActive} style={cssVars}>
       <div className="hero-map">
         <LazyMapView
           mode="landing"
@@ -253,6 +268,7 @@ export function Hero({ onStart }: { onStart: () => void }) {
           onMapReady={onMapReady}
           onFail={onMapFail}
           onSelectLandmark={onSelectLandmark}
+          focusLandmarkId={detail.landmark?.id ?? null}
         />
       </div>
       {/* 모형에는 이름 라벨이 없어서, 화면을 못 보거나 키보드로 쓰는 사람을 위해 같은 이름의 목록을 둔다 */}
@@ -299,6 +315,9 @@ export function Hero({ onStart }: { onStart: () => void }) {
           </svg>
           끌어서 둘러보세요
         </div>
+      )}
+          {detail.landmark && detail.state.phase !== 'flying' && (
+        <LandmarkDetail landmark={detail.landmark} phase={detail.state.phase} onClose={detail.close} onStartPlan={startPlanAt} />
       )}
     </section>
   )
