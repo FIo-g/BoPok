@@ -192,7 +192,7 @@
       "optional": false,
       "source": "OpenStreetMap 보행로 최단 경로(© OpenStreetMap contributors) · 지점: 국립중앙과학관 전시관 안내도(science.go.kr, 확인 2026-11-04) 대조",
       "checkedAt": "2026-11-04",
-      "confidence": "B"
+      "confidence": "C"
     },
     {
       "id": "sc-a2",
@@ -244,7 +244,7 @@
       "optional": false,
       "source": "OpenStreetMap 보행로 최단 경로(© OpenStreetMap contributors) · 지점: 국립중앙과학관 전시관 안내도(science.go.kr, 확인 2026-11-04) 대조",
       "checkedAt": "2026-11-04",
-      "confidence": "B"
+      "confidence": "C"
     },
     {
       "id": "sc-t1",
@@ -663,7 +663,7 @@
       "courseId": "sc-yard",
       "source": "OpenStreetMap 보행로 최단 경로(© OpenStreetMap contributors) · 지점: 국립중앙과학관 전시관 안내도(science.go.kr, 확인 2026-11-04) 대조",
       "checkedAt": "2026-11-04",
-      "confidence": "B"
+      "confidence": "C"
     }
   ],
   "courses": [

@@ -118,6 +118,8 @@ for (const way of ways) {
       steps: way.tags.highway === 'steps',
       stepCount: way.tags.step_count === undefined ? undefined : Number(way.tags.step_count),
       incline: way.tags.incline !== undefined && !['no', '0'].includes(way.tags.incline),
+      // 출입이 막힌 길(access=no·private)은 원천 지도에 있을 때만 알 수 있다. 경로에 쓰이면 보고서에 적는다.
+      restricted: ['no', 'private'].includes(way.tags.access),
     })
   }
 }
@@ -202,7 +204,7 @@ for (let i = 0; i < baseEdges.length; i++) {
     if (chain[j].key === chain[j + 1].key) continue
     edges.push({
       from: chain[j].key, to: chain[j + 1].key, pts: [chain[j].pt, chain[j + 1].pt],
-      wayId: e.wayId, steps: e.steps, stepCount: e.stepCount, incline: e.incline,
+      wayId: e.wayId, steps: e.steps, stepCount: e.stepCount, incline: e.incline, restricted: e.restricted,
     })
   }
 }
@@ -217,7 +219,7 @@ for (const w of extraWays) {
     if (chain[j].key === chain[j + 1].key) continue
     edges.push({
       from: chain[j].key, to: chain[j + 1].key, pts: [chain[j].pt, chain[j + 1].pt],
-      wayId: `extra:${w.id}`, steps: false, stepCount: undefined, incline: false,
+      wayId: `extra:${w.id}`, steps: false, stepCount: undefined, incline: false, restricted: false,
     })
     lengthM += haversine(chain[j].pt, chain[j + 1].pt)
   }
@@ -340,6 +342,8 @@ function stairsOf(used) {
 }
 
 const slopeOf = used => used.some(({ index }) => edges[index].incline)
+// 경로에 쓰인 출입 제한 길의 way 번호(중복 없이). 빈 배열이면 제한 길을 지나지 않는다.
+const restrictedWaysOf = used => [...new Set(used.filter(({ index }) => edges[index].restricted).map(({ index }) => edges[index].wayId))]
 
 // ---- 경계 검사 ----
 // 추출본 way의 geometry는 [lng,lat] 배열이고, 예전 추출본은 {lon,lat} 객체였다. 두 모양을 모두 읽는다.
@@ -383,7 +387,7 @@ const segmentConfidence = seg => [DESIGN_CONFIDENCE, nodeConfidence.get(seg.from
   .filter(level => level !== undefined)
   .reduce((worst, level) => (CONFIDENCE_RANK[level] > CONFIDENCE_RANK[worst] ? level : worst))
 const segments = []
-const report = { detours: [], accessSteps: [] }
+const report = { detours: [], accessSteps: [], restricted: [] }
 // 구간 한 줄. 계단·경사는 그 경로에서 읽은 값만 쓴다.
 function makeSegment(seg, route, extra) {
   const stairs = stairsOf(route.used)
@@ -410,6 +414,7 @@ for (const seg of sorted) {
     }
   }
   if (isTour && !COURSE_ID) throw new Error('관람 구간이 있으면 설계 파일에 course.id가 필요합니다.')
+  if (restrictedWaysOf(route.used).length) report.restricted.push({ id: seg.id, ways: restrictedWaysOf(route.used) })
   const tourExtra = isTour ? { courseId: COURSE_ID } : {}
   segments.push(makeSegment(seg, route, { ...tourExtra, source: SOURCE, checkedAt: CHECKED_AT, confidence: segmentConfidence(seg) }))
 
@@ -421,6 +426,7 @@ for (const seg of sorted) {
         id: `${seg.id}d`, detourOf: seg.id, courseId: COURSE_ID, source: SOURCE, checkedAt: CHECKED_AT, confidence: segmentConfidence(seg),
       }))
       report.detours.push(seg.id)
+      if (restrictedWaysOf(detour.used).length) report.restricted.push({ id: `${seg.id}d`, ways: restrictedWaysOf(detour.used) })
     }
   }
 }
@@ -480,6 +486,8 @@ console.log(JSON.stringify({
   stairsPresentSegments: segments.filter(s => s.stairsStatus === 'present').map(s => s.id),
   accessStepsAvoided: report.accessSteps,
   detoursOf: report.detours,
+  // 출입 제한(access=no·private) 길을 지나는 구간. 원천 지도 태그가 추출본에 남아 있어야 보인다. 그 구간은 신뢰 등급을 C로 낮추고 설계 notes에 적는다.
+  restrictedSegments: report.restricted,
   snapMeters: snapReport,
   snapMaxM: Math.max(...designNodes.map(n => Math.round(snaps[n.id].d * 10) / 10)),
   snapLimitChanged: designNodes.filter(n => n.snapLimitM !== undefined).map(n => ({ id: n.id, snapLimitM: n.snapLimitM, snapNote: n.snapNote, snapMeters: snapReport[n.id] })),
