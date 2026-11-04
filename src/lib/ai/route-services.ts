@@ -13,6 +13,9 @@ function serviceKind(name: string): 'restaurant' | 'cafe' | 'lodging' | null {
   return null
 }
 
+// 부모님과 앉아서 먹는 식사 자리에 맞지 않는 업종(업종명 기준). 카페·숙박 자리에는 적용하지 않는다.
+const NOT_SEATED_MEAL_CATEGORY = /패스트푸드|호프|통닭|주점|술집|포장마차|편의점/
+
 // AI가 만든 빈 식사 자리만 DB 장소로 채운다. 직접 고른 장소·예약·꼭 갈 곳은 건드리지 않는다.
 export async function fillRouteServices(drafts: DraftStop[], options: {
   details: PlaceDetail[]; transport: 'car' | 'transit' | 'taxi'; overnightDays?: number[]; avoidStairs?: boolean; avoidFoodTags?: FoodTag[];
@@ -47,10 +50,11 @@ export async function fillRouteServices(drafts: DraftStop[], options: {
     try {
       const result = await Promise.race([
         recommend({ kind, near, ...(from && to ? { route: [from, to] } : {}),
-          query: '', limit: 5, avoidStairs: options.avoidStairs }),
+          query: '', limit: 10, avoidStairs: options.avoidStairs }),
         new Promise<null>(resolve => { timer = setTimeout(() => resolve(null), Math.max(1, deadline - Date.now())) }),
       ])
       const choice = result?.items.find(item => placeKindOf(item.place) === kind && !used.has(item.place.id) &&
+        !(kind === 'restaurant' && NOT_SEATED_MEAL_CATEGORY.test(item.place.category)) &&
         !item.menus.some(menu => menu.foodTags.some(tag => options.avoidFoodTags?.includes(tag))) &&
         (item.distanceM ?? straightLineDistanceM(near, item.place.coord)) <= maxDistanceM &&
         (item.straightLineDetourM === undefined || item.straightLineDetourM <= maxDistanceM))

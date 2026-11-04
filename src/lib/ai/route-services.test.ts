@@ -6,6 +6,7 @@ const place = (id: string, kind: PlaceKind, x = 127.38): PlaceDetail => ({ id, n
 const spot = place('관광지', 'attraction')
 const meal = { placeId: null, name: '점심 식사', seated: true }
 const response = (p: PlaceDetail, distanceM = 100): PlaceRecommendationResponse => ({ catalogReady: true, method: 'keyword', distanceBasis: 'straight_line', routeCheckRequired: true, items: [{ place: p, menus: [], distanceM }] })
+const multiResponse = (places: PlaceDetail[]): PlaceRecommendationResponse => ({ ...response(places[0]), items: places.map(p => ({ place: p, menus: [], distanceM: 100 })) })
 const options = { details: [spot], transport: 'car' as const }
 describe('AI 동선의 식사·숙박 연결', () => {
   it.each(['아침 산책', '점심 산책', '저녁 한밭수목원 산책', '아침고요수목원', '식사 후 산책',
@@ -32,6 +33,26 @@ describe('AI 동선의 식사·숙박 연결', () => {
     expect(out[1]).toMatchObject({ placeId: '등록식당', name: '등록식당', seated: true })
     expect(recommend).toHaveBeenCalledWith(expect.objectContaining({ kind: 'restaurant', near: spot.coord, query: '' }))
     expect(out[1]).not.toHaveProperty('startTime')
+  })
+  it('앉아서 먹는 식사 자리에는 패스트푸드·호프·주점·편의점 업종 식당을 넣지 않고 다음 후보를 고른다', async () => {
+    const fast = { ...place('정감미', 'restaurant'), category: '패스트푸드' }
+    const pub = { ...place('호프식당', 'restaurant'), category: '호프/통닭' }
+    const store = { ...place('편의점식당', 'restaurant'), category: '편의점' }
+    const korean = { ...place('한식당', 'restaurant'), category: '한식' }
+    const recommend = vi.fn(async () => multiResponse([fast, pub, store, korean]))
+    const out = await fillRouteServices([{ placeId: spot.id, name: spot.name }, meal], options, recommend)
+    expect(out[1]).toMatchObject({ placeId: '한식당', name: '한식당', seated: true })
+  })
+  it('걸러서 남는 식사 후보가 없으면 빈 식사 자리를 그대로 둔다', async () => {
+    const fast = { ...place('정감미', 'restaurant'), category: '패스트푸드' }
+    const pub = { ...place('주점', 'restaurant'), category: '주점·술집' }
+    const drafts = [{ placeId: spot.id, name: spot.name }, meal]
+    expect(await fillRouteServices(drafts, options, async () => multiResponse([fast, pub]))).toEqual(drafts)
+  })
+  it('식사 후보는 한 번에 10곳까지 요청해 걸러내고 남길 수 있게 한다', async () => {
+    const recommend = vi.fn(async () => response(place('등록식당', 'restaurant')))
+    await fillRouteServices([{ placeId: spot.id, name: spot.name }, meal], options, recommend)
+    expect(recommend).toHaveBeenCalledWith(expect.objectContaining({ kind: 'restaurant', limit: 10 }))
   })
   it('당일 여행에는 숙박을 추가하지 않고 여러 날은 마지막 날 전까지만 추가한다', async () => {
     const recommend = vi.fn(async () => response(place('등록숙소', 'lodging')))
