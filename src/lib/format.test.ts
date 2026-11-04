@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Transport } from '@/lib/contracts'
-import { countRideLegsWithoutTime, formatRideMin, formatWalk, hasWalkInfoGap, isWalkInfoMissing, loginRedirectPath, requireUserRedirect, sourceName, stopStairsState } from './format'
+import { countRideLegsWithoutTime, formatRideMin, formatWalk, hasWalkInfoGap, isWalkInfoMissing, formatDateRange, loginRedirectPath, placeWalkDistanceText, requireUserRedirect, sourceName, stopStairsState } from './format'
 
 const seg = (stairsStatus: 'present' | 'confirmed_none' | 'unknown', reverse = false) => ({ stairsStatus, reverse })
 
@@ -157,5 +157,31 @@ describe('로그인이 필요한 화면에서 보낼 곳', () => {
 
   it('로그아웃 버튼으로 나갔으면 next 없이 첫 화면으로 (다음 사람이 남의 여행으로 돌아가지 않게)', () => {
     expect(requireUserRedirect(null, true, '/trips/t1', '?x=1')).toBe('/')
+  })
+})
+
+describe('placeWalkDistanceText', () => {
+  const lengths = { a: 420, b: 800, c: 100 }
+  it('돌아가는 길(reverse)도 걷는 거리이므로 왕복을 모두 더한다', () => {
+    // a 420 + b 800 + 돌아오는 b 800 = 2,020m
+    expect(placeWalkDistanceText([{ segmentId: 'a', reverse: false }, { segmentId: 'b', reverse: false }, { segmentId: 'b', reverse: true }], lengths)).toBe('약 2.0km')
+  })
+  it('1km 보다 짧으면 m 로 보여 준다', () => {
+    expect(placeWalkDistanceText([{ segmentId: 'a', reverse: false }], lengths)).toBe('약 420m')
+  })
+  it('구간 데이터가 없으면 null', () => {
+    expect(placeWalkDistanceText([], lengths)).toBeNull()
+    expect(placeWalkDistanceText([{ segmentId: 'x', reverse: false }], lengths)).toBeNull()
+  })
+})
+
+describe('formatDateRange', () => {
+  it('여러 날이면 기간과 박·일을 보여 준다', () => {
+    expect(formatDateRange('2026-11-14', '2026-11-16')).toBe('2026년 11월 14일 (토) ~ 2026년 11월 16일 (월) · 2박 3일')
+  })
+  it('하루짜리·끝 날짜 없음·날짜 미정은 시작일만', () => {
+    expect(formatDateRange('2026-11-14', null)).toBe('2026년 11월 14일 (토)')
+    expect(formatDateRange('2026-11-14', '2026-11-14')).toBe('2026년 11월 14일 (토)')
+    expect(formatDateRange(null, null)).toBe('날짜 미정')
   })
 })

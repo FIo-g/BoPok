@@ -2,7 +2,7 @@
 // 걷는 시간·계단 수·판정은 엔진 결과를 그대로 쓰고 여기서 다시 계산하지 않는다 (AGENTS.md 6장).
 import { along, length as turfLength, lineString } from '@turf/turf'
 import type { Feature, LineString } from 'geojson'
-import type { Coord, JudgeResult, Leg, PlaceDetail, PlaceNode, Stop, StopResult } from '@/lib/contracts'
+import type { Coord, JudgeResult, Leg, PlaceDetail, PlaceNode, Stop, StopResult, Transport } from '@/lib/contracts'
 import { FEATURE_TOILET } from './map-config'
 import type { Bounds, MapPin, RouteCollection, RouteProps, RouteRole, RouteStatus } from './map-types'
 
@@ -10,6 +10,7 @@ import type { Bounds, MapPin, RouteCollection, RouteProps, RouteRole, RouteStatu
 export const segmentItemId = (stopKey: string, segmentId: string) => `seg:${stopKey}:${segmentId}`
 export const legItemId = (legKey: string) => `leg:${legKey}`
 export const stopItemId = (stopKey: string) => `stop:${stopKey}`
+export const gapItemId = (fromKey: string, toKey: string) => `gap:${fromKey}:${toKey}`
 
 export type MapData = {
   stops: Stop[]
@@ -70,7 +71,32 @@ function stopSegmentFeatures(stopResult: StopResult, place: PlaceDetail | undefi
   return features
 }
 
-// 하루 전체 경로선: 장소 안 구간 + 장소 사이 경로
+const GAP_MODE_TEXT: Record<Transport, string> = { walk: '걸어서', car: '자가용', taxi: '택시', bus: '버스' }
+
+type Gap = { id: string; from: Coord; to: Coord; mode: Transport }
+
+// 경로선을 못 받은 장소 사이. 좌표 없는 자리(식사 자리 등)는 건너뛰고, 앞뒤로 좌표 있는 장소 가운데 경로선이 없는 사이를 곧은 선으로라도 잇는다.
+// 이 선은 실제 길이 아니라 "여기 사이를 이동해요"라는 표시라, 거리나 시간을 만들지 않는다 (AGENTS.md 6장)
+function gapsOf(data: MapData): Gap[] {
+  const drawn = new Set<string>()
+  for (const legResult of data.result.legs) {
+    const leg = data.legs[legResult.legKey]
+    if (leg && leg.path.length >= 2) drawn.add(`${legResult.fromStopKey}>${legResult.toStopKey}`)
+  }
+  const gaps: Gap[] = []
+  const located = data.stops.flatMap(stop => {
+    const coord = stop.coord ?? placeOf(data.places, stop.placeId)?.coord
+    return coord ? [{ stop, coord }] : []
+  })
+  for (let i = 1; i < located.length; i++) {
+    const [a, b] = [located[i - 1], located[i]]
+    if (drawn.has(`${a.stop.key}>${b.stop.key}`)) continue
+    gaps.push({ id: gapItemId(a.stop.key, b.stop.key), from: a.coord, to: b.coord, mode: b.stop.arriveBy })
+  }
+  return gaps
+}
+
+// 하루 전체 경로선: 장소 안 구간 + 장소 사이 경로 (경로가 없는 사이는 점선)
 export function buildRouteGeoJSON(data: MapData, options: RouteOptions = {}): RouteCollection {
   const opts: ResolvedOptions = { selectedId: options.selectedId ?? null, dimOthers: options.dimOthers ?? false }
   const features: RouteFeature[] = []
@@ -86,6 +112,7 @@ export function buildRouteGeoJSON(data: MapData, options: RouteOptions = {}): Ro
       routeFeature(legItemId(legResult.legKey), leg.path, walk ? 'main' : 'ride', walk ? statusOf(legResult.stairsStatus, legResult.status) : 'ok', opts),
     )
   }
+  for (const gap of gapsOf(data)) features.push(routeFeature(gap.id, [gap.from, gap.to], 'ride', 'info', opts))
   return { type: 'FeatureCollection', features }
 }
 
@@ -121,12 +148,25 @@ export function buildPins(data: MapData): MapPin[] {
           indoor: node.restType === 'indoor',
           label: node.restType === 'indoor' ? `${node.name} (실내)` : node.name,
         })
+      } else if (node.kind === 'sight' && node.guideNo !== undefined) {
+        // 현장 안내도에 번호가 붙은 볼거리: 안내도와 같은 번호를 핀에 단다
+        seen.add(node.id)
+        pins.push({ id: node.id, kind: 'guide', coord: node.coord, label: `${node.guideNo}. ${node.name}`, text: String(node.guideNo) })
       } else if (node.kind === 'toilet' && FEATURE_TOILET) {
         seen.add(node.id)
         pins.push({ id: node.id, kind: 'toilet', coord: node.coord, label: node.name })
       }
     }
   })
+  // 경로선이 없는 장소 사이: "자가용 · 경로 정보 없음"
+  for (const gap of gapsOf(data)) {
+    pins.push({
+      id: `link-${gap.id}`,
+      kind: 'link',
+      coord: [(gap.from[0] + gap.to[0]) / 2, (gap.from[1] + gap.to[1]) / 2],
+      label: `${GAP_MODE_TEXT[gap.mode]} · 경로 정보 없음`,
+    })
+  }
   // 계단 표시: 판정에 쓴 구간 가운데에 "! 계단 N칸"
   for (const stopResult of data.result.stops) {
     const stop = data.stops.find(s => s.key === stopResult.stopKey)

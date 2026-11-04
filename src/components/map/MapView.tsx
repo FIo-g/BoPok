@@ -459,6 +459,10 @@ export default function MapView({ mode = 'plan', compact = false, interactive = 
               <div className="map-pin pin-start" style={{ width: 'max-content' }} role="img" aria-label={pin.label}>{pin.text ?? 'P'}</div>
             ) : pin.kind === 'stop' ? (
               <button type="button" className="map-pin pin-stop" aria-label={pin.label} title={pin.label} onClick={e => { e.stopPropagation(); if (pin.itemId) onSelectItem?.(pin.itemId) }}>{pin.text}</button>
+            ) : pin.kind === 'guide' ? (
+              <div className="map-pin pin-guide" role="img" aria-label={`안내도 ${pin.label}`} title={pin.label}>{pin.text}</div>
+            ) : pin.kind === 'link' ? (
+              <div className="map-pin pin-link" role="img" aria-label={pin.label}>{pin.label}</div>
             ) : pin.kind === 'toilet' ? (
               <div className="map-pin pin-toilet" style={{ width: 'max-content' }} role="img" aria-label={`화장실: ${pin.label}`}>WC</div>
             ) : (
