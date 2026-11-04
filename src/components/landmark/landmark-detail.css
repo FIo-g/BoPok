@@ -1,0 +1,367 @@
+/* 랜드마크 상세 화면(전역 CSS: 이 저장소 설정에서는 *.module.css 가 깨져 lmd- 접두어로 구분한다). 연출은 data-state(opening → open → closing) 하나로 바꾼다. 새 애니메이션 라이브러리 없이 CSS transition 만 쓴다.
+   등장: opacity 0→1, translateY(32px→0), blur(8px→0), 700ms, cubic-bezier(0.22, 1, 0.36, 1), 순서(--i) 90ms 간격(이미지 → 이름·설명 → 위치 미니맵) */
+.lmd-root {
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --rise: 32px;
+  --card: #ffffff;
+  --card-line: #e6e1ea;
+  --chip: #f1eef3;
+  --card-ink: #1f2a1c;
+  --paper: #f8f4f6;
+  --blue: #1d4ed8;
+  position: fixed;
+  inset: 0;
+  z-index: 90; /* 가/가+ 토글(z-index 100)은 그 위에 남는다 */
+  text-align: left; /* 첫 화면(히어로)의 가운데 정렬이 이어받지 않게 */
+}
+
+.lmd-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(248, 244, 246, 0);
+  transition: background-color 700ms var(--ease);
+}
+.lmd-root[data-state='open'] .lmd-backdrop {
+  background: rgba(248, 244, 246, 0.72);
+}
+.lmd-root[data-state='closing'] .lmd-backdrop {
+  background: rgba(248, 244, 246, 0);
+  transition-duration: 400ms;
+}
+
+.lmd-panel {
+  position: absolute;
+  inset: 24px;
+  display: grid;
+  grid-template-columns: 3fr minmax(320px, 420px);
+  grid-template-rows: minmax(0, 1fr);
+  gap: 16px;
+  pointer-events: none; /* 빈틈 클릭은 배경(닫기)으로 간다. 카드들만 받는다 */
+}
+.lmd-panel[data-noimage='true'] {
+  grid-template-columns: minmax(320px, 420px);
+  justify-content: center;
+}
+.lmd-panel > * {
+  pointer-events: auto;
+}
+
+/* 이미지 → 이름·설명 → 미니맵 순서로 차례로 */
+.lmd-stagger {
+  opacity: 0;
+  transform: translateY(var(--rise));
+  filter: blur(8px);
+  transition: opacity 700ms var(--ease), transform 700ms var(--ease), filter 700ms var(--ease);
+  transition-delay: calc(var(--i, 0) * 90ms);
+}
+.lmd-root[data-state='open'] .lmd-stagger {
+  opacity: 1;
+  transform: none;
+  filter: none;
+}
+.lmd-root[data-state='closing'] .lmd-stagger {
+  /* 역순으로 아래로 내려가며 흐려진다(전체 400ms) */
+  transition-duration: 300ms;
+  transition-delay: calc((2 - var(--i, 0)) * 50ms);
+}
+
+/* 모바일 시트에서만 보이는 끌어내리기 손잡이 */
+.lmd-grabber {
+  display: none;
+}
+
+.lmd-imageCard {
+  position: relative;
+  height: 100%;
+  border-radius: 24px;
+  overflow: hidden;
+  background: var(--paper);
+  min-height: 0;
+}
+.lmd-imageCard img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 400ms ease;
+}
+.lmd-imageCard[data-img='loaded'] img {
+  opacity: 1;
+}
+/* 이미지가 오기 전: 은은한 shimmer */
+.lmd-shimmer {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 20%, rgba(255, 255, 255, 0.7) 50%, transparent 80%) var(--paper);
+  background-size: 220% 100%;
+  animation: lmd-shimmer 1.4s linear infinite;
+}
+.lmd-imageCard[data-img='loaded'] .lmd-shimmer {
+  display: none;
+}
+@keyframes lmd-shimmer {
+  from { background-position: 120% 0; }
+  to { background-position: -100% 0; }
+}
+/* 이미지를 못 불러오면 이름만 */
+.lmd-imageFallback {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  text-align: center;
+  font-family: 'Noto Serif KR', 'Nanum Myeongjo', 'Batang', serif;
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: #5b564e;
+}
+
+.lmd-side {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+}
+
+.lmd-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 2;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: var(--chip);
+  color: var(--card-ink);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+.lmd-close:hover {
+  background: #e6e1ea;
+}
+.lmd-close:focus-visible,
+.lmd-cta:focus-visible {
+  outline: 3px solid var(--blue);
+  outline-offset: 2px;
+}
+
+.lmd-card {
+  flex: 0 1 auto;
+  max-height: calc(100% - 176px);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 28px;
+  border-radius: 24px;
+  /* 바깥(연한 분홍빛 회색)과 구분되도록 순백 + 가는 테두리 + 옅은 그림자 */
+  background: var(--card);
+  border: 1px solid var(--card-line);
+  box-shadow: 0 4px 20px rgba(60, 50, 90, 0.07);
+  color: var(--card-ink);
+}
+.lmd-area {
+  margin: 0 56px 6px 0; /* 오른쪽 위 닫기 버튼 자리 */
+  font-size: 0.8125rem;
+  opacity: 0.7;
+}
+.lmd-name {
+  margin: 0 0 14px;
+  font-family: 'Noto Serif KR', 'Nanum Myeongjo', 'Batang', serif;
+  font-size: 1.7rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+.lmd-summary {
+  margin: 0 0 16px;
+  font-size: 1rem;
+  line-height: 1.7;
+}
+.lmd-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 20px;
+  padding: 0;
+  list-style: none;
+}
+.lmd-tags li {
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--chip);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.lmd-cta {
+  width: 100%;
+  height: 52px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--blue);
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+.lmd-cta:hover {
+  background: #1e40af;
+}
+.lmd-ctaCard {
+  margin-top: auto;
+  position: sticky;
+  bottom: 0;
+  flex: none;
+  /* 글이 길어 카드가 스크롤될 때 버튼 둘레로 글이 비쳐 보이지 않게 카드와 같은 흰색으로 감싼다 */
+  box-shadow: 0 8px 0 var(--card), 0 -10px 10px 6px var(--card);
+}
+.lmd-ctaSticky {
+  display: none;
+}
+
+.lmd-mapBox {
+  flex: 1;
+  min-height: 160px;
+  border: 1px solid #e6e1ea;
+  border-radius: 24px;
+  overflow: hidden;
+  background: var(--paper);
+}
+
+/* ───────── 모바일: 아래에서 올라오는 시트 ───────── */
+@media (max-width: 1023px) {
+  .lmd-root {
+    --rise: 48px;
+  }
+  .lmd-panel {
+    inset: auto 0 0 0;
+    height: 92dvh;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 8px 16px calc(84px + env(safe-area-inset-bottom));
+    overflow-y: auto;
+    border-radius: 28px 28px 0 0;
+    background: var(--paper);
+    box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.12);
+    pointer-events: auto;
+    transform: translateY(calc(var(--drag, 0) * 1px + var(--rise)));
+    opacity: 0;
+    transition: transform 700ms var(--ease), opacity 700ms var(--ease);
+  }
+  .lmd-root[data-state='open'] .lmd-panel {
+    transform: translateY(calc(var(--drag, 0) * 1px));
+    opacity: 1;
+  }
+  .lmd-root[data-state='open'] .lmd-panel[data-dragging='true'] {
+    transition: none;
+  }
+  .lmd-root[data-state='closing'] .lmd-panel {
+    transition-duration: 400ms;
+  }
+  .lmd-panel[data-noimage='true'] {
+    justify-content: flex-start;
+  }
+  .lmd-grabber {
+    flex: none;
+    display: block;
+    width: 100%;
+    padding: 8px 0 4px;
+    touch-action: none;
+    cursor: grab;
+  }
+  .lmd-grabber::before {
+    content: '';
+    display: block;
+    width: 44px;
+    height: 5px;
+    margin: 0 auto;
+    border-radius: 3px;
+    background: rgba(0, 0, 0, 0.2);
+  }
+  .lmd-imageCard {
+    flex: none;
+    height: auto;
+    aspect-ratio: 16 / 10;
+  }
+  .lmd-side {
+    display: contents; /* 이미지 · 정보 카드 · 미니맵이 세로로 이어지게 */
+  }
+  .lmd-card {
+    flex: none;
+    max-height: none;
+    overflow: visible;
+  }
+  .lmd-ctaCard {
+    display: none;
+  }
+  .lmd-ctaSticky {
+    display: block;
+    position: fixed;
+    left: 16px;
+    right: 16px;
+    bottom: calc(16px + env(safe-area-inset-bottom));
+    z-index: 3;
+    width: auto;
+    box-shadow: 0 6px 20px rgba(29, 78, 216, 0.35);
+  }
+  .lmd-mapBox {
+    flex: none;
+    height: 200px;
+    min-height: 200px;
+  }
+  .lmd-close {
+    position: fixed;
+    top: calc(8vh + 18px);
+  }
+}
+
+/* ───────── 움직임 줄이기: 등장은 opacity 만 200ms ───────── */
+@media (prefers-reduced-motion: reduce) {
+  .lmd-stagger {
+    transform: none;
+    filter: none;
+    transition: opacity 200ms linear;
+    transition-delay: 0s;
+  }
+  .lmd-root[data-state='closing'] .lmd-stagger {
+    transition-duration: 200ms;
+    transition-delay: 0s;
+  }
+  .lmd-backdrop,
+  .lmd-root[data-state='closing'] .lmd-backdrop {
+    transition-duration: 200ms;
+  }
+  .lmd-panel {
+    transition: opacity 200ms linear !important;
+    transform: none !important;
+  }
+  .lmd-shimmer {
+    animation: none;
+  }
+}
+
+/* 출처·확인 날짜·신뢰 등급 줄과 위치 추정 안내: 설명보다 작지만 큰 글씨 설정에서는 함께 커진다(rem) */
+.lmd-source {
+  margin: 0 0 8px;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  opacity: 0.75;
+}
+.lmd-note {
+  margin: 0 0 16px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: #fff7e6;
+  color: #7a4b00;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}

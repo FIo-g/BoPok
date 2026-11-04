@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { LANDMARKS, LANDMARK_FADE_ZOOM, LANDMARK_MATERIAL_COLORS, LANDMARK_SCALE_RANGE, LANDMARK_STYLE, hiddenFids, landmarkCenter, landmarkFade } from './landmarks'
+import { LANDMARKS, LANDMARK_FADE_ZOOM, LANDMARK_MATERIAL_COLORS, LANDMARK_SCALE_RANGE, LANDMARK_STYLE, hiddenFids, landmarkById, landmarkCenter, landmarkFade, landmarkRectCoords, landmarkViewBearing } from './landmarks'
 import { MAP_MAX_BOUNDS } from './map-config'
 
 // 대전 경계 안(건물 타일이 있는 범위)
@@ -106,5 +106,84 @@ describe('landmarkFade', () => {
     expect(landmarkFade(15)).toBeCloseTo(0.5)
     expect(landmarkFade(z1)).toBe(1)
     expect(landmarkFade(18)).toBe(1)
+  })
+})
+
+describe('상세 화면 데이터', () => {
+  it('모든 랜드마크에 사진·설명·동네·칩(최대 3개)이 있다', () => {
+    for (const l of LANDMARKS) {
+      expect(l.image).toBe(`/images/landmarks/${l.id}.webp`)
+      expect(l.imageAlt.length).toBeGreaterThan(0)
+      expect(l.summary.length).toBeGreaterThan(10)
+      expect(l.area).toContain('·')
+      expect(l.tags.length).toBeGreaterThan(0)
+      expect(l.tags.length).toBeLessThanOrEqual(3)
+    }
+  })
+
+  it('사진 파일이 있고 300KB 이하다', () => {
+    for (const l of LANDMARKS) {
+      const file = path.join(__dirname, '../../../public', l.image)
+      expect(fs.existsSync(file)).toBe(true)
+      expect(fs.statSync(file).size).toBeLessThanOrEqual(300 * 1024)
+    }
+  })
+
+  it('카메라 줌은 기본 17.3, 큰 곳(다리·광장)은 16.6', () => {
+    for (const l of LANDMARKS) expect(l.detailZoom).toBe(['expo-bridge', 'expo-plaza'].includes(l.id) ? 16.6 : 17.3)
+  })
+
+  it('landmarkById 는 id 로 찾고 없으면 undefined', () => {
+    expect(landmarkById('expo-bridge')?.name).toBe('엑스포다리')
+    expect(landmarkById('nope')).toBeUndefined()
+    expect(landmarkById(null)).toBeUndefined()
+  })
+
+  it('정면 방향은 모형 앞(+Z)을 마주 보는 bearingDeg - 90, 직접 정한 값이 있으면 그 값', () => {
+    expect(landmarkViewBearing({ bearingDeg: 90 })).toBe(0)
+    expect(landmarkViewBearing({ bearingDeg: 0 })).toBe(270)
+    expect(landmarkViewBearing({ bearingDeg: 355.8 })).toBe(265.8)
+    expect(landmarkViewBearing({ bearingDeg: 90, viewBearingDeg: 45 })).toBe(45)
+  })
+
+  it('다리·광장만 미니맵 도형이 있고, 모서리 5개로 닫힌 직사각형이다', () => {
+    for (const l of LANDMARKS) expect(landmarkRectCoords(l) !== null).toBe(l.hideFids.length === 0)
+    const ring = landmarkRectCoords(landmarkById('expo-bridge')!)!
+    expect(ring).toHaveLength(5)
+    expect(ring[0]).toEqual(ring[4])
+    // 남북으로 놓인 다리(bearing 0): 위도 폭이 길고 경도 폭이 좁다
+    const lngs = ring.map(c => c[0])
+    const lats = ring.map(c => c[1])
+    expect(Math.max(...lats) - Math.min(...lats)).toBeGreaterThan((Math.max(...lngs) - Math.min(...lngs)) * 5)
+  })
+})
+
+describe('설명의 출처와 근거 (AGENTS.md 6장)', () => {
+  it('모든 랜드마크에 출처·확인 날짜(YYYY-MM-DD)·신뢰 등급(A/B/C)이 있다', () => {
+    for (const l of LANDMARKS) {
+      expect(l.source.trim().length).toBeGreaterThan(0)
+      expect(l.checkedAt).toMatch(/^\d{4}-(0[1-9]|1[0-2])-\d{2}$/)
+      expect(['A', 'B', 'C']).toContain(l.confidence)
+    }
+  })
+
+  it('위치가 추정인 곳(도서관·시민광장)에는 위치 안내가 붙어 있다', () => {
+    for (const id of ['ibs-library', 'expo-plaza']) expect(landmarkById(id)?.locationNote).toBeTruthy()
+    expect(landmarkById('art-museum')?.locationNote).toBeUndefined()
+  })
+
+  it('근거 없는 이동 판단 문구(그늘·쉬어가기·걸어서 이어짐·보행 전용·날씨 무관 등)가 설명과 칩에 없다', () => {
+    const banned = ['그늘', '쉬어가기', '쉬기 좋', '걸어서', '보행 전용', '날씨 무관', '이동 거리', '동선', '로비 휴식', '공원 연결']
+    for (const l of LANDMARKS) {
+      const text = [l.summary, ...l.tags].join(' ')
+      for (const word of banned) expect(text, `${l.id}: ${word}`).not.toContain(word)
+    }
+  })
+
+  it('이미지 설명(alt)은 실제 사진이라고 단정하지 않고 "이미지"라고 쓴다', () => {
+    for (const l of LANDMARKS) {
+      expect(l.imageAlt).toContain('이미지')
+      expect(l.imageAlt).not.toContain('사진')
+    }
   })
 })
