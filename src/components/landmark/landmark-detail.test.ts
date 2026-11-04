@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  CLOSED, detailReducer, isDetailVisible, placeIdFromSearch, searchWithPlace, shouldCloseOnKey, shouldCloseSheet,
+  CLOSED, detailReducer, landmarkSourceText, isDetailVisible, placeIdFromSearch, searchWithPlace, shouldCloseOnKey, shouldCloseSheet,
   type DetailEvent, type DetailState,
 } from './landmark-detail'
 
@@ -91,5 +91,19 @@ describe('닫는 입력', () => {
     expect(shouldCloseSheet(80)).toBe(true)
     expect(shouldCloseSheet(200)).toBe(true)
     expect(shouldCloseSheet(-30)).toBe(false)
+  })
+})
+
+describe('설명의 출처 문구', () => {
+  it('출처 · 확인 월 · 신뢰 등급과 그 뜻을 함께 보여 준다', () => {
+    expect(landmarkSourceText({ source: '보폭 팀 작성 문구', checkedAt: '2026-11-04', confidence: 'C' })).toBe('출처: 보폭 팀 작성 문구 · 2026.11 확인 · 신뢰 C(사진·후기로 추정)')
+    expect(landmarkSourceText({ source: 'OpenStreetMap', checkedAt: '2026-11', confidence: 'B' })).toBe('출처: OpenStreetMap · 2026.11 확인 · 신뢰 B(지도에서 측정)')
+    expect(landmarkSourceText({ source: '공식 안내', checkedAt: '2026-11-04', confidence: 'A' })).toContain('신뢰 A(공식 안내·현장 확인)')
+  })
+
+  it('출처가 비었거나 날짜 형식이 틀리면 "출처 확인 중"', () => {
+    expect(landmarkSourceText({ source: '  ', checkedAt: '2026-11-04', confidence: 'C' })).toBe('출처 확인 중')
+    expect(landmarkSourceText({ source: 'x', checkedAt: '내일', confidence: 'C' })).toBe('출처 확인 중')
+    expect(landmarkSourceText({ source: 'x', checkedAt: '2026-13-01', confidence: 'C' })).toBe('출처 확인 중')
   })
 })

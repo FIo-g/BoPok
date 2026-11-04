@@ -157,3 +157,33 @@ describe('상세 화면 데이터', () => {
     expect(Math.max(...lats) - Math.min(...lats)).toBeGreaterThan((Math.max(...lngs) - Math.min(...lngs)) * 5)
   })
 })
+
+describe('설명의 출처와 근거 (AGENTS.md 6장)', () => {
+  it('모든 랜드마크에 출처·확인 날짜(YYYY-MM-DD)·신뢰 등급(A/B/C)이 있다', () => {
+    for (const l of LANDMARKS) {
+      expect(l.source.trim().length).toBeGreaterThan(0)
+      expect(l.checkedAt).toMatch(/^\d{4}-(0[1-9]|1[0-2])-\d{2}$/)
+      expect(['A', 'B', 'C']).toContain(l.confidence)
+    }
+  })
+
+  it('위치가 추정인 곳(도서관·시민광장)에는 위치 안내가 붙어 있다', () => {
+    for (const id of ['ibs-library', 'expo-plaza']) expect(landmarkById(id)?.locationNote).toBeTruthy()
+    expect(landmarkById('art-museum')?.locationNote).toBeUndefined()
+  })
+
+  it('근거 없는 이동 판단 문구(그늘·쉬어가기·걸어서 이어짐·보행 전용·날씨 무관 등)가 설명과 칩에 없다', () => {
+    const banned = ['그늘', '쉬어가기', '쉬기 좋', '걸어서', '보행 전용', '날씨 무관', '이동 거리', '동선', '로비 휴식', '공원 연결']
+    for (const l of LANDMARKS) {
+      const text = [l.summary, ...l.tags].join(' ')
+      for (const word of banned) expect(text, `${l.id}: ${word}`).not.toContain(word)
+    }
+  })
+
+  it('이미지 설명(alt)은 실제 사진이라고 단정하지 않고 "이미지"라고 쓴다', () => {
+    for (const l of LANDMARKS) {
+      expect(l.imageAlt).toContain('이미지')
+      expect(l.imageAlt).not.toContain('사진')
+    }
+  })
+})

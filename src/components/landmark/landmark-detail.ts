@@ -54,3 +54,14 @@ export const shouldCloseOnKey = (key: string) => key === 'Escape' || key === 'Es
 // 모바일 시트를 아래로 끌어 닫는 기준(px)
 export const SHEET_CLOSE_DRAG_PX = 80
 export const shouldCloseSheet = (dragPx: number) => dragPx >= SHEET_CLOSE_DRAG_PX
+
+// ───────── 설명의 출처 문구 (AGENTS.md 6장: 출처·확인 날짜·신뢰 등급을 항상 붙인다) ─────────
+export const CONFIDENCE_LABEL = { A: '공식 안내·현장 확인', B: '지도에서 측정', C: '사진·후기로 추정' } as const
+
+// "출처: {source} · {YYYY.MM} 확인 · 신뢰 C(사진·후기로 추정)". 출처나 날짜가 비었거나 형식이 틀리면 "출처 확인 중"
+export function landmarkSourceText(l: { source: string; checkedAt: string; confidence: 'A' | 'B' | 'C' }): string {
+  const m = l.checkedAt.match(/^(\d{4})-(0[1-9]|1[0-2])(?:-\d{2})?$/)
+  const source = l.source.trim()
+  if (!source || !m) return '출처 확인 중'
+  return `출처: ${source} · ${m[1]}.${m[2]} 확인 · 신뢰 ${l.confidence}(${CONFIDENCE_LABEL[l.confidence]})`
+}

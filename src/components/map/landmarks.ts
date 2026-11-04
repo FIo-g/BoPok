@@ -32,6 +32,12 @@ export type Landmark = {
   image: string
   imageAlt: string
   summary: string
+  // 설명(summary·tags)의 출처·확인 날짜·신뢰 등급 (AGENTS.md 6장: 장소 정보에는 항상 붙인다). 상세 화면에 "출처: … · 2026.11 확인 · 신뢰 C(…)"로 보인다
+  source: string
+  checkedAt: string // YYYY-MM-DD
+  confidence: 'A' | 'B' | 'C'
+  // 위치가 추정인 곳에 붙이는 한 줄(상세 화면에 보인다)
+  locationNote?: string
   // 동네 한 줄
   area: string
   // 칩으로 보여 줄 말(최대 3개)
@@ -49,52 +55,59 @@ export const LANDMARKS: Landmark[] = [
     id: 'science-museum', name: '국립중앙과학관', model: 'science-museum.glb',
     lng: 127.375263, lat: 36.375062, offsetM: [14, 28], footprintLongM: 116, bearingDeg: 355.8, scale: 1.3, heightScale: 1.3,
     hideFids: [96430, 11060, 96431, 11075], placeId: '국립중앙과학관',
-    image: '/images/landmarks/science-museum.webp', imageAlt: '국립중앙과학관 외관 사진',
-    summary: '자연사·과학기술 전시관과 천체관을 갖춘 국립 과학관이에요. 원반 모양 지붕이 상징이고, 전시관 사이 이동 거리가 길어 쉬는 곳을 미리 정해두면 좋아요.',
-    area: '유성구 · 대덕연구단지', tags: ['전시', '천체관', '넓은 부지'], detailZoom: 17.3,
+    image: '/images/landmarks/science-museum.webp', imageAlt: '국립중앙과학관 외관 이미지',
+    summary: '자연사·과학기술 전시관과 천체관을 갖춘 국립 과학관이에요. 원반 모양 지붕이 상징이에요.',
+    source: '보폭 팀 작성 문구(공식 안내로 확인 전)', checkedAt: '2026-11-04', confidence: 'C',
+    area: '유성구 · 대덕연구단지', tags: ['전시', '천체관'], detailZoom: 17.3,
   },
   {
     id: 'arts-center', name: '대전예술의전당', model: 'arts-center.glb',
     lng: 127.383798, lat: 36.366591, offsetM: [3, 6], footprintLongM: 145, bearingDeg: 90, scale: 1.3, heightScale: 1.3,
     hideFids: [133229],
-    image: '/images/landmarks/arts-center.webp', imageAlt: '대전예술의전당 외관 사진',
-    summary: '대전의 대표 공연장이에요. 큰 공연장과 작은 공연장이 함께 있어 공연 전후 동선이 길어질 수 있어요.',
-    area: '서구 · 둔산대공원', tags: ['공연장', '로비 휴식'], detailZoom: 17.3,
+    image: '/images/landmarks/arts-center.webp', imageAlt: '대전예술의전당 외관 이미지',
+    summary: '대전의 대표 공연장이에요. 큰 공연장과 작은 공연장이 함께 있어요.',
+    source: '보폭 팀 작성 문구(공식 안내로 확인 전)', checkedAt: '2026-11-04', confidence: 'C',
+    area: '서구 · 둔산대공원', tags: ['공연장'], detailZoom: 17.3,
   },
   {
     id: 'art-museum', name: '대전시립미술관', model: 'art-museum.glb',
     lng: 127.385743, lat: 36.366824, offsetM: [-3, 9], footprintLongM: 88, bearingDeg: 94, scale: 1.25, heightScale: 1.3,
     hideFids: [118740], placeId: '대전시립미술관',
-    image: '/images/landmarks/art-museum.webp', imageAlt: '대전시립미술관 외관 사진',
-    summary: '둔산대공원 안의 시립 미술관이에요. 근현대 미술 기획전이 열리고, 예술의전당·한밭수목원과 걸어서 이어져요.',
-    area: '서구 · 둔산대공원', tags: ['미술관', '공원 연결'], detailZoom: 17.3,
+    image: '/images/landmarks/art-museum.webp', imageAlt: '대전시립미술관 외관 이미지',
+    summary: '둔산대공원 안의 시립 미술관이에요. 근현대 미술 기획전이 열려요.',
+    source: '보폭 팀 작성 문구(공식 안내로 확인 전)', checkedAt: '2026-11-04', confidence: 'C',
+    area: '서구 · 둔산대공원', tags: ['미술관'], detailZoom: 17.3,
   },
   // 한밭수목원 열대식물원(온실): 바닥 모양 74.5×45.9m 가 모형(75×51m)과 거의 같은 fid 140185
   {
     id: 'hanbat-greenhouse', name: '한밭수목원 열대식물원', model: 'hanbat-arboretum.glb',
     lng: 127.392562, lat: 36.367784, offsetM: [-6, 3], footprintLongM: 75, bearingDeg: 90, scale: 0.95, heightScale: 1.3,
     hideFids: [140185], placeId: '한밭수목원',
-    image: '/images/landmarks/hanbat-greenhouse.webp', imageAlt: '한밭수목원 열대식물원 유리온실 사진',
-    summary: '열대 식물을 실내에서 볼 수 있는 유리온실이에요. 날씨와 상관없이 둘러볼 수 있어 수목원 산책 중 쉬어가기 좋아요.',
-    area: '서구 · 한밭수목원', tags: ['실내', '식물원', '날씨 무관'], detailZoom: 17.3,
+    image: '/images/landmarks/hanbat-greenhouse.webp', imageAlt: '한밭수목원 열대식물원 유리온실 이미지',
+    summary: '열대 식물을 실내에서 볼 수 있는 유리온실이에요.',
+    source: '보폭 팀 작성 문구(공식 안내로 확인 전)', checkedAt: '2026-11-04', confidence: 'C',
+    area: '서구 · 한밭수목원', tags: ['실내', '식물원'], detailZoom: 17.3,
   },
   // 기초과학연구원 도서관: 연구원 터에서 모형(78×42m)과 모양이 가장 닮은 fid 106589(72.6×40.7m, 남북 방향). 건물 이름은 지도 데이터에 없어 모양으로 고른 것이라 확인이 필요하다
   {
     id: 'ibs-library', name: '기초과학연구원 도서관', model: 'ibs-library.glb',
     lng: 127.387171, lat: 36.377117, offsetM: [3, -8], footprintLongM: 73, bearingDeg: 0.3, scale: 0.95, heightScale: 1.3,
     hideFids: [106589],
-    image: '/images/landmarks/ibs-library.webp', imageAlt: '기초과학연구원 도서관 외관 사진',
-    summary: '엑스포과학공원 옆 기초과학연구원 캠퍼스의 과학문화 공간이에요. 곡선 유리 띠가 이어지는 외관이 특징이에요.',
-    area: '유성구 · 엑스포과학공원', tags: ['과학문화', '실내'], detailZoom: 17.3,
+    image: '/images/landmarks/ibs-library.webp', imageAlt: '기초과학연구원 도서관 외관 이미지',
+    summary: '엑스포과학공원 옆 기초과학연구원 캠퍼스에 있는 도서관이에요.',
+    source: '보폭 팀 작성 문구(공식 안내로 확인 전)', checkedAt: '2026-11-04', confidence: 'C',
+    locationNote: '건물 이름은 지도 데이터에 없어, 모양이 가장 닮은 건물에 놓은 위치예요. 확인 중이에요.',
+    area: '유성구 · 엑스포과학공원', tags: ['과학문화'], detailZoom: 17.3,
   },
   // 엑스포다리(갑천 위 남북 방향 보행교). 다리에는 숨길 건물이 없다. 좌표는 OpenStreetMap 의 다리 가운데
   {
     id: 'expo-bridge', name: '엑스포다리', model: 'expo-bridge.glb',
     lng: 127.38804, lat: 36.37261, offsetM: [0, 12], footprintLongM: 120, bearingDeg: 0, scale: 1.2, heightScale: 1,
     hideFids: [],
-    image: '/images/landmarks/expo-bridge.webp', imageAlt: '엑스포다리 사진',
-    summary: '갑천을 가로지르는 보행자 전용 다리예요. 과학관 쪽과 둔산 쪽을 걸어서 잇고, 저녁 조명이 예뻐요.',
-    area: '갑천 · 엑스포과학공원 앞', tags: ['보행 전용', '강변', '야경'], detailZoom: 16.6, miniShapeM: [204, 10],
+    image: '/images/landmarks/expo-bridge.webp', imageAlt: '엑스포다리 이미지',
+    summary: '갑천을 가로질러 엑스포과학공원과 한밭수목원 쪽을 잇는 다리예요. 지도(OpenStreetMap)에는 보행자 길로 표시돼 있어요.',
+    source: 'OpenStreetMap 다리 정보 · 보폭 팀 작성 문구', checkedAt: '2026-11-04', confidence: 'B',
+    area: '갑천 · 엑스포과학공원 앞', tags: ['갑천', '다리'], detailZoom: 16.6, miniShapeM: [204, 10],
   },
   // 대전엑스포 시민광장: 한빛탑 앞에서 엑스포다리까지 이어지는 엑스포과학공원 안의 광장 구역(물빛광장 음악분수·야외공연장·무빙쉘터).
   // 엑스포로 북쪽, 한빛탑(36.3766, 127.3881)과 엑스포다리 북쪽 끝(36.3741) 사이의 남북으로 긴 포장 광장에 놓는다. 지도에 이 광장의 이름·바닥 윤곽이 없어 위치는 추정이라 확인이 필요하다
@@ -102,9 +115,11 @@ export const LANDMARKS: Landmark[] = [
     id: 'expo-plaza', name: '대전엑스포 시민광장', model: 'expo-plaza.glb',
     lng: 127.38807, lat: 36.3753, offsetM: [0, 0], footprintLongM: 147, bearingDeg: 0, scale: 1.1, heightScale: 1,
     hideFids: [],
-    image: '/images/landmarks/expo-plaza.webp', imageAlt: '대전엑스포 시민광장 사진',
-    summary: '큰 지붕 아래 열린 광장이에요. 행사가 자주 열리고, 그늘이 넓어 이동 중 쉬기 좋아요.',
-    area: '유성구 · 엑스포과학공원', tags: ['광장', '그늘', '행사'], detailZoom: 16.6, miniShapeM: [147, 68],
+    image: '/images/landmarks/expo-plaza.webp', imageAlt: '대전엑스포 시민광장 이미지',
+    summary: '엑스포과학공원 안의 광장 구역이에요. 한빛탑 앞에서 엑스포다리까지 이어지고, 음악분수와 야외공연장이 있다고 소개돼 있어요.',
+    source: '여행 정보 사이트 소개 글(대전엑스포시민광장 = 한빛탑 앞~엑스포다리 광장 구역)', checkedAt: '2026-11-04', confidence: 'C',
+    locationNote: '광장의 이름·바닥 윤곽이 지도 데이터에 없어 위치는 추정한 값이에요.',
+    area: '유성구 · 엑스포과학공원', tags: ['광장', '음악분수'], detailZoom: 16.6, miniShapeM: [147, 68],
   },
 ]
 

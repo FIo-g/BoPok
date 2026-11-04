@@ -4,7 +4,7 @@
 // 모바일은 아래에서 올라오는 시트(끌어 내리면 닫힘). 단계(phase)는 useLandmarkDetail 이 정하고, 여기서는 그리기·포커스·키보드만 한다.
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { LazyLandmarkMiniMap, type Landmark } from '@/components/map'
-import { shouldCloseOnKey, shouldCloseSheet, type DetailPhase } from './landmark-detail'
+import { landmarkSourceText, shouldCloseOnKey, shouldCloseSheet, type DetailPhase } from './landmark-detail'
 import './landmark-detail.css'
 
 const FOCUSABLE = 'button:not([disabled]), [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
@@ -118,6 +118,8 @@ export function LandmarkDetail({ landmark, phase, onClose }: { landmark: Landmar
             <ul className="lmd-tags" aria-label="특징">
               {landmark.tags.map(tag => <li key={tag}>{tag}</li>)}
             </ul>
+            <p className="lmd-source">{landmarkSourceText(landmark)}</p>
+            {landmark.locationNote && <p className="lmd-note">{landmark.locationNote}</p>}
             <button type="button" className="lmd-cta lmd-ctaCard" onClick={onClose}>지도 더 둘러보기</button>
           </section>
           <div className="lmd-mapBox lmd-stagger" style={{ '--i': 2 } as React.CSSProperties} role="img" aria-label={`${landmark.name} 위치 지도`}>
