@@ -1,0 +1,152 @@
+{
+  "checkedAt": "2026-11-03T10:20:41.411Z",
+  "passed": true,
+  "sharedDbWritten": false,
+  "externalRequests": 5,
+  "requests": [
+    {
+      "operation": "getVilageFcst",
+      "httpStatus": 200,
+      "resultCode": "00",
+      "items": 1000
+    },
+    {
+      "operation": "getMidLandFcst",
+      "httpStatus": 200,
+      "resultCode": "00",
+      "items": 1
+    },
+    {
+      "operation": "getMidTa",
+      "httpStatus": 200,
+      "resultCode": "00",
+      "items": 1
+    },
+    {
+      "operation": "getPwnStatus",
+      "httpStatus": 200,
+      "resultCode": "00",
+      "items": 1
+    },
+    {
+      "operation": "getVilageFcst",
+      "httpStatus": 200,
+      "resultCode": "00",
+      "items": 52
+    }
+  ],
+  "shortWithinPublishedWindow": true,
+  "days": [
+    {
+      "day": 1,
+      "date": "2026-11-03",
+      "status": "ok",
+      "source": "short",
+      "view": "forecast",
+      "summary": "구름많음 · 최고 12℃ · 최저 8℃ · 비 올 확률 20%",
+      "sourceLine": "출처: 기상청 단기예보 · 11월 3일 17시 발표 · 대전 기준 · 예보는 바뀔 수 있어요",
+      "alerts": []
+    },
+    {
+      "day": 2,
+      "date": "2026-11-04",
+      "status": "ok",
+      "source": "short",
+      "view": "forecast",
+      "summary": "구름많음 · 최고 17℃ · 최저 6℃ · 비 올 확률 20%",
+      "sourceLine": "출처: 기상청 단기예보 · 11월 3일 17시 발표 · 대전 기준 · 예보는 바뀔 수 있어요",
+      "alerts": []
+    },
+    {
+      "day": 3,
+      "date": "2026-11-05",
+      "status": "ok",
+      "source": "short",
+      "view": "forecast",
+      "summary": "흐림, 비 · 최고 15℃ · 최저 9℃ · 비 올 확률 60%",
+      "sourceLine": "출처: 기상청 단기예보 · 11월 3일 17시 발표 · 대전 기준 · 예보는 바뀔 수 있어요",
+      "alerts": []
+    },
+    {
+      "day": 4,
+      "date": "2026-11-06",
+      "status": "ok",
+      "source": "short",
+      "view": "forecast",
+      "summary": "맑음 · 최고 11℃ · 최저 6℃ · 비 올 확률 0%",
+      "sourceLine": "출처: 기상청 단기예보 · 11월 3일 17시 발표 · 대전 기준 · 예보는 바뀔 수 있어요",
+      "alerts": []
+    },
+    {
+      "day": 5,
+      "date": "2026-11-07",
+      "status": "ok",
+      "source": "short",
+      "view": "forecast",
+      "summary": "맑음 · 최고 9℃ · 최저 -1℃ · 비 올 확률 0%",
+      "sourceLine": "출처: 기상청 단기예보 · 11월 3일 17시 발표 · 대전 기준 · 예보는 바뀔 수 있어요",
+      "alerts": []
+    },
+    {
+      "day": 6,
+      "date": "2026-11-08",
+      "status": "ok",
+      "source": "mid",
+      "view": "forecast",
+      "summary": "구름많음 · 최고 9℃ · 최저 1℃ · 비 올 확률 30%",
+      "sourceLine": "출처: 기상청 중기예보 · 11월 3일 18시 발표 · 대전 기준 · 예보는 바뀔 수 있어요",
+      "alerts": []
+    },
+    {
+      "day": 7,
+      "date": "2026-11-09",
+      "status": "ok",
+      "source": "mid",
+      "view": "forecast",
+      "summary": "구름많음 · 최고 12℃ · 최저 3℃ · 비 올 확률 20%",
+      "sourceLine": "출처: 기상청 중기예보 · 11월 3일 18시 발표 · 대전 기준 · 예보는 바뀔 수 있어요",
+      "alerts": []
+    },
+    {
+      "day": 8,
+      "date": "2026-11-10",
+      "status": "ok",
+      "source": "mid",
+      "view": "forecast",
+      "summary": "맑음 · 최고 12℃ · 최저 2℃ · 비 올 확률 10%",
+      "sourceLine": "출처: 기상청 중기예보 · 11월 3일 18시 발표 · 대전 기준 · 예보는 바뀔 수 있어요",
+      "alerts": []
+    },
+    {
+      "day": 9,
+      "date": "2026-11-11",
+      "status": "ok",
+      "source": "mid",
+      "view": "forecast",
+      "summary": "맑음 · 최고 14℃ · 최저 2℃ · 비 올 확률 10%",
+      "sourceLine": "출처: 기상청 중기예보 · 11월 3일 18시 발표 · 대전 기준 · 예보는 바뀔 수 있어요",
+      "alerts": []
+    },
+    {
+      "day": 10,
+      "date": "2026-11-12",
+      "status": "ok",
+      "source": "mid",
+      "view": "forecast",
+      "summary": "맑음 · 최고 15℃ · 최저 4℃ · 비 올 확률 10%",
+      "sourceLine": "출처: 기상청 중기예보 · 11월 3일 18시 발표 · 대전 기준 · 예보는 바뀔 수 있어요",
+      "alerts": []
+    },
+    {
+      "day": 11,
+      "date": "2026-11-13",
+      "status": "ok",
+      "source": "mid",
+      "view": "forecast",
+      "summary": "맑음 · 최고 16℃ · 최저 6℃ · 비 올 확률 10%",
+      "sourceLine": "출처: 기상청 중기예보 · 11월 3일 18시 발표 · 대전 기준 · 예보는 바뀔 수 있어요",
+      "alerts": []
+    }
+  ],
+  "note": "기상특보 API 응답·대전 파싱 경로를 확인했다. 현재 특보가 없으면 경고 표시를 인위적으로 만들지 않는다."
+}

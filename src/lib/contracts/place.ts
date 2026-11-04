@@ -71,6 +71,16 @@ export type PlaceModel = z.infer<typeof PlaceModelSchema>
 export const FoodTagSchema = z.enum(['sugary', 'salty', 'fatty', 'alcohol', 'grapefruit', 'leafy_greens'])
 export type FoodTag = z.infer<typeof FoodTagSchema>
 
+// 화면·주의 문구에 쓰는 이름
+export const FOOD_TAG_LABEL: Record<FoodTag, string> = {
+  sugary: '단 음식',
+  salty: '짠 음식',
+  fatty: '기름진 음식',
+  alcohol: '술',
+  grapefruit: '자몽',
+  leafy_greens: '녹색 잎채소',
+}
+
 export const MenuItemSchema = SourceInfoSchema.extend({
   name: z.string().min(1),
   priceKrw: z.number().int().min(0).optional(),
@@ -107,6 +117,7 @@ export const PlaceDetailSchema = PlaceSummarySchema.extend({
   zones: z.array(PlaceZoneSchema).optional(),
   model: PlaceModelSchema.optional(),
   menus: z.array(MenuItemSchema).optional(),
+  research: z.object({ candidateCount: z.number().int().positive(), continuousWheelchairAccess: z.literal('unverified'), notice: z.string() }).optional(),
 })
 export type PlaceDetail = z.infer<typeof PlaceDetailSchema>
 // 프론트가 쓰는 기존 응답 모양을 유지하고, 서버 입력도 같은 계약에서 검사한다.
@@ -114,6 +125,8 @@ export const PlaceIdInputSchema = z.string().trim().min(1).max(100).regex(/^[a-z
 export const PlaceListQuerySchema = z.object({
   q: z.string().trim().max(100).default(''),
   styles: z.array(z.string().trim().min(1).max(30)).max(10).default([]),
+  kind: PlaceKindSchema.optional(),
+  limit: z.number().int().min(1).max(300).optional(),
 }).strict()
 export type PlaceListQuery = z.infer<typeof PlaceListQuerySchema>
 export const PlaceSummaryListSchema = z.array(PlaceSummarySchema)

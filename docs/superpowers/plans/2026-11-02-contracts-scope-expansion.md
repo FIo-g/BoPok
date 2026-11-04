@@ -184,7 +184,7 @@ it('인터뷰도 끝 날짜를 받고 없는 날짜는 거부', () => {
 - Consumes: `FoodTagSchema` (Task 1), `SourceInfoSchema` (common)
 - Produces:
   - `HealthConditionSchema = z.enum(['diabetes', 'hypertension', 'dyslipidemia', 'kidney_disease', 'gout', 'heart_disease'])`
-  - `MedicationClassSchema = z.enum(['anticoagulant', 'calcium_channel_blocker'])` (주석: 최종 목록은 주의 규칙 표와 함께 [빌더])
+  - `MedicationClassSchema = z.enum(['warfarin', 'calcium_channel_blocker'])` (주석: 최종 목록은 주의 규칙 표와 함께 [빌더])
   - `HealthVisibilitySchema = z.enum(['group', 'self'])`
   - `TravelerHealthSchema = { travelerId, conditions: HealthCondition[], medicationClasses: MedicationClass[], visibility, consentAt: z.iso.datetime(), enteredByUserId: string }`, `type TravelerHealth`
   - `TravelerHealthInputSchema = { conditions, medicationClasses, visibility, consent: z.literal(true) }` (요청 본문 — 동의 없으면 거부, 설계 4.4)

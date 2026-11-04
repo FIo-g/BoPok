@@ -54,10 +54,26 @@ export const lazyMockApi: Api = {
     unconfirm: async tripId => (await mock()).trips.unconfirm(tripId),
     shareText: async tripId => (await mock()).trips.shareText(tripId),
   },
+  health: {
+    list: async tripId => (await mock()).health.list(tripId),
+    put: async (tripId, travelerId, input) => (await mock()).health.put(tripId, travelerId, input),
+    remove: async (tripId, travelerId) => (await mock()).health.remove(tripId, travelerId),
+  },
+  weather: {
+    get: async tripId => (await mock()).weather.get(tripId),
+  },
   opinions: {
     list: async versionId => (await mock()).opinions.list(versionId),
     add: async (versionId, input) => (await mock()).opinions.add(versionId, input),
     remove: async opinionId => (await mock()).opinions.remove(opinionId),
+  },
+  feedback: {
+    list: async tripId => (await mock()).feedback.list(tripId),
+    save: async (tripId, input) => (await mock()).feedback.save(tripId, input),
+  },
+  chat: {
+    list: async (tripId, after) => (await mock()).chat.list(tripId, after),
+    post: async (tripId, text) => (await mock()).chat.post(tripId, text),
   },
   places: {
     list: async query => (await mock()).places.list(query),

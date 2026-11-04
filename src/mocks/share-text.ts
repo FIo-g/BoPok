@@ -2,6 +2,7 @@
 // 하루 요약, 연락처, "출발 전 운영 여부 확인". 숫자는 엔진 판정 결과에서만 가져온다.
 import type { Trip, TripVersion, Traveler } from '@/lib/contracts'
 import { formatRange } from '@/lib/engine'
+import { formatRideMin } from '@/lib/format'
 import { judgeWithMocks } from './judge-helper'
 
 const MODE_TEXT = { walk: '걸어서', car: '자가용', taxi: '택시', bus: '버스' } as const
@@ -25,7 +26,7 @@ export function buildShareText(trip: Trip, version: TripVersion, travelers: Trav
     const leg = result.legs.find(l => l.fromStopKey === stop.key)
     const next = version.stops[index + 1]
     if (leg && next && leg.mode !== 'walk') {
-      lines.push(`  ↓ ${MODE_TEXT[leg.mode]} 이동${leg.rideMin !== null ? ` 약 ${Math.round(leg.rideMin)}분` : ''}`)
+      lines.push(`  ↓ ${MODE_TEXT[leg.mode]} 이동${leg.rideMin !== null ? ` ${formatRideMin(leg.rideMin)}` : ''}`)
     }
   })
   lines.push('', `하루 걷기 ${formatRange(result.day)} · 쉬지 않고 걷는 시간 최대 ${formatRange(result.longest)} (추정치)`)

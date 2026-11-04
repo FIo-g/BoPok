@@ -1,0 +1,12 @@
+{
+  "checkedAt": "2026-11-03T10:26:35.613Z",
+  "target": "isolated-test-server-3001",
+  "httpStatus": 200,
+  "days": 11,
+  "allAvailable": true,
+  "sources": [
+    "short",
+    "mid"
+  ],
+  "sharedDbWritten": false
+}

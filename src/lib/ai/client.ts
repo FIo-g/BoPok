@@ -1,11 +1,31 @@
 // AI 호출을 한 곳에 모은다 (설계 6.2). 모든 AI 요청은 이 파일의 callJson으로만 한다.
 // 키는 환경 변수로만 받고, 로그·에러 메시지에 키 값은 절대 넣지 않는다.
 import 'server-only'
+import Anthropic from '@anthropic-ai/sdk'
 import type { z } from 'zod'
 
 export type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string }
-export type AiProvider = { name: 'upstage' | 'opencode'; baseUrl: string; model: string; apiKey: string }
+// Claude는 공식 SDK로 부르므로 baseUrl이 없다. upstage·opencode는 OpenAI 호환 chat/completions
+export type ClaudeProvider = { name: 'claude'; model: string; apiKey: string }
+export type ChatCompletionsProvider = { name: 'upstage' | 'opencode'; baseUrl: string; model: string; apiKey: string }
+export type AiProvider = ClaudeProvider | ChatCompletionsProvider
 export type FetchLike = (url: string, init: RequestInit) => Promise<Response>
+
+// 테스트에서 실제 API 대신 가짜를 끼우려고 SDK 호출면만 좁게 정의한다 — 진짜 Anthropic 클라이언트도 그대로 들어맞는다
+export type ClaudeCreateParams = Anthropic.Beta.Messages.MessageCreateParamsNonStreaming
+export type ClaudeReply = Pick<Anthropic.Beta.Messages.BetaMessage, 'content' | 'stop_reason'>
+export type ClaudeClientOptions = { apiKey: string; maxRetries: 0; timeout: number }
+export type ClaudeClient = {
+  beta: { messages: { create: (params: ClaudeCreateParams) => PromiseLike<ClaudeReply> } }
+}
+export type ClaudeClientFactory = (options: ClaudeClientOptions) => ClaudeClient
+
+// Sonnet medium (김태형 11/4): 쓸 수 있는 API 예산이 $50라 토큰값이 Opus의 절반인 Sonnet으로,
+// 후보에서 고르고 시간을 맞추는 일이라 effort는 low보다 한 단계 위로 둔다
+const DEFAULT_CLAUDE_MODEL = 'claude-sonnet-5-5'
+const CLAUDE_EFFORT = 'medium'
+// 서버 쪽 대체 모델(fallbacks: 'default')을 쓰려면 이 베타 헤더가 있어야 한다
+const CLAUDE_FALLBACK_BETA = 'server-side-fallback-2026-07-01'
 
 // 키 값은 메시지에 담지 않는다 — 원인은 reason으로만 구분한다
 export class AiCallError extends Error {
@@ -52,9 +72,13 @@ async function upstreamErrorSummary(response: Response): Promise<string> {
   return ''
 }
 
-// Upstage 먼저, opencode는 모델이 정해져 있을 때만. 키 없는 공급자는 뺀다
+// Claude 먼저, 그다음 Upstage, opencode는 모델이 정해져 있을 때만. 키 없는 공급자는 뺀다
 export function providersFromEnv(env: Record<string, string | undefined> = process.env): AiProvider[] {
   const providers: AiProvider[] = []
+  const claudeKey = env.ANTHROPIC_API_KEY?.trim()
+  if (claudeKey) {
+    providers.push({ name: 'claude', model: textOrDefault(env.ANTHROPIC_MODEL, DEFAULT_CLAUDE_MODEL), apiKey: claudeKey })
+  }
   const upstageKey = env.UPSTAGE_API_KEY?.trim()
   if (upstageKey) {
     providers.push({
@@ -121,9 +145,76 @@ function parseWith<T>(content: string, schema: z.ZodType<T>): { ok: true; value:
   return { ok: false, issues }
 }
 
-// 공급자 한 곳에 한 번 묻는다. 공급자 단위 실패(네트워크·시간 초과·429·5xx·401 등)는 재시도 없이 던진다
-async function askOnce(
-  provider: AiProvider,
+// Claude 오류는 SDK의 타입 에러 클래스로 가른다 (문자열 비교 금지).
+// 메시지에는 상태 코드와 오류 종류만 담는다 — 키·프롬프트 내용은 넣지 않는다
+function describeClaudeError(error: unknown): string {
+  if (error instanceof Anthropic.APIConnectionTimeoutError) {
+    return 'claude 공급자 요청이 실패했어요 (시간 초과)'
+  }
+  if (error instanceof Anthropic.APIConnectionError) {
+    return 'claude 공급자 요청이 실패했어요 (네트워크)'
+  }
+  if (error instanceof Anthropic.APIError && error.status !== undefined) {
+    const detail = error.type ? `: ${safeSnippet(error.type)}` : ''
+    // 429·401·5xx(529 과부하 포함)는 공급자 쪽 문제, 그 밖의 4xx는 우리 요청 형식 문제
+    if (
+      error instanceof Anthropic.RateLimitError ||
+      error instanceof Anthropic.AuthenticationError ||
+      error instanceof Anthropic.InternalServerError
+    ) {
+      return `claude 공급자가 문제를 알렸어요 (HTTP ${error.status}${detail})`
+    }
+    return `claude 공급자 요청이 형식 오류를 알렸어요 (HTTP ${error.status}${detail})`
+  }
+  return 'claude 공급자 요청이 실패했어요'
+}
+
+// Claude에 한 번 묻고 text 블록만 이어 붙여 돌려준다.
+// 현재 모델은 temperature·top_p·top_k·thinking 지정과 prefill을 거절(400)하므로 보내지 않는다
+async function askClaude(
+  provider: ClaudeProvider,
+  messages: ChatMessage[],
+  createClient: ClaudeClientFactory,
+  timeoutMs: number,
+): Promise<string> {
+  // OpenAI식 system 메시지는 최상위 system 문자열로, 나머지는 대화 순서 그대로
+  const system = messages
+    .filter(message => message.role === 'system')
+    .map(message => message.content)
+    .join('\n\n')
+  const turns: ClaudeCreateParams['messages'] = []
+  for (const message of messages) {
+    if (message.role !== 'system') turns.push({ role: message.role, content: message.content })
+  }
+  let reply: ClaudeReply
+  try {
+    // SDK 자동 재시도는 끄고(maxRetries 0) 재시도·대체는 callJson이 정한 대로만 한다
+    const client = createClient({ apiKey: provider.apiKey, maxRetries: 0, timeout: timeoutMs })
+    reply = await client.beta.messages.create({
+      model: provider.model,
+      max_tokens: 16000,
+      ...(system ? { system } : {}),
+      messages: turns,
+      output_config: { effort: CLAUDE_EFFORT },
+      betas: [CLAUDE_FALLBACK_BETA],
+      fallbacks: 'default',
+    })
+  } catch (error) {
+    throw new Error(describeClaudeError(error))
+  }
+  // 거절 응답의 글은 쓰지 않고 공급자 실패로 보내 다음 공급자로 넘어가게 한다
+  if (reply.stop_reason === 'refusal') throw new Error('claude 공급자가 요청을 거절했어요 (refusal)')
+  let text = ''
+  for (const block of reply.content) {
+    if (block.type === 'text') text += block.text
+  }
+  if (!text.trim()) throw new Error('claude 공급자 답이 비어 있어요')
+  return text
+}
+
+// OpenAI 호환 공급자(upstage·opencode)에 chat/completions로 한 번 묻는다
+async function askChatCompletions(
+  provider: ChatCompletionsProvider,
   messages: ChatMessage[],
   fetchLike: FetchLike,
   temperature: number,
@@ -164,10 +255,26 @@ async function askOnce(
   return readContent(response)
 }
 
+// 공급자 한 곳에 한 번 묻는다. 공급자 단위 실패(네트워크·시간 초과·429·5xx·401·거절 등)는 재시도 없이 던진다
+async function askOnce(
+  provider: AiProvider,
+  messages: ChatMessage[],
+  fetchLike: FetchLike,
+  createClient: ClaudeClientFactory,
+  temperature: number,
+  timeoutMs: number,
+  sessionId: string,
+): Promise<string> {
+  if (provider.name === 'claude') return askClaude(provider, messages, createClient, timeoutMs)
+  return askChatCompletions(provider, messages, fetchLike, temperature, timeoutMs, sessionId)
+}
+
 export async function callJson<T>(
   req: { messages: ChatMessage[]; schema: z.ZodType<T>; temperature?: number },
   deps?: {
     fetch?: FetchLike
+    // 테스트에서 가짜 Anthropic 클라이언트를 끼우는 자리 (기본: 공식 SDK)
+    anthropic?: ClaudeClientFactory
     providers?: AiProvider[]
     timeoutMs?: number
     deadlineMs?: number
@@ -175,6 +282,7 @@ export async function callJson<T>(
   },
 ): Promise<T> {
   const fetchLike = deps?.fetch ?? (globalThis.fetch as unknown as FetchLike)
+  const createClient: ClaudeClientFactory = deps?.anthropic ?? (options => new Anthropic(options))
   const providers = deps?.providers ?? providersFromEnv()
   const timeoutMs = deps?.timeoutMs ?? 30000
   // 전체 마감: 시작 시각부터 지나면 남은 시도를 하지 않는다 (기본 45초)
@@ -203,7 +311,7 @@ export async function callJson<T>(
       let content: string
       try {
         // 각 요청 시간 초과는 timeoutMs와 남은 시간 중 작은 값으로 건다
-        content = await askOnce(provider, currentMessages, fetchLike, temperature, Math.min(timeoutMs, remainingMs), sessionId)
+        content = await askOnce(provider, currentMessages, fetchLike, createClient, temperature, Math.min(timeoutMs, remainingMs), sessionId)
       } catch (error) {
         lastError = new AiCallError('provider_failed', error instanceof Error ? error.message : '공급자 호출 실패')
         console.error('[ai] 공급자 실패', provider.name, provider.model, lastError.message)

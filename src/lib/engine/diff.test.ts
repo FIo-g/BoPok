@@ -71,7 +71,13 @@ describe('diffSummary', () => {
   })
 
   it('반올림으로 같게 보이면 빠짐', () => {
-    const before = judge(notional42())
+    const judged = judge(notional42())
+    // 반올림 경계에서 먼 값(28분)으로 고정한다 — 계단 시간 근거가 바뀌어도 이 검사가 경계에 걸리지 않게.
+    const before: JudgeResult = {
+      ...judged,
+      longest: { ...judged.longest, base: 28, high: 33.6 },
+      day: { ...judged.day, base: 28, high: 33.6 },
+    }
     // formatRange가 같으면(분 단위 표시가 같으면) longest·day는 빠진다.
     const after: JudgeResult = {
       ...before,

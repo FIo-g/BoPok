@@ -1,7 +1,7 @@
 // 판정을 한 번 돌리는 공용 길. 6단계(버전의 판정 요약)와 7단계(공유 글)가 같이 쓴다.
 // 숫자는 전부 engine.judge에서 나온다 — 서버가 따로 계산하지 않는다 (AGENTS.md 6장).
 import 'server-only'
-import type { JudgeResult, JudgeSummary, Leg, PlaceDetail, Stop, Traveler } from '@/lib/contracts'
+import { stopsOfDay, tripDays, type JudgeResult, type JudgeSummary, type Leg, type PlaceDetail, type Stop, type Traveler, type Verdict } from '@/lib/contracts'
 import { judge, requiredLegs } from '@/lib/engine'
 import type { PlaceGeoDeps } from './place-geo'
 import { getPlaceGeoDeps } from './place-geo'
@@ -39,11 +39,46 @@ export async function judgeStops(
   return { result, places, legs }
 }
 
+// 그날 하루의 판정. stops는 그날 장소만이다.
+export type DayRun = JudgeRun & { day: number; stops: Stop[] }
+
+// 여러 날 여행은 날마다 따로 판정한다 (설계 2026-11-02 4.2). 걷기 조건은 하루 기준이라 합치면 안 되고,
+// 전날 마지막 장소에서 다음 날 첫 장소로 걷는 길도 없다. 빈 일정은 지금까지처럼 1일차 하나로 본다.
+export async function judgeDays(
+  args: { stops: Stop[]; travelers: Traveler[]; tuned?: Partial<Traveler['condition']> },
+  deps: PlaceGeoDeps = getPlaceGeoDeps(),
+): Promise<DayRun[]> {
+  const days = tripDays(args.stops)
+  return Promise.all(
+    (days.length > 0 ? days : [1]).map(async day => {
+      const stops = stopsOfDay(args.stops, day)
+      return { day, stops, ...(await judgeStops({ ...args, stops }, deps)) }
+    }),
+  )
+}
+
 // 6단계에서 버전에 저장할 요약. 판정을 못 돌렸으면 null로 저장한다.
 export function summaryOf(run: JudgeRun): JudgeSummary | null {
   if (!run.result) return null
   const { verdict, reason, day, longest } = run.result
   return { verdict, reason, day, longest }
+}
+
+const VERDICT_WEIGHT: Record<Verdict, number> = { ok: 0, info: 1, adjust: 2 }
+
+// 목록의 배지 하나로 여러 날을 보여 주므로 가장 나쁜 날을 고른다. 조건을 넘는 날이 하루라도 있으면
+// '조건 충족'으로 보이면 안 되기 때문이다. 같으면 앞선 날. 어느 날인지 이유 앞에 밝힌다.
+export function summaryOfDays(runs: DayRun[]): JudgeSummary | null {
+  const judged = runs.filter((run): run is DayRun & { result: JudgeResult } => run.result !== null)
+  const [first] = judged
+  if (!first) return null
+
+  const worst = judged.reduce((picked, run) =>
+    VERDICT_WEIGHT[run.result.verdict] > VERDICT_WEIGHT[picked.result.verdict] ? run : picked,
+  first)
+  const summary = summaryOf(worst)
+  if (!summary || runs.length < 2) return summary
+  return { ...summary, reason: `${worst.day}일차: ${summary.reason}` }
 }
 
 // 요약 계산에 두는 시간 제한. 버전을 저장할 때 TMAP을 실제로 부르므로, 느린 날에
@@ -79,7 +114,7 @@ export async function safeSummary(
   if (args.travelers.length === 0) return null
 
   try {
-    return summaryOf(await withTimeout(judgeStops(args, deps), timeoutMs))
+    return summaryOfDays(await withTimeout(judgeDays(args, deps), timeoutMs))
   } catch (error) {
     const reason = error instanceof SummaryTimeout ? `시간 초과 ${error.message}` : error
     console.error('[acct] 판정 요약을 만들지 못해 요약 없이 저장해요', reason)

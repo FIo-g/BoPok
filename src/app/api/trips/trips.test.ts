@@ -201,6 +201,88 @@ describe('PATCH /api/trips/:id (여행 고치기)', () => {
     expect(cleared.date ?? null).toBeNull()
   })
 
+  it('끝 날짜를 저장하고 null로 비울 수 있다', async () => {
+    const { owner, groupId } = await ownerWithGroup()
+    const created = TripSchema.parse(
+      await readBody(
+        await postTrip(
+          postTripRequest(owner.cookie, { groupId, title: '대전 2박 3일', date: '2026-11-15', endDate: '2026-11-17', mode: 'scratch' }),
+        ),
+      ),
+    )
+    expect(created).toMatchObject({ date: '2026-11-15', endDate: '2026-11-17' })
+
+    const cleared = TripSchema.parse(
+      await readBody(await patchTrip(patchTripRequest(owner.cookie, { endDate: null }), routeParams({ id: created.id }))),
+    )
+    expect(cleared.endDate ?? null).toBeNull()
+    expect(cleared.date).toBe('2026-11-15')
+  })
+
+  it('끝 날짜가 시작 날짜보다 빠른 여행은 만들 수 없다', async () => {
+    const { owner, groupId } = await ownerWithGroup()
+    const res = await postTrip(
+      postTripRequest(owner.cookie, { groupId, title: '대전', date: '2026-11-15', endDate: '2026-11-14', mode: 'scratch' }),
+    )
+    expect(res.status).toBe(400)
+  })
+
+  describe('날짜 한쪽만 고칠 때는 저장된 값과 합쳐서 본다', () => {
+    async function datedTrip() {
+      const { owner, groupId } = await ownerWithGroup()
+      const trip = await tripOf(owner.cookie, groupId)
+      await patchTrip(
+        patchTripRequest(owner.cookie, { date: '2026-11-15', endDate: '2026-11-17' }),
+        routeParams({ id: trip.id }),
+      )
+      return { owner, trip }
+    }
+
+    it('끝 날짜만 시작보다 빠르게 바꾸면 400이고 값이 그대로다', async () => {
+      const { owner, trip } = await datedTrip()
+      const res = await patchTrip(patchTripRequest(owner.cookie, { endDate: '2026-11-14' }), routeParams({ id: trip.id }))
+      expect(res.status).toBe(400)
+
+      const same = TripSchema.parse(await readBody(await patchTrip(patchTripRequest(owner.cookie, {}), routeParams({ id: trip.id }))))
+      expect(same.endDate).toBe('2026-11-17')
+    })
+
+    it('시작 날짜만 끝보다 늦게 바꾸면 400', async () => {
+      const { owner, trip } = await datedTrip()
+      const res = await patchTrip(patchTripRequest(owner.cookie, { date: '2026-11-18' }), routeParams({ id: trip.id }))
+      expect(res.status).toBe(400)
+    })
+
+    it('끝 날짜가 남아 있는데 시작 날짜만 지우면 400', async () => {
+      const { owner, trip } = await datedTrip()
+      const res = await patchTrip(patchTripRequest(owner.cookie, { date: null }), routeParams({ id: trip.id }))
+      expect(res.status).toBe(400)
+    })
+
+    it('시작 날짜가 없는 여행에 끝 날짜만 넣으면 400', async () => {
+      const { owner, groupId } = await ownerWithGroup()
+      const trip = await tripOf(owner.cookie, groupId)
+      const res = await patchTrip(patchTripRequest(owner.cookie, { endDate: '2026-11-17' }), routeParams({ id: trip.id }))
+      expect(res.status).toBe(400)
+    })
+
+    it('두 날짜를 같이 비우거나 같이 옮기면 된다', async () => {
+      const { owner, trip } = await datedTrip()
+      const moved = TripSchema.parse(
+        await readBody(
+          await patchTrip(patchTripRequest(owner.cookie, { date: '2026-12-01', endDate: '2026-12-02' }), routeParams({ id: trip.id })),
+        ),
+      )
+      expect(moved).toMatchObject({ date: '2026-12-01', endDate: '2026-12-02' })
+
+      const cleared = TripSchema.parse(
+        await readBody(await patchTrip(patchTripRequest(owner.cookie, { date: null, endDate: null }), routeParams({ id: trip.id }))),
+      )
+      expect(cleared.date ?? null).toBeNull()
+      expect(cleared.endDate ?? null).toBeNull()
+    })
+  })
+
   it('빈 몸체면 지금 값을 그대로 돌려준다', async () => {
     const { owner, groupId } = await ownerWithGroup()
     const trip = await tripOf(owner.cookie, groupId)

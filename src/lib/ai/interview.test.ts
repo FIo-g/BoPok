@@ -1,8 +1,10 @@
 // 인터뷰(칸 채우기 대화) 검사. AI는 가짜 callJson으로만 부른다.
 import { describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
-import { CONDITION_QUESTIONS, conditionFromAnswers } from '@/lib/engine/condition'
+import { CONDITION_QUESTIONS, conditionFromAnswers, UNKNOWN_CHOICE_LABEL } from '@/lib/engine/condition'
 import {
+  EXERCISE_FREQUENCY_LABEL,
+  ExerciseFrequencySchema,
   InterviewResponseSchema,
   InterviewStateSchema,
   type InterviewAnswer,
@@ -63,11 +65,22 @@ function depsForFlow(mode: StartMode, callJson: AiDeps['callJson']): AiDeps {
   }
 }
 
+// 운동 횟수 선택지 — 문구는 계약(EXERCISE_FREQUENCY_LABEL)에서 가져와 라벨이 바뀌어도 테스트가 따라간다
+const EXERCISE_VALUES = ExerciseFrequencySchema.options
+const EXERCISE_LABELS = EXERCISE_VALUES.map(value => EXERCISE_FREQUENCY_LABEL[value])
+
+// 운동 횟수 칸을 '잘 모르겠어요'로 넘긴다 — 걷기 조건을 보는 테스트에서 이 칸이 상관없을 때 쓴다
+async function skipExercise(state: InterviewState, deps: Pick<AiDeps, 'callJson'>): Promise<InterviewState> {
+  expect(currentQuestion(state).slot).toBe('traveler_exercise')
+  return (await applyAnswer(state, { choiceIndex: EXERCISE_LABELS.length }, deps)).state
+}
+
 // 슬롯마다 고르는 번호 — 끝까지 선택으로만 간다
 function pickForSlot(body: InterviewResponse): InterviewAnswer {
   if (body.slot === 'traveler_age') return { choiceIndex: 1 }
   if (body.slot === 'traveler_height') return { choiceIndex: 1 }
   if (body.slot === 'traveler_sex') return { choiceIndex: 0 }
+  if (body.slot === 'traveler_exercise') return { choiceIndex: 1 } // 두 번째 칸 (EXERCISE_VALUES[1])
   if (body.slot === 'traveler_condition_gate') return { choiceIndex: 0 }
   if (body.slot === 'traveler_condition') return { choiceIndex: 1 }
   if (body.slot === 'time') return { choiceIndex: 1 }
@@ -191,6 +204,10 @@ describe('선택으로 끝까지', () => {
     expect(seen).toContain('styles')
     expect(seen).toContain('budget')
     expect(seen).not.toContain('fix_target')
+
+    // 운동 횟수는 사람마다 한 번씩 묻고, 고른 값이 여행자 저장에 실려 간다
+    expect(seen.filter(slot => slot === 'traveler_exercise')).toHaveLength(3)
+    for (const person of travelers) expect(person.exerciseFrequency).toBe(EXERCISE_VALUES[1])
   })
 
   it('history가 질문·답을 쌓는다', async () => {
@@ -225,7 +242,9 @@ describe('여행자 칸', () => {
     expect(state.filled.travelers[0]?.age).toBe(65)
     state = (await applyAnswer(state, { choiceIndex: 1 }, deps)).state
     expect(state.filled.travelers[0]?.heightCm).toBe(160)
-    // 이름표로 성별이 정해졌으니 관문으로 바로 간다
+    // 이름표로 성별이 정해졌으니 성별은 건너뛰고 운동 횟수로 간다. 그다음이 걷기 조건 갈림길이다
+    expect(currentQuestion(state).slot).toBe('traveler_exercise')
+    state = await skipExercise(state, deps)
     expect(currentQuestion(state).slot).toBe('traveler_condition_gate')
   })
 
@@ -278,6 +297,7 @@ describe('여행자 칸', () => {
     let state = initialState('scratch', [mom])
     state = (await applyAnswer(state, { choiceIndex: 1 }, deps)).state // 60대
     state = (await applyAnswer(state, { choiceIndex: 1 }, deps)).state // 160cm
+    state = await skipExercise(state, deps)
     expect(currentQuestion(state).slot).toBe('traveler_condition_gate')
 
     state = (await applyAnswer(state, { choiceIndex: 1 }, deps)).state // 부모님께 직접 받을게요
@@ -308,6 +328,9 @@ describe('여행자 칸', () => {
     expect(currentQuestion(state).slot).toBe('traveler_sex')
     state = (await applyAnswer(state, { choiceIndex: 0 }, deps)).state // 여성
     expect(state.filled.travelers[0]?.sex).toBe('female')
+    // 성별 다음은 운동 횟수, 그다음이 걷기 조건 갈림길
+    expect(currentQuestion(state).slot).toBe('traveler_exercise')
+    state = await skipExercise(state, deps)
     expect(currentQuestion(state).slot).toBe('traveler_condition_gate')
     state = (await applyAnswer(state, { choiceIndex: 0 }, deps)).state // 없어요
     expect(state.filled.travelers[0]?.condition).toEqual({})
@@ -322,6 +345,7 @@ describe('여행자 칸', () => {
     let state = initialState('scratch', [parentTraveler()])
     state = (await applyAnswer(state, { choiceIndex: 1 }, deps)).state
     state = (await applyAnswer(state, { choiceIndex: 1 }, deps)).state
+    state = await skipExercise(state, deps)
     expect(currentQuestion(state).slot).toBe('traveler_condition_gate')
     state = (await applyAnswer(state, { choiceIndex: 0 }, deps)).state // 지금 대신 답할게요
     const question = currentQuestion(state)
@@ -340,6 +364,7 @@ describe('여행자 칸', () => {
         let state = initialState('scratch', [parentTraveler()])
         state = (await applyAnswer(state, { choiceIndex: 1 }, deps)).state
         state = (await applyAnswer(state, { choiceIndex: 1 }, deps)).state
+        state = await skipExercise(state, deps)
         state = (await applyAnswer(state, { choiceIndex: 0 }, deps)).state
         for (let i = 0; i < answerIndex; i++) {
           state = (await applyAnswer(state, { choiceIndex: 0 }, deps)).state
@@ -364,6 +389,7 @@ describe('여행자 칸', () => {
     let state = initialState('scratch', [parentTraveler()])
     state = (await applyAnswer(state, { choiceIndex: 1 }, deps)).state
     state = (await applyAnswer(state, { choiceIndex: 1 }, deps)).state
+    state = await skipExercise(state, deps)
     state = (await applyAnswer(state, { choiceIndex: 0 }, deps)).state
     // continuousMin·dayMin·restMin을 지나 계단 질문까지 간다
     state = (await applyAnswer(state, { choiceIndex: 1 }, deps)).state
@@ -380,6 +406,7 @@ describe('여행자 칸', () => {
     let state = initialState('scratch', [parentTraveler()])
     state = (await applyAnswer(state, { choiceIndex: 1 }, deps)).state
     state = (await applyAnswer(state, { choiceIndex: 1 }, deps)).state
+    state = await skipExercise(state, deps)
     state = (await applyAnswer(state, { choiceIndex: 0 }, deps)).state
     for (let i = 0; i < 5; i++) {
       state = (await applyAnswer(state, { choiceIndex: 0 }, deps)).state
@@ -396,6 +423,7 @@ describe('여행자 칸', () => {
     expect(state.filled.travelers[0]?.age).toBeUndefined()
     state = (await applyAnswer(state, { choiceIndex: 4 }, deps)).state // 잘 모르겠어요
     expect(state.filled.travelers[0]?.heightCm).toBeUndefined()
+    state = await skipExercise(state, deps)
     state = (await applyAnswer(state, { choiceIndex: 0 }, deps)).state // 대신 답하기
     state = (await applyAnswer(state, { choiceIndex: 3 }, deps)).state // 잘 모르겠어요
     expect(state.filled.travelers[0]?.condition.continuousMin).toBeUndefined()
@@ -490,6 +518,184 @@ describe('여행자 칸', () => {
     expect(state.filled.travelers[0]?.filledBySelf).toBe(false)
     expect(state.filled.travelers[1]?.filledBySelf).toBe(false)
     expect(state.filled.travelers[2]?.filledBySelf).toBe(true)
+  })
+})
+
+describe('운동 횟수 질문 (traveler_exercise)', () => {
+  const friend = (): Traveler => ({
+    id: 't5',
+    label: '친구',
+    pace: 'unknown',
+    mobilityAid: false,
+    isParent: false,
+    condition: {},
+    filledBySelf: false,
+  })
+
+  // 운동 횟수 질문 직전까지 간 상태 — 엄마는 이름표로 성별이 정해져 키 다음이 바로 운동이다
+  async function atExercise(traveler: Traveler = parentTraveler()): Promise<InterviewState> {
+    const deps = { callJson: throwingCallJson() }
+    let state = initialState('scratch', [traveler])
+    state = (await applyAnswer(state, { choiceIndex: 1 }, deps)).state // 나이
+    state = (await applyAnswer(state, { choiceIndex: 1 }, deps)).state // 키
+    if (state.cursor.slot === 'traveler_sex') state = (await applyAnswer(state, { choiceIndex: 0 }, deps)).state
+    expect(state.cursor.slot).toBe('traveler_exercise')
+    return state
+  }
+
+  it('질문 문구와 선택지 5개(운동 횟수 4개 + 잘 모르겠어요)', async () => {
+    const question = currentQuestion(await atExercise())
+    expect(question.slot).toBe('traveler_exercise')
+    expect(question.text).toBe('엄마는 일주일에 운동을 몇 번 하세요? (걷기·체조 포함)')
+    expect(question.choices).toEqual([...EXERCISE_LABELS, UNKNOWN_CHOICE_LABEL])
+    expect(question.choices).toHaveLength(5)
+  })
+
+  it('부모님이 아니어도 같은 문구, 받침에 따라 은/는', async () => {
+    const me: Traveler = { ...friend(), id: 't9', label: '나', filledBySelf: true }
+    const mine = currentQuestion(await atExercise(me))
+    expect(mine.text).toBe('나는 일주일에 운동을 몇 번 하세요? (걷기·체조 포함)')
+    const theirs = currentQuestion(await atExercise(friend()))
+    expect(theirs.text).toBe('친구는 일주일에 운동을 몇 번 하세요? (걷기·체조 포함)')
+    const sibling = currentQuestion(await atExercise({ ...friend(), label: '동생' }))
+    expect(sibling.text).toBe('동생은 일주일에 운동을 몇 번 하세요? (걷기·체조 포함)')
+    expect(sibling.choices).toEqual(theirs.choices)
+  })
+
+  it('이름표로 성별이 정해진 엄마는 키 다음에 운동, 성별을 모르는 친구는 성별 → 운동 → 걷기 조건 갈림길', async () => {
+    const deps = { callJson: throwingCallJson() }
+    // 엄마: 나이 → 키 → 운동 (성별 질문 없음)
+    let mom = initialState('scratch', [parentTraveler()])
+    mom = (await applyAnswer(mom, { choiceIndex: 1 }, deps)).state
+    mom = (await applyAnswer(mom, { choiceIndex: 1 }, deps)).state
+    expect(currentQuestion(mom).slot).toBe('traveler_exercise')
+
+    // 친구: 나이 → 키 → 성별 → 운동 → 갈림길
+    let other = initialState('scratch', [friend()])
+    other = (await applyAnswer(other, { choiceIndex: 1 }, deps)).state
+    other = (await applyAnswer(other, { choiceIndex: 1 }, deps)).state
+    expect(currentQuestion(other).slot).toBe('traveler_sex')
+    other = (await applyAnswer(other, { choiceIndex: 0 }, deps)).state
+    expect(currentQuestion(other).slot).toBe('traveler_exercise')
+    other = (await applyAnswer(other, { choiceIndex: 0 }, deps)).state
+    expect(currentQuestion(other).slot).toBe('traveler_condition_gate')
+  })
+
+  it('성별을 모르겠어요로 넘겨도 운동을 거쳐 갈림길로 간다', async () => {
+    const deps = { callJson: throwingCallJson() }
+    let state = initialState('scratch', [friend()])
+    state = (await applyAnswer(state, { choiceIndex: 1 }, deps)).state
+    state = (await applyAnswer(state, { choiceIndex: 1 }, deps)).state
+    state = (await applyAnswer(state, { choiceIndex: 2 }, deps)).state // 잘 모르겠어요
+    expect(state.filled.travelers[0]?.sex).toBeUndefined()
+    expect(currentQuestion(state).slot).toBe('traveler_exercise')
+    state = await skipExercise(state, deps)
+    expect(currentQuestion(state).slot).toBe('traveler_condition_gate')
+  })
+
+  it('선택지를 고르면 그 값이 들어가고 AI를 부르지 않는다', async () => {
+    const counter = { calls: 0 }
+    const deps = { callJson: throwingCallJson(counter) }
+    for (const [index, value] of EXERCISE_VALUES.entries()) {
+      const out = await applyAnswer(await atExercise(), { choiceIndex: index }, deps)
+      expect(out.retryText).toBeUndefined()
+      expect(out.state.filled.travelers[0]?.exerciseFrequency).toBe(value)
+      expect(out.state.cursor).toEqual({ slot: 'traveler_condition_gate', travelerIndex: 0, questionIndex: 0 })
+    }
+    expect(counter.calls).toBe(0)
+  })
+
+  it('글자로 라벨을 그대로 쓰면(공백이 달라도) 같은 값, AI를 부르지 않는다', async () => {
+    const counter = { calls: 0 }
+    const deps = { callJson: throwingCallJson(counter) }
+    const state = await atExercise()
+    for (const [index, value] of EXERCISE_VALUES.entries()) {
+      const exact = await applyAnswer(state, { text: EXERCISE_LABELS[index]! }, deps)
+      expect(exact.retryText).toBeUndefined()
+      expect(exact.state.filled.travelers[0]?.exerciseFrequency).toBe(value)
+      const spaced = await applyAnswer(state, { text: ` ${EXERCISE_LABELS[index]!.replace(/\s+/g, '  ')} ` }, deps)
+      expect(spaced.state.filled.travelers[0]?.exerciseFrequency).toBe(value)
+    }
+    expect(counter.calls).toBe(0)
+  })
+
+  it('잘 모르겠어요를 고르면 칸을 지운다 (이미 있던 값도)', async () => {
+    const deps = { callJson: throwingCallJson() }
+    const had = { ...parentTraveler(), exerciseFrequency: 'five_plus' as const }
+    for (const answer of [{ choiceIndex: EXERCISE_LABELS.length }, { text: UNKNOWN_CHOICE_LABEL }]) {
+      const out = await applyAnswer(await atExercise(had), answer, deps)
+      expect(out.retryText).toBeUndefined()
+      expect(out.state.filled.travelers[0]).not.toHaveProperty('exerciseFrequency')
+      expect(out.state.cursor.slot).toBe('traveler_condition_gate')
+    }
+  })
+
+  it('고르면 filledBySelf를 이름표로 다시 정한다 (부모님 false, 본인 true)', async () => {
+    const deps = { callJson: throwingCallJson() }
+    const mom = await applyAnswer(await atExercise(), { choiceIndex: 0 }, deps)
+    expect(mom.state.filled.travelers[0]?.filledBySelf).toBe(false)
+    const me: Traveler = { ...friend(), id: 't9', label: '나' }
+    const mine = await applyAnswer(await atExercise(me), { choiceIndex: 0 }, deps)
+    expect(mine.state.filled.travelers[0]?.filledBySelf).toBe(true)
+  })
+
+  it('엉뚱한 글(“주 3회”·“3번”·“세 번”)은 다시 묻고 AI를 부르지 않는다', async () => {
+    const counter = { calls: 0 }
+    const deps = { callJson: throwingCallJson(counter) }
+    const state = await atExercise()
+    for (const text of ['주 3회', '3번', '세 번', '글쎄요', '']) {
+      const out = await applyAnswer(state, { text }, deps)
+      expect(out.retryText).toContain('아래에서 골라 주세요')
+      expect(out.state.cursor).toEqual(state.cursor)
+      expect(out.state.filled.travelers[0]).not.toHaveProperty('exerciseFrequency')
+    }
+    expect(counter.calls).toBe(0)
+  })
+
+  it('API: 엉뚱한 글이면 같은 질문에 접두사를 붙여 다시 묻는다', async () => {
+    const deps = depsForFlow('scratch', throwingCallJson())
+    const planted = InterviewStateSchema.parse({
+      ...(await atExercise()),
+      history: [],
+    })
+    await deps.interviews.save('trip-dev', planted)
+    const response = await handleInterview(makeRequest({ tripId: 'trip-dev', answer: { text: '주 3회' } }), deps)
+    expect(response.status).toBe(200)
+    const body = InterviewResponseSchema.parse(await response.json())
+    expect(body.slot).toBe('traveler_exercise')
+    expect(body.text).toBe('다시 여쭤볼게요. 아래에서 골라 주세요. 엄마는 일주일에 운동을 몇 번 하세요? (걷기·체조 포함)')
+    expect(body.choices).toEqual([...EXERCISE_LABELS, UNKNOWN_CHOICE_LABEL])
+    expect(body.questionId).toBe('traveler_exercise:0:0')
+  })
+
+  it('범위 밖 선택은 같은 질문', async () => {
+    const state = await atExercise()
+    const out = await applyAnswer(state, { choiceIndex: 99 }, { callJson: throwingCallJson() })
+    expect(out.state).toBe(state)
+    expect(out.retryText).toBeUndefined()
+  })
+
+  it('여러 명이면 사람마다 한 번씩 묻고 마지막 사람 뒤에 날짜로 간다', async () => {
+    const deps = { callJson: throwingCallJson() }
+    const mom = parentTraveler('엄마')
+    const me: Traveler = { ...friend(), id: 't2', label: '나', sex: 'male' }
+    let state = initialState('scratch', [mom, me])
+    for (const slot of ['traveler_age', 'traveler_height', 'traveler_exercise'] as const) {
+      expect(currentQuestion(state).slot).toBe(slot)
+      state = (await applyAnswer(state, { choiceIndex: 1 }, deps)).state
+    }
+    expect(state.filled.travelers[0]?.exerciseFrequency).toBe(EXERCISE_VALUES[1])
+    state = (await applyAnswer(state, { choiceIndex: 0 }, deps)).state // 엄마 갈림길: 대신 답하기
+    // 걷기 조건 6문항(첫 선택지)을 지나면 다음 사람 나이로 간다
+    for (let i = 0; i < CONDITION_QUESTIONS.length; i++) {
+      state = (await applyAnswer(state, { choiceIndex: 0 }, deps)).state
+    }
+    expect(state.cursor).toEqual({ slot: 'traveler_age', travelerIndex: 1, questionIndex: 0 })
+    // 두 번째 사람(성별이 이미 있는 나)도 키 다음에 운동
+    state = (await applyAnswer(state, { choiceIndex: 1 }, deps)).state
+    state = (await applyAnswer(state, { choiceIndex: 1 }, deps)).state
+    expect(state.cursor).toEqual({ slot: 'traveler_exercise', travelerIndex: 1, questionIndex: 0 })
+    expect(currentQuestion(state).text).toContain('나는')
   })
 })
 
@@ -747,6 +953,68 @@ describe('날짜·시간·장소', () => {
       callJson: stubCallJson({ mustVisit: [{ name: '한밭수목원' }] }),
     })
     expect(must.state.filled.mustVisit).toEqual([{ name: '한밭수목원' }])
+  })
+
+  describe('여행 기간 (trip_length)', () => {
+    const lengthState = (overrides: Record<string, unknown> = {}) =>
+      InterviewStateSchema.parse({
+        filled: {
+          mode: 'scratch',
+          travelers: [parentTraveler()],
+          styles: [],
+          date: '2026-11-28',
+          mustVisit: [],
+          fixTargets: [],
+          ...overrides,
+        },
+        cursor: { slot: 'trip_length', travelerIndex: 0, questionIndex: 0 },
+        history: [],
+      })
+
+    it('날짜 다음에 기간을 묻는다', async () => {
+      const state = InterviewStateSchema.parse({
+        ...lengthState(),
+        cursor: { slot: 'date', travelerIndex: 0, questionIndex: 0 },
+      })
+      const out = await applyAnswer(state, { choiceIndex: 0 }, { callJson: stubCallJson({}) })
+      expect(out.state.cursor.slot).toBe('trip_length')
+    })
+
+    it('당일치기면 끝 날짜를 두지 않고 다음 질문으로 간다', async () => {
+      const out = await applyAnswer(lengthState(), { choiceIndex: 0 }, { callJson: stubCallJson({}) })
+      expect(out.state.filled.endDate).toBeUndefined()
+      expect(out.state.cursor.slot).toBe('time')
+    })
+
+    it('2박 3일을 고르면 시작일 + 2일이 끝 날짜다 (달이 넘어가도)', async () => {
+      const out = await applyAnswer(lengthState({ date: '2026-11-29' }), { choiceIndex: 2 }, { callJson: stubCallJson({}) })
+      expect(out.state.filled.endDate).toBe('2026-12-01')
+    })
+
+    it.each([
+      ['4박 5일', '2026-12-02'],
+      ['4박5일', '2026-12-02'],
+      ['5일', '2026-12-02'],
+      ['1박 2일', '2026-11-29'],
+      ['3일이요', '2026-11-30'],
+      ['2박 정도요', '2026-11-30'],
+      ['5일간', '2026-12-02'],
+    ])('직접 적은 "%s"도 알아듣는다', async (text, endDate) => {
+      const out = await applyAnswer(lengthState(), { text }, { callJson: stubCallJson({}) })
+      expect(out.state.filled.endDate).toBe(endDate)
+    })
+
+    it('하루라고 적으면 앞서 정한 끝 날짜를 지운다', async () => {
+      const out = await applyAnswer(lengthState({ endDate: '2026-11-30' }), { text: '하루만요' }, { callJson: stubCallJson({}) })
+      expect(out.state.filled.endDate).toBeUndefined()
+    })
+
+    it.each(['글쎄요', '100박', '0일', '15일까지', '11월 16일에 돌아와요', '하루 자고 와요', '하루 더 묵어요', '2박 5일'])('알 수 없는 "%s"는 다시 묻는다', async text => {
+      const out = await applyAnswer(lengthState(), { text }, { callJson: stubCallJson({}) })
+      expect(out.retryText).toBeDefined()
+      expect(out.state.cursor.slot).toBe('trip_length')
+      expect(out.state.filled.endDate).toBeUndefined()
+    })
   })
 
   // 데모 버그 11/2: 예약 시간을 말하지 않았는데 AI가 reservedAt에 00:00을 채워 넣었다.

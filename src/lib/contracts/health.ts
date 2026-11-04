@@ -20,9 +20,27 @@ export const HealthConditionSchema = z.enum([
 ])
 export type HealthCondition = z.infer<typeof HealthConditionSchema>
 
+// 화면·주의 문구에 쓰는 이름. 영문 값을 그대로 보이지 않으려고 한곳에 둔다.
+export const HEALTH_CONDITION_LABEL: Record<HealthCondition, string> = {
+  diabetes: '당뇨',
+  hypertension: '고혈압',
+  dyslipidemia: '고지혈증',
+  kidney_disease: '신장 질환',
+  gout: '통풍',
+  heart_disease: '심장 질환',
+}
+
 // 약은 이름이 아니라 "종류"로 저장한다. 최종 목록은 주의 규칙 표와 함께 [빌더]
-export const MedicationClassSchema = z.enum(['anticoagulant', 'calcium_channel_blocker'])
+// 항응고제를 통째로 두지 않고 와파린으로 좁혔다: 질병관리청 국가건강정보포털이 잎채소(비타민 K)·술 주의는
+// 와파린에만 해당하고, 새 항응고제(NOAC)는 비타민 K의 영향을 받지 않는다고 적었기 때문이다.
+export const MedicationClassSchema = z.enum(['warfarin', 'calcium_channel_blocker'])
 export type MedicationClass = z.infer<typeof MedicationClassSchema>
+
+// 칼슘채널차단제는 약마다 자몽 영향이 달라서(암로디핀은 언급 없음) 이름에 "일부"를 붙여 보이게 한다.
+export const MEDICATION_CLASS_LABEL: Record<MedicationClass, string> = {
+  warfarin: '와파린(항응고제)',
+  calcium_channel_blocker: '일부 혈압약(칼슘채널차단제 계열)',
+}
 
 // group: 가족 모두에게 보임 / self: 본인에게만 보임
 export const HealthVisibilitySchema = z.enum(['group', 'self'])
@@ -63,6 +81,26 @@ export function canSeeHealth(
   if (health.visibility === 'group') return true
   return viewerUserId === (travelerUserId ?? health.enteredByUserId)
 }
+
+// 고칠 수 있는 사람. 보이는 범위(visibility)와 상관없이 정한다 — "가족 모두"로 열어 둔 정보도 남이 고치게 하지 않는다.
+// 계정이 연결된 여행자는 본인만, 계정이 없는 여행자는 처음 입력한 사람만 고친다.
+// existing이 없으면 첫 입력이다: 계정 있는 여행자는 본인만, 계정 없는 여행자는 그룹 구성원 누구나 처음 넣을 수 있다
+// (구성원인지는 API(route)가 먼저 검사한다). 지우기(동의 철회)도 같은 규칙이다.
+// travelerUserId를 꼭 받는 까닭은 canSeeHealth와 같다: 생략(undefined)과 "계정 없음"(null)을 헷갈리지 않게 하려는 것이다.
+export function canEditHealth(
+  existing: Pick<TravelerHealth, 'enteredByUserId'> | null,
+  actorUserId: string,
+  travelerUserId: string | null,
+): boolean {
+  if (travelerUserId !== null) return actorUserId === travelerUserId
+  if (existing !== null) return actorUserId === existing.enteredByUserId
+  return true
+}
+
+// GET /api/trips/:id/health 응답. 서버가 canSeeHealth로 보는 사람에 맞춰 걸러서 내려준다 —
+// 못 보는 사람의 항목은 "비어 있다"가 아니라 배열에 아예 없다 (있다는 사실도 새면 안 된다).
+export const HealthListResponseSchema = z.object({ health: z.array(TravelerHealthSchema) })
+export type HealthListResponse = z.infer<typeof HealthListResponseSchema>
 
 // 사람이 만든 주의 규칙 표 한 줄: 병 또는 약 종류 → 주의할 음식 태그 → 근거 구절·출처·확인 날짜.
 // 근거 없는 "괜찮아요"를 막으려고 SourceInfo의 선택 칸(source·checkedAt)을 필수로 바꾼다 (설계 7장).

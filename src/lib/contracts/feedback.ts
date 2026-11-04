@@ -16,3 +16,14 @@ export type DayFeedback = z.infer<typeof DayFeedbackSchema>
 // 요청 본문: tripId는 주소에서, userId·createdAt은 서버가 정한다
 export const DayFeedbackInputSchema = DayFeedbackSchema.pick({ day: true, score: true, comment: true })
 export type DayFeedbackInput = z.infer<typeof DayFeedbackInputSchema>
+
+// 화면에 가족의 답을 함께 보여 주려고 이름을 붙인다
+export const DayFeedbackItemSchema = DayFeedbackSchema.extend({ userName: z.string() })
+export type DayFeedbackItem = z.infer<typeof DayFeedbackItemSchema>
+
+// GET /api/trips/:id/feedback. tripDate는 시작일이다 — 화면이 '그날이 왔는지' 볼 때 여행 전체를 또 받지 않게 같이 준다
+export const DayFeedbackListResponseSchema = z.object({
+  tripDate: z.string().nullable(),
+  feedback: z.array(DayFeedbackItemSchema),
+})
+export type DayFeedbackListResponse = z.infer<typeof DayFeedbackListResponseSchema>

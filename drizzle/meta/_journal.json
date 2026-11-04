@@ -22,6 +22,27 @@
       "when": 1793436493153,
       "tag": "0002_trips-versions",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1793635694678,
+      "tag": "0003_trip-days-feedback-chat",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793684726266,
+      "tag": "0004_traveler-health",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1793696860450,
+      "tag": "0005_place-services-research",
+      "breakpoints": true
     }
   ]
 }

@@ -2,10 +2,15 @@
 import { z } from 'zod'
 import {
   AcceptInviteResponseSchema,
+  ChatListResponseSchema,
+  ChatMessageSchema,
+  DayFeedbackItemSchema,
+  DayFeedbackListResponseSchema,
   ExplainResponseSchema,
   GroupDetailSchema,
   GroupSchema,
   GroupSummarySchema,
+  HealthListResponseSchema,
   InterviewResponseSchema,
   InvitePreviewSchema,
   InviteSchema,
@@ -17,11 +22,13 @@ import {
   PlanResponseSchema,
   ReviseResponseSchema,
   ShareTextResponseSchema,
+  TravelerHealthSchema,
   TravelerSchema,
   TripDetailSchema,
   TripListItemSchema,
   TripSchema,
   TripVersionSchema,
+  TripWeatherResponseSchema,
   UserSchema,
   type User,
 } from '@/lib/contracts'
@@ -74,6 +81,18 @@ export const realApi: Api = {
     unconfirm: tripId => request(`/api/trips/${enc(tripId)}/confirm`, { method: 'DELETE', schema: TripSchema }),
     shareText: tripId => request(`/api/trips/${enc(tripId)}/share-text`, { schema: ShareTextResponseSchema }),
   },
+  health: {
+    list: async tripId => (await request(`/api/trips/${enc(tripId)}/health`, { schema: HealthListResponseSchema })).health,
+    put: (tripId, travelerId, input) =>
+      request(`/api/trips/${enc(tripId)}/travelers/${enc(travelerId)}/health`, { method: 'PUT', body: input, schema: TravelerHealthSchema }),
+    // 204 라 본문이 없다 — 스키마를 주지 않는다
+    remove: async (tripId, travelerId) => {
+      await request(`/api/trips/${enc(tripId)}/travelers/${enc(travelerId)}/health`, { method: 'DELETE' })
+    },
+  },
+  weather: {
+    get: tripId => request(`/api/trips/${enc(tripId)}/weather`, { schema: TripWeatherResponseSchema }),
+  },
   opinions: {
     list: versionId => request(`/api/versions/${enc(versionId)}/opinions`, { schema: z.array(OpinionSchema) }),
     add: (versionId, input) => request(`/api/versions/${enc(versionId)}/opinions`, { method: 'POST', body: input, schema: OpinionSchema }),
@@ -81,11 +100,22 @@ export const realApi: Api = {
       await request(`/api/opinions/${enc(opinionId)}`, { method: 'DELETE' })
     },
   },
+  feedback: {
+    list: tripId => request(`/api/trips/${enc(tripId)}/feedback`, { schema: DayFeedbackListResponseSchema }),
+    save: (tripId, input) => request(`/api/trips/${enc(tripId)}/feedback`, { method: 'PUT', body: input, schema: DayFeedbackItemSchema }),
+  },
+  chat: {
+    list: (tripId, after) =>
+      request(`/api/trips/${enc(tripId)}/chat${after ? `?after=${encodeURIComponent(after)}` : ''}`, { schema: ChatListResponseSchema }),
+    post: (tripId, text) => request(`/api/trips/${enc(tripId)}/chat`, { method: 'POST', body: { text }, schema: ChatMessageSchema }),
+  },
   places: {
     list: (query = {}) => {
       const params = new URLSearchParams()
       if (query.q) params.set('q', query.q)
       if (query.styles?.length) params.set('styles', query.styles.join(','))
+      if (query.kind) params.set('kind', query.kind)
+      if (query.limit) params.set('limit', String(query.limit))
       const qs = params.toString()
       return request(`/api/places${qs ? `?${qs}` : ''}`, { schema: z.array(PlaceSummarySchema) })
     },

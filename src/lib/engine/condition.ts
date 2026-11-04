@@ -23,7 +23,7 @@ export const CONDITION_QUESTIONS: readonly ConditionQuestion[] = [
       { label: '버스 한 정거장', note: '약 30분', value: 30 },
     ],
     allowUnknown: true,
-    unknownNote: '기본값 20분',
+    unknownNote: '기본값 20분 (75세 이상 15분, 85세 이상·보조기구 10분)',
   },
   {
     id: 'dayMin',

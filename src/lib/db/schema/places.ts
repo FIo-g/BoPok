@@ -5,7 +5,7 @@ import {
   pgEnum, pgTable, primaryKey, text, timestamp,
 } from 'drizzle-orm/pg-core'
 import { ConfidenceSchema, StairsStatusSchema, TransportSchema, type Coord } from '../../contracts/common'
-import { PlaceNodeKindSchema } from '../../contracts/place'
+import { PlaceNodeKindSchema, type MenuItem, type PlaceKind } from '../../contracts/place'
 
 export const placeConfidence = pgEnum('place_confidence', ConfidenceSchema.enum)
 export const placeStairsStatus = pgEnum('place_stairs_status', StairsStatusSchema.enum)
@@ -26,6 +26,7 @@ export const places = pgTable('places', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   category: text('category').notNull(),
+  kind: text('kind').$type<PlaceKind>(),
   styles: text('styles').array().notNull(),
   lng: doublePrecision('lng').notNull(),
   lat: doublePrecision('lat').notNull(),
@@ -42,6 +43,23 @@ export const places = pgTable('places', {
   check('places_visit_min_nonnegative', sql`${table.visitMin} >= 0 and ${table.visitMin} < 'Infinity'::float8`),
   check('places_source_nonempty', sql`length(trim(${table.source})) > 0`),
   check('places_checked_at_nonempty', sql`length(trim(${table.checkedAt})) > 0`),
+  check('places_kind_valid', sql`${table.kind} in ('attraction', 'restaurant', 'cafe', 'lodging')`),
+])
+
+// 목록에서는 큰 원본·메뉴를 읽지 않는다. 기존 장소·관람 구간과 별도로 수집 자료를 보존한다.
+export const placeCatalog = pgTable('place_catalog', {
+  placeId: text('place_id').primaryKey().references(() => places.id, { onDelete: 'cascade' }),
+  provider: text('provider').notNull(),
+  sourceId: text('source_id').notNull(),
+  searchText: text('search_text').notNull(),
+  menus: jsonb('menus').$type<MenuItem[]>().notNull(),
+  contentHash: text('content_hash').notNull(),
+  data: jsonb('data').$type<Record<string, unknown>>().notNull(),
+  importedAt: timestamp('imported_at', { withTimezone: true }).notNull().defaultNow(),
+}, table => [
+  check('place_catalog_provider_valid', sql`${table.provider} in ('daejeon_food', 'tourapi')`),
+  check('place_catalog_menus_array', sql`jsonb_typeof(${table.menus}) = 'array'`),
+  check('place_catalog_hash_valid', sql`${table.contentHash} ~ '^[a-f0-9]{64}$'`),
 ])
 
 export const placeNodes = pgTable('place_nodes', {

@@ -1,0 +1,22 @@
+{
+  "sharedDbWritten": false,
+  "totalPlaces": 20214,
+  "firstImport": {
+    "inserted": 20206,
+    "unchanged": 0,
+    "total": 20206
+  },
+  "repeatedImport": {
+    "inserted": 0,
+    "unchanged": 20206,
+    "total": 20206
+  },
+  "recommendationCounts": {
+    "restaurant": 10,
+    "cafe": 10,
+    "lodging": 10
+  },
+  "pricePlacesChecked": 25,
+  "placesWithPriceOptions": 6,
+  "unknownMenuUnitsPreserved": true
+}

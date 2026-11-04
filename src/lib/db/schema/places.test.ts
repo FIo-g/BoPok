@@ -70,7 +70,7 @@ describe('장소 마이그레이션과 계약 호환', () => {
     const nodes = await db.select().from(placeNodes)
     const segments = await db.select().from(placeSegments).orderBy(placeSegments.order)
     const detail = PlaceDetailSchema.parse({
-      ...row, coord: [row.lng, row.lat], visitMin: row.visitMin ?? undefined,
+      ...row, kind: row.kind ?? undefined, coord: [row.lng, row.lat], visitMin: row.visitMin ?? undefined,
       address: row.address ?? undefined, phone: row.phone ?? undefined, homepage: row.homepage ?? undefined,
       nodes: nodes.map(node => ({ ...node, coord: [node.lng, node.lat] })),
       segments: segments.map(item => ({ ...item, stairsCount: item.stairsCount ?? undefined, detourOf: item.detourOf ?? undefined })),

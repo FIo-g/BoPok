@@ -6,7 +6,7 @@ import {
   MAP_FILTER_MS, DRIFT_AFTER_EXTRAS_MS, EXTRAS_AFTER_INTRO_MS, prefetchTileUrls, MOBILE_MAX_WIDTH, READY_TIMEOUT_MS, PLACE_PINS, QUIET_MAP_FILTER, SEEN_KEY, TITLE_LINES, TITLE_TEXT, TOUR_MS, TOUR_RESUME_MS,
   TOUR_WAYPOINTS, VEIL, VEIL_FADE_MS, exitHalfMs, exitTotalMs, introTimeline,
 } from './landing-intro'
-import { BUILDINGS_TILES, LazyMapView, PALETTE, createCameraLoop, metersToLon, type CameraLoop, type MapInstance, type MapPin } from '@/components/map'
+import { BUILDINGS_TILES, LANDMARKS, LazyMapView, PALETTE, createCameraLoop, metersToLon, type CameraLoop, type Landmark, type MapInstance, type MapPin } from '@/components/map'
 import './hero.css'
 
 const reduced = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -82,6 +82,10 @@ export function Hero({ onStart }: { onStart: () => void }) {
     m.once('idle', () => setReady(true))
   }, [])
   const onMapFail = useCallback(() => setMapFailed(true), [])
+  // 모형을 누르면 그 장소로 다가간다(둘러보기가 자리 잡은 뒤에만 눌린다)
+  const onSelectLandmark = useCallback((landmark: Landmark) => {
+    map?.easeTo({ center: [landmark.lng, landmark.lat], zoom: 17, pitch: 60, bearing: map.getBearing(), duration: reduced() ? 0 : 1200 })
+  }, [map])
   // 지도가 늦거나 실패해도 글자는 보여야 한다
   useEffect(() => {
     const id = window.setTimeout(() => setReady(true), READY_TIMEOUT_MS)
@@ -248,8 +252,19 @@ export function Hero({ onStart }: { onStart: () => void }) {
           pins={exploring && arrived ? placePins : []}
           onMapReady={onMapReady}
           onFail={onMapFail}
+          onSelectLandmark={onSelectLandmark}
         />
       </div>
+      {/* 모형에는 이름 라벨이 없어서, 화면을 못 보거나 키보드로 쓰는 사람을 위해 같은 이름의 목록을 둔다 */}
+      {exploring && (
+        <ul className="hero-sr-only" aria-label="지도에 표시된 랜드마크">
+          {LANDMARKS.map(landmark => (
+            <li key={landmark.id}>
+              <button type="button" onClick={() => onSelectLandmark(landmark)}>{landmark.name} 가까이 보기</button>
+            </li>
+          ))}
+        </ul>
+      )}
       <div className="hero-veil" data-hidden={exploring} style={{ background: veilBackground }} aria-hidden="true" />
 
       <div className="hero-copy" data-hidden={exploring} aria-hidden={exploring} inert={exploring}>

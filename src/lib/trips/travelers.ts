@@ -8,6 +8,7 @@ import { findMembership } from '@/lib/auth/members'
 import type { Db } from '@/lib/db/client'
 import { getDb } from '@/lib/db/client'
 import { groupMembers, tripTravelers, trips } from '@/lib/db/schema'
+import { deleteHealthExcept, deleteHealthFor } from '@/lib/health/prune'
 import { refreshSummaries } from './summary'
 
 type TravelerRow = typeof tripTravelers.$inferSelect
@@ -27,6 +28,7 @@ function toTraveler(row: TravelerRow): Traveler {
     isParent: row.isParent,
     condition: row.condition,
     filledBySelf: row.filledBySelf,
+    exerciseFrequency: row.exerciseFrequency ?? undefined,
   }
 }
 
@@ -189,6 +191,7 @@ export async function replaceTravelers(
       mobilityAid: incoming.mobilityAid,
       isParent: incoming.isParent,
       condition: incoming.condition,
+      exerciseFrequency: incoming.exerciseFrequency ?? null,
       filledBySelf: nextFilledBySelf({
         next: incoming,
         existing,
@@ -209,6 +212,16 @@ export async function replaceTravelers(
 
   await db.delete(tripTravelers).where(eq(tripTravelers.tripId, args.tripId))
   await db.insert(tripTravelers).values(rows)
+  // 목록에서 빠진 사람의 건강 정보도 지운다 (건강 표는 여행자 표에 외래키가 없다)
+  await deleteHealthExcept(args.tripId, ids, db)
+  // 계정 연결이 바뀐 사람의 건강 정보도 지운다 — 연결만 걸어 남의 "본인만" 정보를 보지 못하게 (src/lib/health/prune.ts)
+  const relinkedIds = rows
+    .filter(row => {
+      const was = beforeById.get(row.id)
+      return was !== undefined && (was.userId ?? null) !== row.userId
+    })
+    .map(row => row.id)
+  await deleteHealthFor(args.tripId, relinkedIds, db)
 
   const saved = await listTravelers(args.tripId, db)
   // 걷기 조건이 바뀌면 버전 요약이 낡는다 — 다시 계산해 덮어쓴다 (던지지 않는다).
@@ -284,6 +297,8 @@ export async function patchTraveler(
       mobilityAid: next.mobilityAid,
       isParent: patch.isParent ?? existing.isParent,
       condition: next.condition,
+      // 운동 횟수는 걷기 조건 칸이 아니라서(판정 숫자에 안 쓴다) filledBySelf 계산에 넣지 않는다
+      exerciseFrequency: 'exerciseFrequency' in patch ? patch.exerciseFrequency ?? null : existing.exerciseFrequency,
       // userId는 이 API로 바꿀 수 없으므로 기존 연결로 판단한다
       filledBySelf: nextFilledBySelf({ next, existing, userId: existing.userId, actorUserId: args.actorUserId }),
     })

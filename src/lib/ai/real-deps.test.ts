@@ -5,6 +5,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { z } from 'zod'
 import {
   ApiErrorSchema,
+  FOOD_TAG_LABEL,
   ParseScheduleResponseSchema,
   PlanResponseSchema,
   type InterviewState,
@@ -14,6 +15,7 @@ import { legKey } from '@/lib/contracts'
 import { createGroup, insertTrip, signUp, traveler } from '@/lib/auth/test-fixtures'
 import type { TestDb } from '@/lib/db/test-db'
 import { setupTestDb } from '@/lib/db/test-db'
+import { putHealth } from '@/lib/health'
 import { insertPilotPlaces, PilotPlaceSchema } from '@/lib/places/seed'
 import { replaceTravelers } from '@/lib/trips'
 import type { AiDeps } from './deps'
@@ -94,7 +96,7 @@ describe('getAiDeps', () => {
 describe('권한 — 진짜 로그인과 구성원 검사', () => {
   it('로그인 안 한 요청은 401', async () => {
     const { tripId } = await tripFor()
-    const response = await handleInterview(aiRequest('interview', { tripId }), createRealDeps())
+    const response = await handleInterview(aiRequest('interview', { tripId }), createRealDeps({ searchPoi: async () => null }))
     expect(response.status).toBe(401)
     expect(ApiErrorSchema.parse(await response.json()).error.code).toBe('unauthorized')
   })
@@ -103,7 +105,7 @@ describe('권한 — 진짜 로그인과 구성원 검사', () => {
     const { owner, tripId } = await tripFor()
     const response = await handleInterview(
       aiRequest('interview', { tripId }, { 'x-dev-user': owner.userId }),
-      createRealDeps(),
+      createRealDeps({ searchPoi: async () => null }),
     )
     expect(response.status).toBe(401)
   })
@@ -111,7 +113,7 @@ describe('권한 — 진짜 로그인과 구성원 검사', () => {
   it('그룹 구성원이 아닌 로그인 사용자는 403', async () => {
     const { tripId } = await tripFor()
     const stranger = await signUp({ name: '낯선 사람', email: 'stranger@example.com' })
-    const response = await handleInterview(aiRequest('interview', { tripId }, { cookie: stranger.cookie }), createRealDeps())
+    const response = await handleInterview(aiRequest('interview', { tripId }, { cookie: stranger.cookie }), createRealDeps({ searchPoi: async () => null }))
     expect(response.status).toBe(403)
     expect(ApiErrorSchema.parse(await response.json()).error.code).toBe('forbidden')
   })
@@ -120,13 +122,13 @@ describe('권한 — 진짜 로그인과 구성원 검사', () => {
     const { owner } = await tripFor()
     const response = await handleInterview(
       aiRequest('interview', { tripId: 'no-such-trip' }, { cookie: owner.cookie }),
-      createRealDeps(),
+      createRealDeps({ searchPoi: async () => null }),
     )
     expect(response.status).toBe(403)
   })
 
   it('여행 조회에서 나온 404는 500이 아니라 404로 나간다', async () => {
-    const deps = createRealDeps()
+    const deps = createRealDeps({ searchPoi: async () => null })
     const response = await handle(() => deps.getTripContext('no-such-trip'))
     expect(response.status).toBe(404)
     expect(ApiErrorSchema.parse(await response.json()).error.code).toBe('not_found')
@@ -136,7 +138,7 @@ describe('권한 — 진짜 로그인과 구성원 검사', () => {
 describe('인터뷰 — 진짜 여행·인터뷰 저장', () => {
   it('첫 질문을 받고 상태가 DB에 저장된다', async () => {
     const { owner, tripId } = await tripFor()
-    const deps = createRealDeps({
+    const deps = createRealDeps({ searchPoi: async () => null,
       callJson: (async () => {
         throw new Error('첫 질문에는 AI가 필요 없다')
       }) as unknown as AiDeps['callJson'],
@@ -153,7 +155,7 @@ describe('인터뷰 — 진짜 여행·인터뷰 저장', () => {
 describe('붙여넣기 정리 — 진짜 장소 DB', () => {
   it('DB 장소는 id로 맞추고, 못 맞춘 이름은 좌표 없이 정보 없음으로 둔다', async () => {
     const { owner, tripId } = await tripFor('paste')
-    const deps = createRealDeps({ callJson: fakeCallJson({ items: [{ name: '10시 한밭수목원 산책' }, { name: '성심당 본점' }] }) })
+    const deps = createRealDeps({ searchPoi: async () => null, callJson: fakeCallJson({ items: [{ name: '10시 한밭수목원 산책' }, { name: '성심당 본점' }] }) })
 
     const response = await handleParseSchedule(
       aiRequest('parse-schedule', { tripId, text: '10시 한밭수목원 산책\n성심당 본점' }, { cookie: owner.cookie }),
@@ -163,7 +165,8 @@ describe('붙여넣기 정리 — 진짜 장소 DB', () => {
     expect(response.status).toBe(200)
     const body = ParseScheduleResponseSchema.parse(await response.json())
     expect(body.stops.map(stop => stop.placeId)).toEqual(['hanbat', null])
-    expect(body.stops[1].coord).toBeUndefined() // TMAP POI 검색이 없으므로 좌표를 지어내지 않는다
+    // 테스트는 TMAP POI 검색을 막아 두었다(searchPoi null) — 실제 키가 있어도 외부 호출이 나가지 않는다. 좌표는 지어내지 않는다
+    expect(body.stops[1].coord).toBeUndefined()
     expect(body.unmatched).toEqual(['성심당 본점'])
     expect((await deps.interviews.get(tripId))?.filled.pastedText).toContain('성심당')
   })
@@ -176,7 +179,7 @@ describe('처음부터 일정 — 진짜 여행·장소·버전 저장', () => {
       tripId,
       travelers: [traveler({ id: 't1', label: '엄마', age: 72, sex: 'female', isParent: true })],
     })
-    const deps = createRealDeps({
+    const deps = createRealDeps({ searchPoi: async () => null,
       callJson: fakeCallJson({
         stops: [
           { placeId: 'hanbat', name: '한밭수목원' },
@@ -208,5 +211,64 @@ describe('처음부터 일정 — 진짜 여행·장소·버전 저장', () => {
       madeByUserId: owner.userId,
       note: '덜 걷는 일정',
     })
+  })
+})
+
+describe('건강 정보 → AI 프롬프트 — 진짜 DB', () => {
+  it('병·약이 있어도 프롬프트에는 음식 태그 이름만 가고, "본인만"으로 둔 정보도 태그로는 반영된다', async () => {
+    const { owner, tripId } = await tripFor()
+    await replaceTravelers({
+      tripId,
+      travelers: [traveler({ id: 't1', label: '엄마', age: 72, sex: 'female', isParent: true })],
+    })
+    await putHealth({
+      tripId,
+      travelerId: 't1',
+      actorUserId: owner.userId,
+      input: {
+        conditions: ['diabetes', 'hypertension'],
+        medicationClasses: ['warfarin', 'calcium_channel_blocker'],
+        visibility: 'self',
+        consent: true,
+      },
+    })
+    const prompts: string[] = []
+    const deps = createRealDeps({ searchPoi: async () => null,
+      callJson: (async (req: { messages: { content: string }[]; schema: z.ZodType<unknown> }) => {
+        prompts.push(req.messages.map(message => message.content).join('\n'))
+        return req.schema.parse({ stops: [{ placeId: 'hanbat', name: '한밭수목원' }] })
+      }) as unknown as AiDeps['callJson'],
+      getLegs: fakeLegs,
+    })
+    const done: InterviewState = {
+      filled: { mode: 'scratch', travelers: [], styles: ['자연·산책'], mustVisit: [], fixTargets: [], transport: 'car' },
+      cursor: { slot: 'done', travelerIndex: 0, questionIndex: 0 },
+      history: [],
+    }
+    await deps.interviews.save(tripId, done)
+
+    // 규칙 표(AI_AVOID_RULES)에서 나온 태그가 일행 전체 몫으로 모인다.
+    // 와파린의 잎채소는 근거가 "피하라"가 아니라 "일정하게"라서 AI에는 가지 않는다
+    const tags = await deps.getAvoidFoodTags(tripId)
+    expect(tags).toEqual(expect.arrayContaining(['sugary', 'salty', 'alcohol', 'grapefruit']))
+    expect(tags).not.toContain('leafy_greens')
+
+    const response = await handleGenerate(aiRequest('generate', { tripId }, { cookie: owner.cookie }), deps)
+    expect(response.status).toBe(200)
+
+    expect(prompts.length).toBeGreaterThan(0)
+    const expectedLine = `피할 음식: ${tags.map(tag => FOOD_TAG_LABEL[tag]).join(', ')} — 이런 메뉴가 많은 식당은 고르지 마라.`
+    for (const prompt of prompts) {
+      expect(prompt).toContain(expectedLine)
+      for (const word of ['당뇨', '고혈압', '혈압', '와파린', '항응고', '칼슘채널', 'diabetes', 'warfarin', 'hypertension']) {
+        expect(prompt).not.toContain(word)
+      }
+    }
+  })
+
+  it('건강 정보가 없으면 피할 음식 태그가 없다', async () => {
+    const { tripId } = await tripFor()
+    await replaceTravelers({ tripId, travelers: [traveler({ id: 't1', label: '엄마', isParent: true })] })
+    await expect(createRealDeps({ searchPoi: async () => null }).getAvoidFoodTags(tripId)).resolves.toEqual([])
   })
 })

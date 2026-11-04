@@ -2,14 +2,16 @@
 // 권한(로그인·구성원·그룹장)과 에러 코드(401·403·404·410)도 서버처럼 흉내 내서 화면의 에러 처리를 미리 확인할 수 있다.
 import type { Api, SignInInput, SignUpInput } from '@/lib/api-client/types'
 import { ApiRequestError } from '@/lib/api-client/http'
-import { AcceptInviteRequestSchema, type ApiErrorCode, type Group, type Opinion, type Trip, type TripListItem, type TripVersion, type User, type VersionSummary } from '@/lib/contracts'
+import { AcceptInviteRequestSchema, type ApiErrorCode, type ChatMessage, type DayFeedbackItem, type Group, type Opinion, type Trip, type TripListItem, type TripVersion, type User, type VersionSummary } from '@/lib/contracts'
 import { judgeWithMocks } from './judge-helper'
+import { deleteMockHealth, listMockHealth, pruneMockHealth, putMockHealth } from './health'
 import { mockLeg } from './legs'
 import { mockExplain, mockGenerate, mockInterview, mockParseSchedule, mockRevise, saveMockVersion } from './mock-ai'
 import { mockPlaceDetails, mockPlaces, toSummary } from './places'
 import { buildShareText } from './share-text'
 import { getDb, nextId, saveDb, type MockDb } from './store'
 import { replaceMockTravelers } from './travelers'
+import { mockTripWeather } from './weather'
 
 const LATENCY_MS = 120
 
@@ -174,7 +176,7 @@ export const mockApi: Api = {
       const user = requireMember(db, input.groupId)
       void user
       const trip: Trip = {
-        id: nextId('t'), groupId: input.groupId, title: input.title, date: input.date ?? null, mode: input.mode, transport: null,
+        id: nextId('t'), groupId: input.groupId, title: input.title, date: input.date ?? null, endDate: input.endDate ?? null, mode: input.mode, transport: null,
         styles: [], budget: null, confirmedVersionId: null, confirmedByName: null, createdAt: now(),
       }
       db.trips.push(trip)
@@ -196,8 +198,11 @@ export const mockApi: Api = {
     putTravelers: (tripId, travelers) => call(db => {
       const { user } = requireTrip(db, tripId)
       // 서버(src/lib/trips/travelers.ts)와 같은 규칙: 내 계정만 연결·해제하고, filledBySelf 는 화면이 보낸 값이 아니라 직접 계산한다
-      const saved = replaceMockTravelers({ before: db.travelers[tripId] ?? [], incoming: travelers, actorUserId: user.id })
+      const before = db.travelers[tripId] ?? []
+      const saved = replaceMockTravelers({ before, incoming: travelers, actorUserId: user.id })
       db.travelers[tripId] = saved
+      // 목록에서 빠진 사람, 계정 연결이 바뀐 사람의 건강 정보도 함께 지운다 (서버의 replaceTravelers 가 하는 일)
+      pruneMockHealth(db, tripId, before)
       refreshSummaries(db, tripId)
       return saved
     }),
@@ -240,6 +245,25 @@ export const mockApi: Api = {
     }),
   },
 
+  health: {
+    list: tripId => call(db => {
+      const { user } = requireTrip(db, tripId)
+      return listMockHealth(db, tripId, user.id)
+    }),
+    put: (tripId, travelerId, input) => call(db => {
+      const { user } = requireTrip(db, tripId)
+      return putMockHealth(db, { tripId, travelerId, actorUserId: user.id, body: input })
+    }),
+    remove: (tripId, travelerId) => call(db => {
+      const { user } = requireTrip(db, tripId)
+      deleteMockHealth(db, { tripId, travelerId, actorUserId: user.id })
+    }),
+  },
+
+  weather: {
+    get: tripId => call(db => mockTripWeather(requireTrip(db, tripId).trip)),
+  },
+
   opinions: {
     list: versionId => call(db => {
       const version = db.versions.find(v => v.id === versionId) ?? fail(404, 'not_found', '버전을 찾을 수 없어요')
@@ -264,11 +288,41 @@ export const mockApi: Api = {
     }),
   },
 
+  feedback: {
+    list: tripId => call(db => {
+      const { trip } = requireTrip(db, tripId)
+      return { tripDate: trip.date ?? null, feedback: db.feedback.filter(item => item.tripId === tripId) }
+    }),
+    save: (tripId, input) => call(db => {
+      const { user } = requireTrip(db, tripId)
+      const before = db.feedback.find(item => item.tripId === tripId && item.day === input.day && item.userId === user.id)
+      const saved: DayFeedbackItem = {
+        tripId, day: input.day, userId: user.id, userName: user.name, score: input.score,
+        comment: input.comment ?? null, createdAt: before?.createdAt ?? now(),
+      }
+      db.feedback = [...db.feedback.filter(item => item !== before), saved]
+      return saved
+    }),
+  },
+  chat: {
+    list: (tripId, after) => call(db => {
+      requireTrip(db, tripId)
+      return { messages: db.chat.filter(message => message.tripId === tripId && (!after || message.createdAt >= after)) }
+    }),
+    post: (tripId, text) => call(db => {
+      const { user } = requireTrip(db, tripId)
+      const message: ChatMessage = { id: nextId('c'), tripId, userId: user.id, userName: user.name, text: text.trim(), createdAt: now() }
+      db.chat.push(message)
+      return message
+    }),
+  },
   places: {
     list: (query = {}) => call(() =>
       mockPlaceDetails
         .filter(p => !query.q || p.name.includes(query.q))
         .filter(p => !query.styles?.length || p.styles.some(s => query.styles?.includes(s)))
+        .filter(p => !query.kind || (p.kind ?? 'attraction') === query.kind)
+        .slice(0, query.limit ?? 100)
         .map(toSummary),
     ),
     get: placeId => call(() => mockPlaces[placeId] ?? fail(404, 'not_found', '장소를 찾을 수 없어요')),
@@ -285,10 +339,15 @@ export const mockApi: Api = {
       const res = mockInterview(trip, input)
       // 인터뷰가 끝나면 서버가 여행자와 여행 정보를 저장한다
       if (res.done) {
-        if (res.filled.travelers.length > 0) db.travelers[trip.id] = res.filled.travelers
+        if (res.filled.travelers.length > 0) {
+          const before = db.travelers[trip.id] ?? []
+          db.travelers[trip.id] = res.filled.travelers
+          pruneMockHealth(db, trip.id, before) // 빠진 사람·연결이 바뀐 사람의 건강 정보도 지운다 (서버의 replaceTravelers 와 같다)
+        }
         trip.styles = res.filled.styles.length ? res.filled.styles : trip.styles
         trip.budget = res.filled.budget ?? trip.budget
         trip.date = res.filled.date ?? trip.date
+        trip.endDate = res.filled.endDate ?? trip.endDate
         trip.transport = res.filled.transport ?? trip.transport
       }
       return res
@@ -300,17 +359,26 @@ export const mockApi: Api = {
     generate: input => call(db => {
       const { trip } = requireTrip(db, input.tripId)
       const interview = db.interviews[trip.id]?.filled
-      if (interview?.travelers.length) db.travelers[trip.id] = interview.travelers
+      if (interview?.travelers.length) {
+        const before = db.travelers[trip.id] ?? []
+        db.travelers[trip.id] = interview.travelers
+        pruneMockHealth(db, trip.id, before)
+      }
       if (interview) {
         trip.styles = interview.styles.length ? interview.styles : trip.styles
         trip.budget = interview.budget ?? trip.budget
         trip.date = interview.date ?? trip.date
+        trip.endDate = interview.endDate ?? trip.endDate
         trip.transport = interview.transport ?? trip.transport
       }
       return mockGenerate(trip, db.travelers[trip.id] ?? [])
     }),
     revise: input => call(db => {
       const { trip } = requireTrip(db, input.tripId)
+      // 서버와 같은 규칙: 반영할 의견도 전달할 대화도 없으면 400
+      const pending = db.opinions.some(o => o.versionId === input.versionId && !o.appliedInVersionId)
+      const hasChat = Boolean(input.includeChat) && db.chat.some(message => message.tripId === trip.id)
+      if (!pending && !hasChat) fail(400, 'invalid_request', input.includeChat ? '반영할 의견이나 대화가 없어요' : '반영할 의견이 없어요')
       return mockRevise(trip, input.versionId, db.travelers[trip.id] ?? [])
     }),
     explain: input => call(db => {

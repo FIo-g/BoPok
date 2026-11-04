@@ -18,6 +18,7 @@ import { ChatSlot } from '@/components/trip/slots/ChatSlot'
 import { CostSlot } from '@/components/trip/slots/CostSlot'
 import { HealthSlot } from '@/components/trip/slots/HealthSlot'
 import { SatisfactionSlot } from '@/components/trip/slots/SatisfactionSlot'
+import { WeatherSlot } from '@/components/trip/slots/WeatherSlot'
 import type { TripSlotProps } from '@/components/trip/slots/types'
 import { StopList, type StopEditing } from '@/components/trip/StopList'
 import { TripMap } from '@/components/trip/TripMap'
@@ -242,8 +243,18 @@ export function TripScreen({ tripId }: { tripId: string }) {
     stops: stops ?? [],
     result: judged?.result ?? null,
     travelers: detail.data.travelers,
+    places: judged?.places ?? {},
     versionId: activeId,
     userId: user?.id ?? '',
+    onNewVersion: (id, text) => {
+      // 고치던 일정을 묻지 않고 버리지 않는다. 남기기로 하면 새 안은 안 목록에만 더한다
+      if (dirty && !window.confirm('고치던 내용이 저장되지 않았어요. 버리고 새 안을 볼까요?')) {
+        detail.reload()
+        setMessage({ tone: 'info', text: `${text}. 위의 안 목록에서 고를 수 있어요` })
+        return
+      }
+      void afterNewVersion(id, text)
+    },
   }
 
   return (
@@ -272,6 +283,7 @@ export function TripScreen({ tripId }: { tripId: string }) {
           )}
 
           <DayTabs days={days} day={day} startDate={trip.date} onSelect={chooseDay} disabled={busy !== null} />
+          <WeatherSlot {...slotProps} />
 
           {version.error && <ErrorNotice message={errorMessage(version.error)} onRetry={version.reload} />}
           {!canJudge && versions && versions.length > 0 && (

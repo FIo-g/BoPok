@@ -7,17 +7,23 @@ import {
   PlanResponseSchema,
   TimeSchema,
   nonNegative,
+  placeKindOf,
   type Coord,
+  type PlaceKind,
   type PlaceSummary,
   type Stop,
   type Traveler,
 } from '@/lib/contracts'
 import { groupProfile } from '@/lib/engine'
+import { tripDayList } from '@/lib/plan/trip-days'
 import { AiCallError } from './client'
 import type { AiDeps } from './deps'
 import { HttpError, handle, readJson } from './http'
+import { partyNoteLines, readAvoidFoodTags } from './party-notes'
+import { readWeatherLine } from './weather-notes'
 import { planJudgeSave, type PlanAttempt } from './plan-and-save'
 import {
+  arrangeDraftsByDay,
   dropTimesOutsideWindow,
   enforceMustStops,
   mustVisitWithinWindow,
@@ -25,7 +31,7 @@ import {
   samePlaceName,
   type DraftStop,
 } from './stops'
-import { hasNumberOrStairsClaim, sanitizePromptText } from './text-guard'
+import { hasDietTalk, hasNumberOrStairsClaim, sanitizePromptText } from './text-guard'
 
 // AI가 돌려줄 모양. 걷는 시간·거리·계단 칸은 두지 않는다 (엔진이 계산한다).
 const AiStopsSchema = z.object({
@@ -33,6 +39,8 @@ const AiStopsSchema = z.object({
     z.object({
       placeId: z.string().nullable(),
       name: z.string().trim().min(1).max(100),
+      // 여러 날 여행에서 몇째 날인지. 이상한 값이 와도 일정 전체를 버리지 않고 앞 장소의 날에 둔다
+      day: z.number().int().min(1).optional().catch(undefined),
       startTime: TimeSchema.optional(),
       visitMin: nonNegative.optional(),
       seated: z.boolean().optional(),
@@ -41,18 +49,40 @@ const AiStopsSchema = z.object({
   note: z.string().max(500).optional(),
 })
 
+// 한 번에 AI가 짜는 날 수의 한도. 날마다 3~5곳이라 날이 많으면 응답이 길어져 50초 안에 끝나지 않는다.
+// 그 뒤의 날은 비워 두고(날짜 탭은 그대로 보인다) 다시 짜기나 직접 고치기로 채운다.
+const GENERATE_DAYS_MAX = 7
+
+// 여러 날일 때 시스템 프롬프트에 붙인다. 하루짜리는 붙이지 않아 지금과 같다.
+function multiDayPrompt(dayCount: number): string {
+  return (
+    `이번 여행은 ${dayCount}일이다. 날마다 출발·귀가 시간 안에 3~5곳을 고르고, stops의 항목마다 몇째 날인지 "day"(1부터 ${dayCount}까지)를 넣어라. ` +
+    '같은 장소를 여러 날에 넣지 마라. 시간과 순서는 날마다 따로 정한다.'
+  )
+}
+
 const SYSTEM_PROMPT =
   '대전 하루 여행 일정을 짠다. 이 목록의 id로만 골라라. 식사 자리는 placeId null + 이름으로 넣는다. ' +
   '출발·귀가 시간 안에 3~5곳을 고른다. 꼭 갈 곳은 반드시 넣고 예약 시간 그대로 둔다. ' +
-  '걷는 시간·거리·계단 수는 쓰지 마라. ' +
+  '걷는 시간·거리·계단 수는 쓰지 마라. 메모와 식사 자리 이름에 건강·식단 이야기를 쓰지 마라. ' +
   '반드시 JSON으로만 답하라. 모양: {"stops":[{"placeId":"장소 id 또는 null","name":"장소 이름","startTime":"HH:mm","visitMin":60,"seated":false}],"note":"한 줄 메모"}'
+
+const KIND_LABEL: Record<PlaceKind, string> = {
+  attraction: '관광지',
+  restaurant: '식당',
+  cafe: '카페',
+  lodging: '숙박',
+}
 
 function candidateLine(place: PlaceSummary): string {
   const parts = [`id: ${place.id}`, `이름: ${place.name}`, `분류: ${place.category}`]
   if (place.styles.length > 0) parts.push(`스타일: ${place.styles.join(', ')}`)
   parts.push(place.visitMin !== undefined ? `머무는 시간 약 ${place.visitMin}분` : '머무는 시간 미정')
-  parts.push(place.seated ? '앉는 곳' : '앉는 곳 아님')
-  parts.push(place.indoor ? '실내' : '실외')
+  parts.push(`종류: ${KIND_LABEL[placeKindOf(place)]}`)
+  // false는 '아님'과 '미확인'을 함께 뜻한다 (필수 칸이라). 날씨 줄이 야외 장소를 짧게 하라고 하므로 관광지는 야외로 보게 쓴다.
+  // 식당·카페·숙박의 false는 미확인일 뿐이라 야외라고 하지 않는다 (비 오는 날 사람이 넣은 점심 식당을 빼지 않게, weather-view와 같은 기준).
+  parts.push(place.seated ? '앉는 곳' : '앉는 곳 아님 또는 미확인')
+  parts.push(place.indoor ? '실내' : placeKindOf(place) === 'attraction' ? '실외 또는 실내 미확인(야외로 볼 것)' : '실내 여부 미확인')
   return `- ${parts.join(', ')}`
 }
 
@@ -89,6 +119,8 @@ function filterDrafts(
   candidates: PlaceSummary[],
   allowedIds?: Set<string>,
   baseStops?: Stop[],
+  // AI가 새로 지은 식사 자리 이름을 버릴지. 건강·식단 이야기("저염 식당")가 가족 화면에 나오지 않게 한다
+  rejectName: (name: string) => boolean = () => false,
 ): DraftStop[] {
   const byId = new Map(candidates.map(candidate => [candidate.id, candidate] as const))
   const allowed = allowedIds ?? new Set(candidates.map(candidate => candidate.id))
@@ -109,6 +141,7 @@ function filterDrafts(
       drafts.push({
         placeId: stop.placeId,
         name,
+        ...(stop.day !== undefined ? { day: stop.day } : {}),
         ...(stop.startTime !== undefined ? { startTime: stop.startTime } : {}),
         // 머무는 시간은 DB visitMin이 있으면 그것이 우선이다.
         ...(candidate?.visitMin !== undefined
@@ -128,6 +161,7 @@ function filterDrafts(
         drafts.push({
           placeId: null,
           name: base.name,
+          ...(stop.day !== undefined ? { day: stop.day } : {}),
           ...(stop.startTime !== undefined ? { startTime: stop.startTime } : {}),
           ...(base.visitMin !== undefined ? { visitMin: base.visitMin } : {}),
           seated: base.seated ?? stop.seated ?? true,
@@ -136,10 +170,11 @@ function filterDrafts(
         continue
       }
       if (stop.seated !== true) continue
-      if (hasNumberOrStairsClaim(stop.name)) continue
+      if (hasNumberOrStairsClaim(stop.name) || rejectName(stop.name)) continue
       drafts.push({
         placeId: null,
         name: stop.name,
+        ...(stop.day !== undefined ? { day: stop.day } : {}),
         ...(stop.startTime !== undefined ? { startTime: stop.startTime } : {}),
         ...(stop.visitMin !== undefined ? { visitMin: stop.visitMin } : {}),
         seated: true,
@@ -149,7 +184,8 @@ function filterDrafts(
   return drafts
 }
 
-// 연달아 같은 placeId는 하나로 줄인다. 떨어져서 두 번은 그대로 둔다.
+// 같은 날 안에서 연달아 같은 placeId는 하나로 줄인다. 떨어져서 두 번은 그대로 둔다.
+// 날이 다르면 줄이지 않는다 — 1일차 마지막과 2일차 첫 장소가 같은 곳(예: 숙소)일 수 있다.
 function dedupConsecutive(drafts: DraftStop[]): DraftStop[] {
   const out: DraftStop[] = []
   for (const draft of drafts) {
@@ -158,7 +194,8 @@ function dedupConsecutive(drafts: DraftStop[]): DraftStop[] {
       prev !== undefined &&
       prev.placeId !== null &&
       draft.placeId !== null &&
-      prev.placeId === draft.placeId
+      prev.placeId === draft.placeId &&
+      (prev.day ?? 1) === (draft.day ?? 1)
     ) {
       continue
     }
@@ -198,11 +235,15 @@ export async function handleGenerate(
     const transport = filled.transport ?? 'car'
 
     const candidates = await deps.searchCandidates({
+      query: filled.styles.join(' ').slice(0, 100),
       styles: filled.styles,
       ...(filled.budget !== undefined ? { budget: filled.budget } : {}),
       // 장소 사이 이동수단 고르기용이라 대중교통은 버스로 찾는다 (설계 7.3.1).
       transport: transport === 'transit' ? 'bus' : transport,
       avoidStairs: profile.condition.avoidStairs,
+      // 가져온 식당·카페는 위치 순위가 없어 대전 어디서나 이름순으로 뽑힌다. 관광지만 고르게 하고,
+      // 식사는 식사 자리(null)나 사람이 고른 장소로 둔다.
+      kind: 'attraction',
       limit: 30,
     })
 
@@ -259,6 +300,21 @@ export async function handleGenerate(
           : ctx.versions.reduce((a, b) => (b.number > a.number ? b : a)).id
     }
 
+    // 여러 날: 인터뷰의 시작~끝 날짜로 날 수를 정한다. 붙여넣기 다듬기는 바탕 일정을 고치는 것이라 지금처럼 하루로 둔다.
+    const tripDayCount = tripDayList({ date: filled.date ?? null, endDate: filled.endDate ?? null }, []).length
+    const dayCount = isPaste ? 1 : Math.min(GENERATE_DAYS_MAX, tripDayCount)
+    // 여러 날이면 "하루 여행"이라는 첫 문장을 바꾸고 날 지시를 붙인다
+    const systemPrompt =
+      dayCount > 1
+        ? `${SYSTEM_PROMPT.replace('대전 하루 여행 일정을 짠다.', '대전 여행 일정을 짠다.')} ${multiDayPrompt(dayCount)}`
+        : SYSTEM_PROMPT
+    const dayWish =
+      dayCount > 1
+        ? tripDayCount > dayCount
+          ? `여행 ${tripDayCount}일 가운데 앞 ${dayCount}일을 날마다 `
+          : `${dayCount}일 동안 날마다 `
+        : ''
+
     const timeWish =
       filled.startTime !== undefined && filled.endTime !== undefined
         ? `출발 ${filled.startTime} ~ 귀가 ${filled.endTime} 안에`
@@ -267,6 +323,19 @@ export async function handleGenerate(
       filled.mustVisit.length > 0
         ? `꼭 갈 곳: ${filled.mustVisit.map(must => (must.reservedAt ? `${must.name} (예약 ${must.reservedAt})` : must.name)).join(', ')}`
         : '꼭 갈 곳 없음'
+
+    // 피할 음식(병·약에서 나온 태그만)과 운동 참고 줄. 병·약 이름은 어디에도 가지 않는다 (AGENTS 6장).
+    // 비·눈·폭염인 날은 실내 위주로 하라는 날씨 줄도 붙인다 (판정은 바꾸지 않는다). 날짜는 인터뷰가 정한 것을 먼저 본다
+    const weatherDates = filled.date
+      ? { date: filled.date, endDate: filled.endDate ?? null }
+      : { date: ctx.trip.date ?? null, endDate: ctx.trip.endDate ?? null }
+    const [avoidTags, weatherLine] = await Promise.all([
+      readAvoidFoodTags(deps, input.tripId),
+      readWeatherLine(deps, weatherDates, dayCount),
+    ])
+    const partyBlock = [...partyNoteLines(avoidTags, ctx.travelers), ...(weatherLine ? [weatherLine] : [])]
+      .map(line => `${line}\n`)
+      .join('')
 
     // AI가 돌려준 한 줄 메모는 저장된 시도의 것으로 쓴다 — planJudgeSave가 고른 시도의 메타를 읽는다.
     const args: {
@@ -290,7 +359,8 @@ export async function handleGenerate(
         const userText =
           `후보 장소 목록:\n${candidates.map(candidateLine).join('\n')}\n` +
           baseBlock +
-          `${timeWish} 일정을 짜라.\n${mustWish}\n` +
+          `${dayWish}${timeWish} 일정을 짜라.\n${mustWish}\n` +
+          partyBlock +
           (feedback === null
             ? ''
             : `앞 일정은 이런 이유로 부모님 조건을 넘었다:\n${feedback}\n덜 걷게 다시 골라라.`)
@@ -298,7 +368,7 @@ export async function handleGenerate(
         const parsed: z.infer<typeof AiStopsSchema> = await deps.callJson(
           {
             messages: [
-              { role: 'system', content: SYSTEM_PROMPT },
+              { role: 'system', content: systemPrompt },
               { role: 'user', content: userText },
             ],
             schema: AiStopsSchema,
@@ -306,12 +376,15 @@ export async function handleGenerate(
           { deadlineMs: deadlineMs() },
         )
         // 메모에 숫자·계단 약속이 있으면 버린다 — 숫자는 엔진에서만 나온다 (설계 6.4).
+        // 건강 상태를 짐작한 말("당뇨가 있으셔서…")도 버린다 — 프롬프트에 병 이름을 안 넣어도 AI가 짐작해 쓸 수 있다.
         const note =
-          parsed.note !== undefined && !hasNumberOrStairsClaim(parsed.note) ? parsed.note : undefined
+          parsed.note !== undefined && !hasNumberOrStairsClaim(parsed.note) && !hasDietTalk(parsed.note, avoidTags)
+            ? parsed.note
+            : undefined
         // AI가 정한 시간이 출발~귀가 밖이면 지운다 (데모 버그 11/2: 성심당 00:00).
         // 붙여넣기 바탕에 사람이 적어 둔 같은 장소·같은 시간은 시간대 밖이어도 남긴다.
         const filtered = dropTimesOutsideWindow(
-          filterDrafts(parsed.stops, candidates, allowedIds, isPaste ? baseStops : undefined),
+          filterDrafts(parsed.stops, candidates, allowedIds, isPaste ? baseStops : undefined, name => hasDietTalk(name, avoidTags)),
           filled,
           draft => baseStops.some(base => base.startTime === draft.startTime && samePlaceName(base.name, draft.name)),
         )
@@ -319,7 +392,11 @@ export async function handleGenerate(
         if (filtered.length === 0) {
           throw new AiCallError('invalid_output', 'AI가 고른 장소가 없어요')
         }
-        const drafts = dedupConsecutive(applyMustVisit(filtered, musts))
+        // 날을 정리한 뒤 꼭 갈 곳을 맞추고, 되돌려 넣은 꼭 갈 곳에도 날을 붙인다(앞 장소의 날).
+        // 하루짜리는 모두 1일차가 되어 day 칸이 저장되지 않는다(draftsToStops) — 지금 저장 모양과 같다.
+        const drafts = dedupConsecutive(
+          arrangeDraftsByDay(applyMustVisit(arrangeDraftsByDay(filtered, dayCount), musts), dayCount),
+        )
         if (drafts.length === 0) {
           throw new AiCallError('invalid_output', 'AI가 고른 장소가 없어요')
         }

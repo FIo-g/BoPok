@@ -10,6 +10,8 @@ import {
   ADULT_MIN_AGE,
   ADULT_SPEED_TABLE,
   CHILD_SPEED_TABLE,
+  CONTINUOUS_DEFAULT_BY_AGE,
+  CONTINUOUS_DEFAULT_MOBILITY_AID_MIN,
   DEFAULT_CONDITION,
   HEIGHT_ADJUST_CAP_MPS,
   HEIGHT_MPS_PER_CM,
@@ -106,10 +108,32 @@ function roundField(field: NumericField, value: number): number {
 
 type NumericResult = { value: number; from: ConditionSource; pendingConsents: PendingConsent[] }
 
+// 그 사람이 답하지 않았을 때의 기본값. 쉬지 않고 걷기만 나이·보조기구에 맞추고, 나머지 칸은 모두 같다 (설계 7.1.2)
+export function defaultConditionValue(field: NumericField, traveler: Pick<Traveler, 'age' | 'mobilityAid'>): number {
+  if (field !== 'continuousMin') return DEFAULT_CONDITION[field]
+  if (traveler.mobilityAid) return CONTINUOUS_DEFAULT_MOBILITY_AID_MIN
+  let value = DEFAULT_CONDITION.continuousMin
+  if (traveler.age !== undefined) {
+    for (const row of CONTINUOUS_DEFAULT_BY_AGE) if (traveler.age >= row.minAge) value = row.continuousMin
+  }
+  return value
+}
+
+// 여러 사람의 기본값 가운데 가장 엄격한 값
+function strictestDefault(field: NumericField, list: Traveler[]): number {
+  let value = DEFAULT_CONDITION[field]
+  for (const traveler of list) {
+    const own = defaultConditionValue(field, traveler)
+    if (isStricter(field, own, value)) value = own
+  }
+  return value
+}
+
 function numericCondition(field: NumericField, parents: Traveler[], others: Traveler[]): NumericResult {
   const parentAnswer = strictestOf(field, parents)
   const otherAnswer = strictestOf(field, others)
-  const fallback = DEFAULT_CONDITION[field]
+  // 답한 분이 없을 때 쓰는 값: 부모님이 있으면 부모님들, 없으면 일행 가운데 가장 엄격한 분의 기본값
+  const fallback = strictestDefault(field, parents.length > 0 ? parents : others)
   const pendingConsents: PendingConsent[] = []
 
   if (parents.length === 0) {

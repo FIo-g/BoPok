@@ -1,6 +1,18 @@
+import Anthropic from '@anthropic-ai/sdk'
 import { describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
-import { AiCallError, callJson, providersFromEnv, type AiProvider, type ChatMessage, type FetchLike } from './client'
+import {
+  AiCallError,
+  callJson,
+  providersFromEnv,
+  type AiProvider,
+  type ChatMessage,
+  type ClaudeClientFactory,
+  type ClaudeClientOptions,
+  type ClaudeCreateParams,
+  type ClaudeReply,
+  type FetchLike,
+} from './client'
 
 const schema = z.object({ ok: z.boolean() })
 const messages: ChatMessage[] = [{ role: 'user', content: 'JSON을 내줘' }]
@@ -201,15 +213,13 @@ describe('callJson', () => {
     expect(providersFromEnv(env).map(p => p.name)).toEqual(['upstage'])
     expect(providersFromEnv({ ...env, OPENCODE_MODEL: 'm2' }).map(p => p.name)).toEqual(['upstage', 'opencode'])
     const only = providersFromEnv({ UPSTAGE_API_KEY: 'k1' })[0]
-    expect(only?.baseUrl).toBe('https://api.upstage.ai/v1')
-    expect(only?.model).toBe('solar-pro4')
+    expect(only).toMatchObject({ baseUrl: 'https://api.upstage.ai/v1', model: 'solar-pro4' })
   })
 
   it('providersFromEnv: 빈 문자열·공백은 없음으로 본다', () => {
     // 주소·모델이 비어 있거나 공백이면 기본값을 쓴다
     const blank = providersFromEnv({ UPSTAGE_API_KEY: 'k', UPSTAGE_BASE_URL: '', UPSTAGE_MODEL: '  ' })[0]
-    expect(blank?.baseUrl).toBe('https://api.upstage.ai/v1')
-    expect(blank?.model).toBe('solar-pro4')
+    expect(blank).toMatchObject({ baseUrl: 'https://api.upstage.ai/v1', model: 'solar-pro4' })
     // 공백뿐인 키·모델은 없는 것으로 본다
     expect(providersFromEnv({ UPSTAGE_API_KEY: '  ' })).toEqual([])
     expect(providersFromEnv({ OPENCODE_API_KEY: 'k2', OPENCODE_MODEL: '  ' }).map(p => p.name)).toEqual([])
@@ -217,7 +227,7 @@ describe('callJson', () => {
 
   it('providersFromEnv: baseUrl 끝의 /는 뗀다', () => {
     const withSlash = providersFromEnv({ UPSTAGE_API_KEY: 'k', UPSTAGE_BASE_URL: 'https://x/v1/' })[0]
-    expect(withSlash?.baseUrl).toBe('https://x/v1')
+    expect(withSlash).toMatchObject({ baseUrl: 'https://x/v1' })
   })
 
   it('에러 메시지에 키가 없다', async () => {
@@ -247,6 +257,259 @@ describe('callJson', () => {
       const { fn } = fakeFetch(() => statusResponse(429))
       await callJson({ messages, schema }, { fetch: fn, providers: [upstage] }).catch(() => undefined)
       expect(spy).toHaveBeenCalledWith('[ai] 공급자 실패', 'upstage', 'm1', expect.stringContaining('HTTP 429'))
+    } finally {
+      spy.mockRestore()
+    }
+  })
+})
+
+// ---- Claude (공식 SDK) ----
+
+const claude: AiProvider = { name: 'claude', model: 'claude-opus-5-5', apiKey: 'secret-key-cc' }
+
+type ClaudeCall = { options: ClaudeClientOptions; params: ClaudeCreateParams }
+
+// 하는 일: 실제 API를 부르지 않고 SDK 호출 꼴·횟수를 남기는 가짜 Anthropic 클라이언트 공장
+function fakeClaude(handler: (call: ClaudeCall, index: number) => ClaudeReply | Promise<ClaudeReply>) {
+  const calls: ClaudeCall[] = []
+  const factory: ClaudeClientFactory = options => ({
+    beta: {
+      messages: {
+        create: async params => {
+          const call: ClaudeCall = { options, params }
+          calls.push(call)
+          return handler(call, calls.length - 1)
+        },
+      },
+    },
+  })
+  return { factory, calls }
+}
+
+function textReply(...texts: string[]): ClaudeReply {
+  return {
+    stop_reason: 'end_turn',
+    content: texts.map(text => ({ type: 'text' as const, text, citations: null })),
+  }
+}
+
+function sdkError(status: number, type: string): Error {
+  // 실제 SDK가 상태 코드로 고르는 클래스 그대로 만든다 (429 → RateLimitError, 5xx → InternalServerError)
+  return Anthropic.APIError.generate(
+    status,
+    { type: 'error', error: { type, message: `테스트 오류 ${status}` } },
+    `테스트 오류 ${status}`,
+    new Headers(),
+  )
+}
+
+describe('providersFromEnv — Claude', () => {
+  it('키가 있으면 맨 앞, 모델 기본값은 claude-sonnet-5-5', () => {
+    const env = { ANTHROPIC_API_KEY: 'ka', UPSTAGE_API_KEY: 'ku', OPENCODE_API_KEY: 'ko', OPENCODE_MODEL: 'm2' }
+    expect(providersFromEnv(env).map(p => p.name)).toEqual(['claude', 'upstage', 'opencode'])
+    expect(providersFromEnv(env)[0]).toEqual({ name: 'claude', model: 'claude-sonnet-5-5', apiKey: 'ka' })
+  })
+
+  it('ANTHROPIC_MODEL로 모델을 바꾸고, 빈 값·공백이면 기본값', () => {
+    expect(providersFromEnv({ ANTHROPIC_API_KEY: 'ka', ANTHROPIC_MODEL: 'claude-x' })[0]?.model).toBe('claude-x')
+    expect(providersFromEnv({ ANTHROPIC_API_KEY: 'ka', ANTHROPIC_MODEL: '  ' })[0]?.model).toBe('claude-sonnet-5-5')
+    expect(providersFromEnv({ ANTHROPIC_API_KEY: 'ka', ANTHROPIC_MODEL: '' })[0]?.model).toBe('claude-sonnet-5-5')
+  })
+
+  it('키가 없거나 공백이면 Claude는 없고 나머지 순서는 그대로', () => {
+    expect(providersFromEnv({ UPSTAGE_API_KEY: 'ku' }).map(p => p.name)).toEqual(['upstage'])
+    expect(providersFromEnv({ ANTHROPIC_API_KEY: '  ', UPSTAGE_API_KEY: 'ku' }).map(p => p.name)).toEqual(['upstage'])
+    expect(providersFromEnv({ ANTHROPIC_API_KEY: '', ANTHROPIC_MODEL: 'claude-x' })).toEqual([])
+  })
+})
+
+describe('callJson — Claude', () => {
+  it('키가 있으면 Claude를 먼저 부르고, 맞으면 다른 공급자는 부르지 않는다', async () => {
+    const providers = providersFromEnv({ ANTHROPIC_API_KEY: 'ka', UPSTAGE_API_KEY: 'ku' })
+    const sdk = fakeClaude(() => textReply('{"ok":true}'))
+    const http = fakeFetch(() => okResponse('{"ok":false}'))
+    const result = await callJson({ messages, schema }, { providers, anthropic: sdk.factory, fetch: http.fn })
+    expect(result).toEqual({ ok: true })
+    expect(sdk.calls).toHaveLength(1)
+    expect(http.calls).toHaveLength(0)
+  })
+
+  it('요청 꼴: 공식 SDK beta.messages, 재시도 0, effort medium, 서버 쪽 대체 모델, temperature 없음', async () => {
+    const sdk = fakeClaude(() => textReply('{"ok":true}'))
+    await callJson(
+      {
+        messages: [
+          { role: 'system', content: 'JSON만 답하라' },
+          { role: 'system', content: '한국어로' },
+          { role: 'user', content: 'JSON을 내줘' },
+          { role: 'assistant', content: '{"ok":"아니야"}' },
+          { role: 'user', content: '다시' },
+        ],
+        schema,
+        temperature: 0.7,
+      },
+      { providers: [claude], anthropic: sdk.factory, timeoutMs: 20000 },
+    )
+    const call = sdk.calls[0]!
+    expect(call.options).toEqual({ apiKey: 'secret-key-cc', maxRetries: 0, timeout: 20000 })
+    expect(call.params).toEqual({
+      model: 'claude-opus-5-5',
+      max_tokens: 16000,
+      system: 'JSON만 답하라\n\n한국어로',
+      messages: [
+        { role: 'user', content: 'JSON을 내줘' },
+        { role: 'assistant', content: '{"ok":"아니야"}' },
+        { role: 'user', content: '다시' },
+      ],
+      output_config: { effort: 'medium' },
+      betas: ['server-side-fallback-2026-07-01'],
+      fallbacks: 'default',
+    })
+    // 현재 모델은 샘플링 매개변수·thinking·prefill을 거절(400)한다 — 아예 보내지 않는다
+    for (const key of ['temperature', 'top_p', 'top_k', 'thinking']) {
+      expect(call.params).not.toHaveProperty(key)
+    }
+  })
+
+  it('system 메시지가 없으면 system을 보내지 않는다', async () => {
+    const sdk = fakeClaude(() => textReply('{"ok":true}'))
+    await callJson({ messages, schema }, { providers: [claude], anthropic: sdk.factory })
+    expect(sdk.calls[0]!.params).not.toHaveProperty('system')
+  })
+
+  it('text 블록만 이어 붙이고 thinking·fallback 블록은 무시한다', async () => {
+    const sdk = fakeClaude(() => ({
+      stop_reason: 'end_turn',
+      content: [
+        { type: 'thinking', thinking: '생각 중', signature: 'sig' },
+        { type: 'text', text: '{"ok":', citations: null },
+        { type: 'text', text: 'true}', citations: null },
+      ],
+    }))
+    const result = await callJson({ messages, schema }, { providers: [claude], anthropic: sdk.factory })
+    expect(result).toEqual({ ok: true })
+  })
+
+  it('울타리 친 JSON도 읽음', async () => {
+    const sdk = fakeClaude(() => textReply('```json\n{"ok":true}\n```'))
+    const result = await callJson({ messages, schema }, { providers: [claude], anthropic: sdk.factory })
+    expect(result).toEqual({ ok: true })
+  })
+
+  it('형식이 틀리면 Claude에 한 번 다시 묻고 통과', async () => {
+    const sdk = fakeClaude((_call, i) => (i === 0 ? textReply('{"ok":"아니야"}') : textReply('{"ok":true}')))
+    const result = await callJson({ messages, schema }, { providers: [claude], anthropic: sdk.factory })
+    expect(result).toEqual({ ok: true })
+    expect(sdk.calls).toHaveLength(2)
+    const retry = sdk.calls[1]!.params.messages
+    expect(retry).toHaveLength(3)
+    expect(retry[1]).toEqual({ role: 'assistant', content: '{"ok":"아니야"}' })
+    expect(retry[2]?.role).toBe('user')
+    expect(retry[2]?.content).toContain('앞 답이 형식에 맞지 않았다')
+  })
+
+  it('Claude가 두 번 틀리면 다음 공급자', async () => {
+    const sdk = fakeClaude(() => textReply('형식에 안 맞는 말'))
+    const http = fakeFetch(() => okResponse('{"ok":true}'))
+    const result = await callJson({ messages, schema }, { providers: [claude, upstage], anthropic: sdk.factory, fetch: http.fn })
+    expect(result).toEqual({ ok: true })
+    expect(sdk.calls).toHaveLength(2)
+    expect(http.calls).toHaveLength(1)
+  })
+
+  it('429(RateLimitError)면 재시도 없이 다음 공급자', async () => {
+    const sdk = fakeClaude(() => {
+      throw sdkError(429, 'rate_limit_error')
+    })
+    const http = fakeFetch(() => okResponse('{"ok":true}'))
+    const result = await callJson({ messages, schema }, { providers: [claude, upstage], anthropic: sdk.factory, fetch: http.fn })
+    expect(result).toEqual({ ok: true })
+    expect(sdk.calls).toHaveLength(1)
+    expect(http.calls).toHaveLength(1)
+  })
+
+  it('stop_reason이 refusal이면 공급자 실패로 보고 다음 공급자', async () => {
+    const sdk = fakeClaude(() => ({
+      stop_reason: 'refusal',
+      content: [{ type: 'text', text: '{"ok":true}', citations: null }], // 거절 응답의 글은 쓰지 않는다
+    }))
+    const http = fakeFetch(() => okResponse('{"ok":true}'))
+    const result = await callJson({ messages, schema }, { providers: [claude, upstage], anthropic: sdk.factory, fetch: http.fn })
+    expect(result).toEqual({ ok: true })
+    expect(sdk.calls).toHaveLength(1) // 다시 묻지 않는다
+    expect(http.calls).toHaveLength(1)
+  })
+
+  it.each([
+    ['401 AuthenticationError', () => sdkError(401, 'authentication_error')],
+    ['500 InternalServerError', () => sdkError(500, 'api_error')],
+    ['529 overloaded', () => sdkError(529, 'overloaded_error')],
+    ['400 BadRequestError', () => sdkError(400, 'invalid_request_error')],
+    ['네트워크 APIConnectionError', () => new Anthropic.APIConnectionError({ message: '연결이 끊겼어요' })],
+    ['시간 초과 APIConnectionTimeoutError', () => new Anthropic.APIConnectionTimeoutError()],
+    ['알 수 없는 예외', () => new TypeError('이상한 오류')],
+  ])('%s면 재시도 없이 다음 공급자', async (_name, makeError) => {
+    const sdk = fakeClaude(() => {
+      throw makeError()
+    })
+    const http = fakeFetch(() => okResponse('{"ok":true}'))
+    const result = await callJson({ messages, schema }, { providers: [claude, upstage], anthropic: sdk.factory, fetch: http.fn })
+    expect(result).toEqual({ ok: true })
+    expect(sdk.calls).toHaveLength(1)
+    expect(http.calls).toHaveLength(1)
+  })
+
+  it('text 블록이 없으면 공급자 실패', async () => {
+    const sdk = fakeClaude(() => ({ stop_reason: 'end_turn', content: [] }))
+    const error = await callJson({ messages, schema }, { providers: [claude], anthropic: sdk.factory }).catch(e => e)
+    expect(error).toBeInstanceOf(AiCallError)
+    expect(error.reason).toBe('provider_failed')
+  })
+
+  it('Claude만 있고 거절·실패하면 provider_failed', async () => {
+    const sdk = fakeClaude(() => ({ stop_reason: 'refusal', content: [] }))
+    const error = await callJson({ messages, schema }, { providers: [claude], anthropic: sdk.factory }).catch(e => e)
+    expect(error).toBeInstanceOf(AiCallError)
+    expect(error.reason).toBe('provider_failed')
+  })
+
+  it('SDK 시간 초과는 timeoutMs와 남은 시간 중 작은 값', async () => {
+    let n = 0
+    const now = () => (n++ === 0 ? 0 : 44000) // 남은 시간 1000
+    const sdk = fakeClaude(() => textReply('{"ok":true}'))
+    await callJson(
+      { messages, schema },
+      { providers: [claude], anthropic: sdk.factory, timeoutMs: 30000, deadlineMs: 45000, now },
+    )
+    expect(sdk.calls[0]!.options.timeout).toBe(1000)
+  })
+
+  it('전체 마감을 넘기면 Claude도 부르지 않고 provider_failed', async () => {
+    let n = 0
+    const now = () => (n++ === 0 ? 0 : 60000)
+    const sdk = fakeClaude(() => textReply('{"ok":true}'))
+    const error = await callJson(
+      { messages, schema },
+      { providers: [claude], anthropic: sdk.factory, deadlineMs: 45000, now },
+    ).catch(e => e)
+    expect(error.reason).toBe('provider_failed')
+    expect(sdk.calls).toHaveLength(0)
+  })
+
+  it('실패 로그에 공급자·상태만 남기고 키·프롬프트 내용은 남기지 않는다', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const sdk = fakeClaude(() => {
+        throw sdkError(429, 'rate_limit_error')
+      })
+      const secretMessages: ChatMessage[] = [{ role: 'user', content: '비밀스러운 사용자 입력' }]
+      const error = await callJson({ messages: secretMessages, schema }, { providers: [claude], anthropic: sdk.factory }).catch(e => e)
+      expect(spy).toHaveBeenCalledWith('[ai] 공급자 실패', 'claude', 'claude-opus-5-5', expect.stringContaining('HTTP 429'))
+      const logged = JSON.stringify(spy.mock.calls)
+      for (const text of [logged, String(error.message)]) {
+        expect(text).not.toContain('secret-key-cc')
+        expect(text).not.toContain('비밀스러운 사용자 입력')
+      }
     } finally {
       spy.mockRestore()
     }

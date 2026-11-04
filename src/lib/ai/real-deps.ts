@@ -3,9 +3,14 @@
 // (가짜 로그인 헤더로 로그인 없이 들어오는 길이 실제 실행에 남지 않게 하려는 것이다. routes.test.ts가 지킨다.)
 import 'server-only'
 import { getLegsPartial } from '@/lib/geo/legs'
+import { avoidFoodTagsForTrip } from '@/lib/health'
+import { tripWeather } from '@/lib/weather'
+import { searchPoi } from '@/lib/geo/poi'
+import { matchPlaceByName, searchCandidates } from '@/lib/places/search'
 import {
   createVersion,
   getOpinions,
+  listChatMessages,
   getTripContext,
   interviews,
   requireTripMember,
@@ -13,7 +18,7 @@ import {
 } from '@/lib/trips'
 import { callJson } from './client'
 import type { AiDeps } from './deps'
-import { createLegsAdapter, createPlaceAdapters, createPlaceDetailsAdapter } from './place-adapters'
+import { createLegsAdapter, createPlaceDetailsAdapter } from './place-adapters'
 
 // overrides는 테스트에서 일부만 바꿔 끼울 때 쓴다 (예: 진짜 DB는 두고 callJson만 가짜로).
 export function createRealDeps(overrides: Partial<AiDeps> = {}): AiDeps {
@@ -23,14 +28,20 @@ export function createRealDeps(overrides: Partial<AiDeps> = {}): AiDeps {
     // 함수 인자 끝의 db(테스트용)가 새어 들어가지 않게 화살표로 감싼다.
     getTripContext: tripId => getTripContext(tripId),
     getOpinions: versionId => getOpinions(versionId),
+    getChatMessages: tripId => listChatMessages({ tripId }),
     createVersion: (tripId, input) => createVersion(tripId, input),
     saveTravelers: (tripId, travelers) => saveTravelers(tripId, travelers),
+    // 김태형 health: 일행 전체의 병·약에서 음식 태그만 모은다 (db 인자가 새어 들어가지 않게 감싼다)
+    getAvoidFoodTags: tripId => avoidFoodTagsForTrip(tripId),
+    // 김태형 weather: 기상청 단기·중기예보 (키 TOURAPI_SERVICE_KEY). 부른 결과는 발표 단위로 캐시된다
+    getWeather: async dates => (await tripWeather(dates)).days,
     interviews: {
       get: tripId => interviews.get(tripId),
       save: (tripId, state) => interviews.save(tripId, state),
     },
-    // 이동주: 장소 조회와 경로. 후보 검색·이름 맞추기·POI는 아직 없어 어댑터가 채운다.
-    ...createPlaceAdapters(),
+    searchCandidates: query => searchCandidates(query),
+    matchPlaceByName: name => matchPlaceByName(name),
+    searchPoi: name => searchPoi(name),
     getPlaceDetails: createPlaceDetailsAdapter(),
     getLegs: createLegsAdapter(getLegsPartial),
     callJson,

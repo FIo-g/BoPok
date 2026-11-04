@@ -12,12 +12,13 @@ import { listVersions } from './versions'
 
 // deps.ts의 AiTripInfo·TripContext와 같은 모양 (타입을 import하지 않고 구조만 맞춘다 —
 // lib/ai는 김태형 담당이라 그쪽을 기준으로 끌어오면 서로 물고 들어간다).
-export type TripInfo = { id: string; groupId: string; startMode: StartMode }
+export type TripInfo = { id: string; groupId: string; startMode: StartMode; date: string | null; endDate: string | null }
 export type TripContext = { trip: TripInfo; travelers: Traveler[]; versions: TripVersion[] }
 
 export async function getTripContext(tripId: string, db: Db = getDb()): Promise<TripContext> {
   const [row] = await db
-    .select({ id: trips.id, groupId: trips.groupId, startMode: trips.startMode })
+    // 날짜는 AI가 날씨 참고 줄을 만들 때 쓴다
+    .select({ id: trips.id, groupId: trips.groupId, startMode: trips.startMode, date: trips.date, endDate: trips.endDate })
     .from(trips)
     .where(eq(trips.id, tripId))
     .limit(1)
