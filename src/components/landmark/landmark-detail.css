@@ -226,6 +226,13 @@
 .lmd-ctaSticky {
   display: none;
 }
+/* 실내 보기: 정보 카드가 길어서 미니맵을 조금 줄이고 카드에 더 준다 */
+.lmd-panel[data-indoor='true'] .lmd-card {
+  max-height: calc(100% - 136px);
+}
+.lmd-panel[data-indoor='true'] .lmd-mapBox {
+  min-height: 120px;
+}
 
 .lmd-mapBox {
   flex: 1;
@@ -313,10 +320,14 @@
     width: auto;
     box-shadow: 0 6px 20px rgba(29, 78, 216, 0.35);
   }
-  .lmd-mapBox {
+  .lmd-mapBox,
+  .lmd-panel[data-indoor='true'] .lmd-mapBox {
     flex: none;
     height: 200px;
     min-height: 200px;
+  }
+  .lmd-panel[data-indoor='true'] .lmd-card {
+    max-height: none;
   }
   .lmd-close {
     position: fixed;
