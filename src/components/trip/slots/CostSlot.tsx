@@ -1,15 +1,16 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { PlaceCostChoicesResponseSchema, TaxiCostResponseSchema, legKey, type CostItemKind, type LegRequest, type PlaceCostChoices } from '@/lib/contracts'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { PlaceCostChoicesResponseSchema, TaxiCostResponseSchema, costPlanContext, legKey, type CostDraft, type SavedCostPlan, type CostItemKind, type LegRequest, type PlaceCostChoices } from '@/lib/contracts'
 import { estimateCosts } from '@/lib/engine/cost'
 import { api, USE_MOCKS } from '@/lib/api-client'
 import { request } from '@/lib/api-client/http'
 import { Card, Button } from '@/components/ui'
 import type { TripSlotProps } from './types'
 import { applyUneditedQuotes, costScope, placeCostKey, taxiCostKey } from './cost-drafts'
+import { CostStorage } from './CostStorage'
 
-type Draft = { amount: string; unit: '' | 'per_person' | 'shared'; quantity: number; kind: CostItemKind; option: string; source?: string; checkedAt?: string; confidence?: string }
+type Draft = CostDraft
 const emptyDraft = (): Draft => ({ amount: '', unit: '', quantity: 1, kind: 'other', option: '' })
 const labels: Record<CostItemKind, string> = { admission: '입장료', meal: '식사·카페', lodging: '숙박', taxi: '택시', other: '기타' }
 const inputClass = 'min-h-12 w-full rounded-xl border border-line bg-white px-3 py-2 text-base'
@@ -20,6 +21,22 @@ const isWebUrl = (value?: string): value is string => !!value && /^https?:\/\//.
 export function CostSlot({ tripId, versionId, day, stops, travelers }: TripSlotProps) {
   const [drafts, setDrafts] = useState<Record<string, Draft>>({})
   const [extras, setExtras] = useState<Record<string, number>>({})
+  const touched = useRef(new Set<string>())
+  const restore = useCallback((scope: string, plan: SavedCostPlan, force: boolean) => {
+    // 첫 조회가 늦게 도착해도 이미 입력 중인 금액을 덮어쓰지 않는다.
+    if (!force && touched.current.has(scope)) return
+    touched.current.delete(scope)
+    setDrafts(previous => {
+      const next = { ...previous }
+      for (const key of Object.keys(next)) {
+        if (key.startsWith(`${scope}:extra-`)) { delete next[key]; continue }
+        try { if (JSON.parse(key)[0] === scope) delete next[key] } catch {}
+      }
+      for (const { key, value } of plan.drafts) next[key] = value
+      return next
+    })
+    setExtras(previous => ({ ...previous, [scope]: plan.extraCount }))
+  }, [])
   const [prices, setPrices] = useState<{ scope: string; data: PlaceCostChoices; error: boolean }>({ scope: '', data: [], error: false })
   const [taxiStatus, setTaxiStatus] = useState({ scope: '', busy: false, message: '' })
   const taxiController = useRef<AbortController | null>(null)
@@ -67,9 +84,11 @@ export function CostSlot({ tripId, versionId, day, stops, travelers }: TripSlotP
     return { result, known: charges.length, missing: rows.length - charges.length }
   }, [rows, drafts, travelers.length])
   function update(id: string, patch: Partial<Draft>) {
+    touched.current.add(scope)
     setDrafts(previous => ({ ...previous, [id]: { ...emptyDraft(), ...previous[id], ...patch } }))
   }
   async function loadTaxiPrices() {
+    touched.current.add(scope)
     taxiController.current?.abort()
     const controller = new AbortController()
     taxiController.current = controller
@@ -112,7 +131,9 @@ export function CostSlot({ tripId, versionId, day, stops, travelers }: TripSlotP
     <Card>
       <h3 className="text-lg font-extrabold">{day}일차 예상 비용 · 한 사람 기준</h3>
       <p className="mt-1 text-sm text-muted">함께 가는 {travelers.length}명 기준 · 여유 20% 포함 · 추정치</p>
-      <p className="mt-1 text-sm text-muted">직접 입력한 금액은 이 화면에서만 계산돼요. 새로고침하면 초기화돼요.</p>
+      <CostStorage tripId={tripId} versionId={versionId} day={day} scope={scope} context={costPlanContext(stops, travelers.length)}
+        drafts={rows.flatMap(row => drafts[row.id] ? [{ key: row.id, value: drafts[row.id] }] : [])}
+        extraCount={extras[scope] ?? 0} mock={USE_MOCKS} onRestore={restore} />
       {calculation.result && calculation.known > 0 ? (
         <p className="my-3 text-xl font-extrabold" aria-live="polite">약 {won(calculation.result.perPersonKrw.low)}~{won(calculation.result.perPersonKrw.high)}</p>
       ) : <p className="my-3 font-bold">금액과 계산 단위를 선택하면 합계가 나와요.</p>}
@@ -158,7 +179,7 @@ export function CostSlot({ tripId, versionId, day, stops, travelers }: TripSlotP
               </p>}
             </fieldset>
           })}
-          <Button variant="secondary" onClick={() => setExtras(previous => ({ ...previous, [scope]: Math.min(20, (previous[scope] ?? 0) + 1) }))}>기타 비용 더하기</Button>
+          <Button variant="secondary" onClick={() => { touched.current.add(scope); setExtras(previous => ({ ...previous, [scope]: Math.min(20, (previous[scope] ?? 0) + 1) })) }}>기타 비용 더하기</Button>
           {rows.some(row => row.taxi) && <Button variant="secondary" disabled={taxiBusy} onClick={() => void loadTaxiPrices()}>{taxiBusy ? '택시 요금 확인 중…' : 'TMAP 거리로 택시 요금 추정'}</Button>}
           {taxiMessage && <p className="text-sm text-info" role="status">{taxiMessage}</p>}
           <p className="text-sm text-muted">택시는 차량 수(중형 한 대 최대 4명), 숙박은 객실 수×박 수를 수량에 반영해 주세요. 가격 확인일은 API 수집일이며 예약·결제 금액과 다를 수 있어요.</p>

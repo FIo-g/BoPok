@@ -43,6 +43,13 @@
       "when": 1793696860450,
       "tag": "0005_place-services-research",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793760557518,
+      "tag": "0006_trip-cost-plans",
+      "breakpoints": true
     }
   ]
 }

@@ -6,6 +6,7 @@ import type { ChatMessage, Budget, FoodTag, Opinion, PlaceDetail, PlaceSummary, 
 import type { StartMode, InterviewState, AiFallback, ApiErrorCode } from '@/lib/contracts'
 import type { Stop, Leg, LegRequest } from '@/lib/contracts'
 import type { callJson } from './client'
+import type { PlaceRecommendationRequest, PlaceRecommendationResponse } from '@/lib/contracts'
 
 // 김경선 trips.ts의 trip 행 가운데 AI가 필요한 칸. 날짜는 날씨 참고 줄에만 쓴다 (없으면 날씨 없이 짠다)
 export type AiTripInfo = { id: string; groupId: string; startMode: StartMode; date?: string | null; endDate?: string | null }
@@ -62,6 +63,8 @@ export interface AiDeps {
   searchPoi(name: string): Promise<{ name: string; coord: Coord } | null>
   getPlaceDetails(ids: string[]): Promise<PlaceDetail[]>
   getLegs(requests: LegRequest[]): Promise<Leg[]>
+  // 이동주: 빈 식사·숙박 자리를 현재 동선 가까운 DB 장소로 채운다. 없으면 기존 동작을 유지한다.
+  recommendServicePlaces?(input: PlaceRecommendationRequest): Promise<PlaceRecommendationResponse>
   interviews: InterviewStore
   // 모든 AI 호출은 실제 client.ts의 callJson으로만 한다 — 테스트에서 가짜로 바꿔 끼우는 지점
   callJson: typeof callJson

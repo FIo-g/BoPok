@@ -9,13 +9,14 @@ process.chdir(resolve(dirname(fileURLToPath(import.meta.url)), '../..'))
 async function main() {
   const { values } = parseArgs({ options: {
     'install-schema': { type: 'boolean', default: false }, index: { type: 'boolean', default: false },
-    limit: { type: 'string', default: '16' }, 'max-requests': { type: 'string', default: '0' }, help: { type: 'boolean', default: false },
+    limit: { type: 'string', default: '16' }, kind: { type: 'string' }, 'max-requests': { type: 'string', default: '0' }, help: { type: 'boolean', default: false },
   } })
   if (values.help) {
     console.log(`장소 벡터 검색 준비 (기본: 읽기 전용 상태 확인)
 node --use-system-ca --env-file-if-exists=.env.local --conditions=react-server scripts/data/place-vector-index.mjs
 --install-schema       main에 머지된 Neon 전용 벡터 SQL만 적용
 --index                Upstage 임베딩 생성·저장 (원문·모델이 같은 항목은 건너뜀)
+--kind lodging         이 종류만 처리 (attraction, restaurant, cafe, lodging)
 --limit 16             한 번에 처리할 장소 수 (최대 20000)
 --max-requests 1       외부 임베딩 요청 상한. 기본 0이라 유료 API를 자동 호출하지 않음`)
     return
@@ -44,7 +45,7 @@ node --use-system-ca --env-file-if-exists=.env.local --conditions=react-server s
   if (!status.catalog_ready || !status.vectors_ready) throw new Error('main의 장소·벡터 테이블과 자료 적재를 먼저 완료해 주세요.')
   const { getDb } = require('../../src/lib/db/client.ts')
   const { indexPlaceEmbeddings } = require('../../src/lib/places/embeddings.ts')
-  console.log(JSON.stringify(await indexPlaceEmbeddings(getDb(), { limit: Number(values.limit), maxRequests })))
+  console.log(JSON.stringify(await indexPlaceEmbeddings(getDb(), { limit: Number(values.limit), maxRequests, kind: values.kind })))
 }
 main().catch(() => {
   console.error('Neon·Upstage 설정과 main 반영 여부·테이블·호출 상한을 확인해 주세요. 인증값과 외부 오류 원문은 출력하지 않았습니다.')
