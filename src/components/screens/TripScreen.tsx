@@ -353,6 +353,7 @@ export function TripScreen({ tripId }: { tripId: string }) {
               {showQuickFix && !draft && tuned?.transport === undefined && (
                 <QuickFixPanel
                   input={{ travelers: quickFixTravelers, tuned: tuned?.condition, stops, places: judged.places, legs: judged.legs }}
+                  verdict={judged.result.verdict}
                   onApply={applyQuickFix}
                   onClose={() => setShowQuickFix(false)}
                 />

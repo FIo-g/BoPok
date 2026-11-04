@@ -2,11 +2,11 @@
 
 // 빠른 수정안 A·B·C 카드 (설계 7.4). 엔진(quickFixes)이 돌려준 안을 그대로 보여 주고, 고르면 그 stops 로 새 버전을 저장한다.
 import { useMemo, useState } from 'react'
-import type { JudgeInput, QuickFix } from '@/lib/contracts'
+import type { JudgeInput, QuickFix, Verdict } from '@/lib/contracts'
 import { fixedChangeSentence, formatRange, quickFixes } from '@/lib/engine'
 import { errorMessage } from '@/lib/use-async'
 import { Button, Card, ErrorNotice, Notice, VerdictBadge } from '@/components/ui'
-import { quickFixStatus } from './quick-fix-text'
+import { quickFixEmptyNotice, quickFixStatus } from './quick-fix-text'
 
 const LEVEL_TEXT = {
   A: { title: 'A안 · 동선 조정', body: '계단 구간은 우회로로, 꼭 보지 않아도 되는 구간은 빼요' },
@@ -15,8 +15,19 @@ const LEVEL_TEXT = {
 } as const
 
 const STATUS_CLASS = { ok: 'text-ok', info: 'text-info', warn: 'text-warn' } as const
+// 기준 판정(verdict)은 부모 화면이 이미 구한 값을 받는다. 엔진 quickFixes는 adjust일 때만 안을 주므로 빈 목록만으로 '충족'을 판단하지 않는다.
 
-export function QuickFixPanel({ input, onApply, onClose }: { input: JudgeInput; onApply: (fix: QuickFix) => Promise<void>; onClose: () => void }) {
+export function QuickFixPanel({
+  input,
+  verdict,
+  onApply,
+  onClose,
+}: {
+  input: JudgeInput
+  verdict: Verdict
+  onApply: (fix: QuickFix) => Promise<void>
+  onClose: () => void
+}) {
   const fixes = useMemo(() => quickFixes(input), [input])
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -32,6 +43,7 @@ export function QuickFixPanel({ input, onApply, onClose }: { input: JudgeInput; 
     }
   }
 
+  const empty = quickFixEmptyNotice(verdict)
   return (
     <Card className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-2">
@@ -41,7 +53,7 @@ export function QuickFixPanel({ input, onApply, onClose }: { input: JudgeInput; 
         </Button>
       </div>
       {fixes.length === 0 ? (
-        <Notice tone="ok">고칠 곳이 없어요. 이 일정은 지금 조건에 맞아요.</Notice>
+        <Notice tone={empty.tone}>{empty.text}</Notice>
       ) : (
         <ul className="grid gap-3">
           {fixes.map(fix => {
