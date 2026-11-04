@@ -340,6 +340,15 @@ describe('dedupeSameDayPlaces', () => {
     expect(out).toEqual([{ placeId: 'hanbat', name: '한밭수목원', startTime: '12:00' }])
   })
 
+  it("'아침 산책'·'저녁 노을'처럼 끼니 낱말만 있고 앉는 자리가 아니면 식사 자리로 바꾸지 않고 버린다", () => {
+    const out = dedupeSameDayPlaces([
+      { placeId: 'hanbat', name: '한밭수목원', startTime: '09:00' },
+      { placeId: 'hanbat', name: '한밭수목원', sourceName: '아침 산책', startTime: '07:30' },
+      { placeId: 'hanbat', name: '한밭수목원', sourceName: '저녁 노을 보기', startTime: '18:00' },
+    ])
+    expect(out).toEqual([{ placeId: 'hanbat', name: '한밭수목원', startTime: '09:00' }])
+  })
+
   it('꼭 갈 곳·예약이 붙은 중복은 버리지 않는다 (첫 번째가 아니어도)', () => {
     const drafts: DraftStop[] = [
       { placeId: 'hanbat', name: '한밭수목원', startTime: '10:00' },
