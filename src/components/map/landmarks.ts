@@ -96,14 +96,15 @@ export const LANDMARKS: Landmark[] = [
     summary: '갑천을 가로지르는 보행자 전용 다리예요. 과학관 쪽과 둔산 쪽을 걸어서 잇고, 저녁 조명이 예뻐요.',
     area: '갑천 · 엑스포과학공원 앞', tags: ['보행 전용', '강변', '야경'], detailZoom: 16.6, miniShapeM: [204, 10],
   },
-  // 대전엑스포 시민광장: 엑스포로와 갑천 사이 강변 띠(엑스포다리 북쪽 끝). 광장에는 숨길 건물이 없다
+  // 대전엑스포 시민광장: 한빛탑 앞에서 엑스포다리까지 이어지는 엑스포과학공원 안의 광장 구역(물빛광장 음악분수·야외공연장·무빙쉘터).
+  // 엑스포로 북쪽, 한빛탑(36.3766, 127.3881)과 엑스포다리 북쪽 끝(36.3741) 사이의 남북으로 긴 포장 광장에 놓는다. 지도에 이 광장의 이름·바닥 윤곽이 없어 위치는 추정이라 확인이 필요하다
   {
     id: 'expo-plaza', name: '대전엑스포 시민광장', model: 'expo-plaza.glb',
-    lng: 127.38805, lat: 36.37392, offsetM: [0, 0], footprintLongM: 134, bearingDeg: 90, scale: 1, heightScale: 1,
+    lng: 127.38807, lat: 36.3753, offsetM: [0, 0], footprintLongM: 147, bearingDeg: 0, scale: 1.1, heightScale: 1,
     hideFids: [],
     image: '/images/landmarks/expo-plaza.webp', imageAlt: '대전엑스포 시민광장 사진',
     summary: '큰 지붕 아래 열린 광장이에요. 행사가 자주 열리고, 그늘이 넓어 이동 중 쉬기 좋아요.',
-    area: '유성구 · 엑스포과학공원', tags: ['광장', '그늘', '행사'], detailZoom: 16.6, miniShapeM: [134, 62],
+    area: '유성구 · 엑스포과학공원', tags: ['광장', '그늘', '행사'], detailZoom: 16.6, miniShapeM: [147, 68],
   },
 ]
 
