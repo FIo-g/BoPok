@@ -118,6 +118,13 @@ describe('findPlaceByName', () => {
     expect(findPlaceByName(station, '대전역 앞 광장 근처')).toBeNull()
   })
 
+  it('입력 안의 두 글자 이름은 긴 문장의 일부로 보고 맞추지 않는다', () => {
+    const named = [place('market', '시장'), place('hanbat', '한밭수목원')]
+    expect(findPlaceByName(named, '한밭 전통시장 구경')).toBeNull()
+    expect(findPlaceByName([place('walk', '산책'), place('hanbat', '한밭수목원')], '한밭수목원 산책')?.id).toBe('hanbat')
+    expect(findPlaceByName(named, '시장')?.id).toBe('market')
+  })
+
   it('입력이 장소 이름의 일부일 때("미술관")는 맞추지 않는다', () => {
     expect(findPlaceByName(ALL, '미술관')).toBeNull()
     expect(findPlaceByName(ALL, '수목원')).toBeNull()

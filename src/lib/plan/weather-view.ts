@@ -1,6 +1,6 @@
 // 일정 화면 "날씨" 카드가 무엇을 보여 줄지 가르는 순수 도우미 (React·fetch 없음).
 // 안내 문장은 엔진(dayWeatherCautions)이 만들고, 여기서는 고른 날을 찾아 출처 줄과 야외 장소 수를 붙인다.
-import { WEATHER_SOURCE_LABEL, type PlaceDetail, type Stop, type TripWeatherResponse, type WeatherCaution } from '@/lib/contracts'
+import { placeKindOf, WEATHER_SOURCE_LABEL, type PlaceDetail, type Stop, type TripWeatherResponse, type WeatherCaution } from '@/lib/contracts'
 import { dayWeatherCautions, weatherSummaryParts } from '@/lib/engine'
 
 export type WeatherSlotView =
@@ -19,9 +19,14 @@ function issuedText(issuedAt: string): string {
   return `${Number(m[1])}월 ${Number(m[2])}일 ${Number(m[3])}시 발표`
 }
 
-// 그날 일정의 야외 장소 수. 장소 정보가 없는 곳(직접 적은 곳)은 실내인지 몰라서 세지 않는다
+// 그날 일정의 야외 관광지 수. 장소 정보가 없는 곳(직접 적은 곳)은 실내인지 몰라서 세지 않는다.
+// 가져온 식당·카페·숙박은 indoor false가 '실내 아님'이 아니라 '미확인'이라 세지 않는다 (날씨 안내는 관광지 기준).
 export function outdoorStopCount(stops: Stop[], places: Record<string, PlaceDetail>): number {
-  return stops.filter(stop => stop.placeId !== null && Object.hasOwn(places, stop.placeId) && places[stop.placeId].indoor === false).length
+  return stops.filter(stop => {
+    if (stop.placeId === null || !Object.hasOwn(places, stop.placeId)) return false
+    const place = places[stop.placeId]
+    return placeKindOf(place) === 'attraction' && place.indoor === false
+  }).length
 }
 
 export function weatherSlotView(args: {

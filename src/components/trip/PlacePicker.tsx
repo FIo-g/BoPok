@@ -4,7 +4,9 @@
 // 한 곳만 고르면 바로 닫히는 것이 기본이고(일정 화면), multi 를 주면 여러 곳을 고른 순서대로 모은 뒤 버튼을 눌러야 넘어간다(새 여행).
 import { useState } from 'react'
 import { api } from '@/lib/api-client'
-import type { PlaceSummary } from '@/lib/contracts'
+import type { PlaceKind, PlaceSummary } from '@/lib/contracts'
+import { ServicePlacePicker } from './ServicePlacePicker'
+import { ResearchInfo } from './ResearchInfo'
 import { CONFIDENCE_TEXT, sourceLine } from '@/lib/format'
 import { STYLE_OPTIONS } from '@/lib/trip-options'
 import { errorMessage, useAsync } from '@/lib/use-async'
@@ -63,8 +65,9 @@ function PickedFooter({ multi }: { multi: MultiPick }) {
 
 export function PlacePicker({ title, usedIds, onPick, multi, onClose }: Props) {
   const [q, setQ] = useState('')
+  const [kind, setKind] = useState<PlaceKind>('attraction')
   const [styles, setStyles] = useState<string[]>([])
-  const places = useAsync(() => api.places.list({ q: q.trim() || undefined, styles }), `places:${q.trim()}:${styles.join(',')}`)
+  const places = useAsync(() => api.places.list({ q: q.trim() || undefined, styles, kind: 'attraction', limit: 300 }), `places:${q.trim()}:${styles.join(',')}`, kind === 'attraction')
 
   function choose(place: PlaceSummary) {
     if (multi) multi.onChange([...multi.picked, place])
@@ -73,6 +76,11 @@ export function PlacePicker({ title, usedIds, onPick, multi, onClose }: Props) {
 
   return (
     <Dialog title={title} onClose={onClose}>
+      <div className="mb-4 flex flex-wrap gap-2" aria-label="장소 종류">
+        {([['attraction', '관광지'], ['restaurant', '식당'], ['cafe', '카페'], ['lodging', '숙박']] as const).map(([value, label]) =>
+          <Chip key={value} selected={kind === value} onClick={() => setKind(value)}>{label}</Chip>)}
+      </div>
+      {kind !== 'attraction' ? <ServicePlacePicker key={kind} kind={kind} usedIds={usedIds} picked={multi?.picked ?? []} onPick={choose} busy={multi?.busy} /> : <>
       <TextInput value={q} onChange={e => setQ(e.target.value)} placeholder="장소 이름으로 찾기" aria-label="장소 이름 검색" />
       <div className="my-3 flex flex-wrap gap-2">
         {STYLE_OPTIONS.map(style => (
@@ -102,12 +110,13 @@ export function PlacePicker({ title, usedIds, onPick, multi, onClose }: Props) {
                   </p>
                   <p className="text-muted">
                     {place.category}
-                    {place.indoor ? ' · 실내' : ' · 야외'}
+                    {place.indoor ? ' · 실내' : ' · 실내 여부 확인 필요'}
                     {place.visitMin !== undefined && ` · 약 ${place.visitMin}분 머물러요`}
                   </p>
                   <p className="text-sm text-muted">
                     {sourceLine(place.source, place.checkedAt)} · 신뢰 {place.confidence}({CONFIDENCE_TEXT[place.confidence]})
                   </p>
+                  <ResearchInfo placeId={place.id} />
                 </div>
                 <Button
                   variant={multi && pickedCount > 0 ? 'secondary' : 'primary'}
@@ -124,6 +133,8 @@ export function PlacePicker({ title, usedIds, onPick, multi, onClose }: Props) {
       ) : (
         <p className="py-6 text-center text-muted">맞는 장소가 없어요. 검색어나 스타일을 바꿔 보세요.</p>
       )}
+      {!places.loading && !!places.data?.length && <p className="mt-3 text-sm text-muted">최대 300곳을 보여 드려요. 이름과 스타일로 범위를 좁혀 주세요.</p>}
+      </>}
       {multi && <PickedFooter multi={multi} />}
     </Dialog>
   )

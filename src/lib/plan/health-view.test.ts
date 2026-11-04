@@ -294,6 +294,36 @@ describe('healthSlotView', () => {
     expect(view).toEqual({ kind: 'no_cautions', uncheckedMeals: ['칼국수집', '카페', '점심 식사'] })
   })
 
+  it('음식 태그가 빈 메뉴(수집한 메뉴)는 확인한 메뉴로 보지 않는다 — 태그 있는 메뉴가 없으면 no_menus', () => {
+    // 김경선 PR #29 리뷰: 당뇨 + 태그 없는 메뉴가 no_cautions·빈 uncheckedMeals로 나와 "확인 못 함" 안내가 사라졌다
+    const imported: PlaceDetail = { ...place('p2', [menu('칼국수', []), menu('보리밥', [])]), kind: 'restaurant' }
+    const view = healthSlotView({
+      health: [diabetic],
+      stops: [stop('s1', 'p2', '칼국수집')],
+      places: { p2: imported },
+      travelers: [mom],
+      rules,
+    })
+    expect(view).toEqual({ kind: 'no_menus' })
+  })
+
+  it('태그 있는 메뉴가 다른 곳에 있어도 태그가 빈 메뉴가 있는 식당은 확인하지 못한 식사 자리로 알린다', () => {
+    const imported: PlaceDetail = { ...place('p2', [menu('칼국수', [])]), kind: 'restaurant' }
+    const partly: PlaceDetail = { ...place('p3', [menu('단팥빵', ['sugary']), menu('우유', [])]), kind: 'cafe' }
+    const view = healthSlotView({
+      health: [diabetic],
+      stops: [stop('s1', 'p1'), stop('s2', 'p2', '칼국수집'), stop('s3', 'p3', '빵집')],
+      places: { p1: place('p1', [menu('냉면', ['salty'])]), p2: imported, p3: partly },
+      travelers: [mom],
+      rules,
+    })
+    expect(view.kind).toBe('cautions')
+    if (view.kind !== 'cautions') return
+    // 단팥빵 주의는 그대로 보이고, 태그가 다 붙지 않은 두 곳은 따로 알린다
+    expect(view.rows.map(row => row.menuName)).toEqual(['단팥빵'])
+    expect(view.uncheckedMeals).toEqual(['칼국수집', '빵집'])
+  })
+
   it('주의가 있는 날에도 확인하지 못한 식사 자리를 함께 돌려준다', () => {
     const view = healthSlotView({
       health: [diabetic],

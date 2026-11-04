@@ -1,0 +1,786 @@
+{
+  "mode": "test-db",
+  "candidates": 108,
+  "mapping": [
+    {
+      "researchId": "DJ-001",
+      "dbId": null,
+      "status": "pending",
+      "reason": "범위 보류: no_match",
+      "matchKind": "no_match"
+    },
+    {
+      "researchId": "DJ-002",
+      "dbId": "tourapi-14-2733503",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-003",
+      "dbId": null,
+      "status": "pending",
+      "reason": "범위 보류: no_match",
+      "matchKind": "no_match"
+    },
+    {
+      "researchId": "DJ-004",
+      "dbId": null,
+      "status": "pending",
+      "reason": "범위 보류: no_match",
+      "matchKind": "no_match"
+    },
+    {
+      "researchId": "DJ-005",
+      "dbId": "tourapi-12-2775492",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-006",
+      "dbId": null,
+      "status": "pending",
+      "reason": "범위 보류: subsite_only",
+      "matchKind": "subsite_only"
+    },
+    {
+      "researchId": "DJ-007",
+      "dbId": "tourapi-14-130890",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-008",
+      "dbId": "tourapi-12-3588718",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-009",
+      "dbId": "tourapi-12-2661814",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "alias_address"
+    },
+    {
+      "researchId": "DJ-010",
+      "dbId": "tourapi-28-2727458",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-011",
+      "dbId": "tourapi-12-3455349",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-012",
+      "dbId": null,
+      "status": "pending",
+      "reason": "범위 보류: no_match",
+      "matchKind": "no_match"
+    },
+    {
+      "researchId": "DJ-013",
+      "dbId": null,
+      "status": "pending",
+      "reason": "범위 보류: superset_only",
+      "matchKind": "superset_only"
+    },
+    {
+      "researchId": "DJ-014",
+      "dbId": "tourapi-12-2674960",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-015",
+      "dbId": "tourapi-12-3074323",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-016",
+      "dbId": "tourapi-12-3051657",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "alias_address"
+    },
+    {
+      "researchId": "DJ-017",
+      "dbId": null,
+      "status": "pending",
+      "reason": "범위 보류: superset_only",
+      "matchKind": "superset_only"
+    },
+    {
+      "researchId": "DJ-018",
+      "dbId": "tourapi-12-2662681",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-019",
+      "dbId": "tourapi-12-2911386",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-020",
+      "dbId": "tourapi-28-2407314",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "alias_address"
+    },
+    {
+      "researchId": "DJ-021",
+      "dbId": null,
+      "status": "pending",
+      "reason": "범위 보류: no_match",
+      "matchKind": "no_match"
+    },
+    {
+      "researchId": "DJ-022",
+      "dbId": "tourapi-12-705678",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-023",
+      "dbId": "tourapi-12-3080289",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-024",
+      "dbId": "tourapi-12-127683",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "alias_address"
+    },
+    {
+      "researchId": "DJ-025",
+      "dbId": null,
+      "status": "pending",
+      "reason": "범위 보류: subsite_only",
+      "matchKind": "subsite_only"
+    },
+    {
+      "researchId": "DJ-026",
+      "dbId": "tourapi-28-2766990",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-027",
+      "dbId": "tourapi-28-131720",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-028",
+      "dbId": "tourapi-12-2930677",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-029",
+      "dbId": "tourapi-14-3038788",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-030",
+      "dbId": "tourapi-14-2605913",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-031",
+      "dbId": "tourapi-14-3038994",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-032",
+      "dbId": null,
+      "status": "pending",
+      "reason": "범위 보류: no_match",
+      "matchKind": "no_match"
+    },
+    {
+      "researchId": "DJ-033",
+      "dbId": "tourapi-14-3085034",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-034",
+      "dbId": "tourapi-14-130553",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-035",
+      "dbId": "tourapi-14-1125312",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-036",
+      "dbId": "tourapi-12-1089992",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-037",
+      "dbId": "tourapi-12-741957",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-038",
+      "dbId": "tourapi-14-1906578",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-039",
+      "dbId": "tourapi-14-2715656",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "alias_address"
+    },
+    {
+      "researchId": "DJ-040",
+      "dbId": null,
+      "status": "pending",
+      "reason": "범위 보류: no_match",
+      "matchKind": "no_match"
+    },
+    {
+      "researchId": "DJ-041",
+      "dbId": null,
+      "status": "pending",
+      "reason": "중첩 후보: 동일 콘텐츠를 공유하므로 통합 검토 필요",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-042",
+      "dbId": "tourapi-12-1954031",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-043",
+      "dbId": "tourapi-12-1623977",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-044",
+      "dbId": "tourapi-12-1058971",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "alias_address"
+    },
+    {
+      "researchId": "DJ-045",
+      "dbId": "tourapi-12-1623995",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-046",
+      "dbId": "tourapi-12-1955818",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "alias_address"
+    },
+    {
+      "researchId": "DJ-047",
+      "dbId": null,
+      "status": "pending",
+      "reason": "범위 보류: no_match",
+      "matchKind": "no_match"
+    },
+    {
+      "researchId": "DJ-048",
+      "dbId": null,
+      "status": "pending",
+      "reason": "범위 보류: no_match",
+      "matchKind": "no_match"
+    },
+    {
+      "researchId": "DJ-049",
+      "dbId": null,
+      "status": "pending",
+      "reason": "범위 보류: no_match",
+      "matchKind": "no_match"
+    },
+    {
+      "researchId": "DJ-050",
+      "dbId": null,
+      "status": "pending",
+      "reason": "범위 보류: no_match",
+      "matchKind": "no_match"
+    },
+    {
+      "researchId": "DJ-051",
+      "dbId": null,
+      "status": "pending",
+      "reason": "범위 보류: no_match",
+      "matchKind": "no_match"
+    },
+    {
+      "researchId": "DJ-052",
+      "dbId": "tourapi-12-1865944",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-053",
+      "dbId": null,
+      "status": "pending",
+      "reason": "범위 보류: no_match",
+      "matchKind": "no_match"
+    },
+    {
+      "researchId": "DJ-054",
+      "dbId": "tourapi-12-2460289",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-055",
+      "dbId": null,
+      "status": "pending",
+      "reason": "범위 보류: no_match",
+      "matchKind": "no_match"
+    },
+    {
+      "researchId": "DJ-056",
+      "dbId": "tourapi-12-1907645",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "alias_address"
+    },
+    {
+      "researchId": "DJ-057",
+      "dbId": "tourapi-14-129785",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-058",
+      "dbId": "tourapi-38-132505",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-059",
+      "dbId": "tourapi-12-125858",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "alias_address"
+    },
+    {
+      "researchId": "DJ-060",
+      "dbId": "hanbat",
+      "status": "linked",
+      "reason": "명시적 콘텐츠 ID 연결, 기존 값 보존",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-061",
+      "dbId": "tourapi-12-125994",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "alias_address"
+    },
+    {
+      "researchId": "DJ-062",
+      "dbId": "tourapi-12-126838",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-063",
+      "dbId": "tourapi-12-127641",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-064",
+      "dbId": "tourapi-14-1964617",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-065",
+      "dbId": "tourapi-14-2663239",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-066",
+      "dbId": "tourapi-12-2612261",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-067",
+      "dbId": "tourapi-28-131579",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-068",
+      "dbId": "tourapi-14-644085",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "alias_address"
+    },
+    {
+      "researchId": "DJ-069",
+      "dbId": "tourapi-14-2758629",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-070",
+      "dbId": null,
+      "status": "pending",
+      "reason": "범위 보류: no_match",
+      "matchKind": "no_match"
+    },
+    {
+      "researchId": "DJ-071",
+      "dbId": "tourapi-39-1796079",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-072",
+      "dbId": "tourapi-12-250324",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-073",
+      "dbId": "tourapi-12-1622872",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-074",
+      "dbId": "tourapi-12-945477",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-075",
+      "dbId": null,
+      "status": "pending",
+      "reason": "범위 보류: no_match",
+      "matchKind": "no_match"
+    },
+    {
+      "researchId": "DJ-076",
+      "dbId": "tourapi-12-1623810",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "alias_address"
+    },
+    {
+      "researchId": "DJ-077",
+      "dbId": "tourapi-12-1623927",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-078",
+      "dbId": "tourapi-12-250279",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "alias_address"
+    },
+    {
+      "researchId": "DJ-079",
+      "dbId": null,
+      "status": "pending",
+      "reason": "범위 보류: no_match",
+      "matchKind": "no_match"
+    },
+    {
+      "researchId": "DJ-080",
+      "dbId": null,
+      "status": "pending",
+      "reason": "범위 보류: subsite_only",
+      "matchKind": "subsite_only"
+    },
+    {
+      "researchId": "DJ-081",
+      "dbId": null,
+      "status": "pending",
+      "reason": "범위 보류: no_match",
+      "matchKind": "no_match"
+    },
+    {
+      "researchId": "DJ-082",
+      "dbId": "tourapi-14-1907589",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-083",
+      "dbId": "tourapi-14-129789",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-084",
+      "dbId": "tourapi-14-130550",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-085",
+      "dbId": "tourapi-14-130420",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-086",
+      "dbId": "tourapi-14-129817",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "alias_address"
+    },
+    {
+      "researchId": "DJ-087",
+      "dbId": "tourapi-14-1066804",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-088",
+      "dbId": "tourapi-14-1622704",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "alias_address"
+    },
+    {
+      "researchId": "DJ-089",
+      "dbId": "tourapi-14-1066785",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-090",
+      "dbId": "art",
+      "status": "linked",
+      "reason": "명시적 콘텐츠 ID 연결, 기존 값 보존",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-091",
+      "dbId": "leeungno",
+      "status": "linked",
+      "reason": "명시적 콘텐츠 ID 연결, 기존 값 보존",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-092",
+      "dbId": null,
+      "status": "pending",
+      "reason": "범위 보류: no_match",
+      "matchKind": "no_match"
+    },
+    {
+      "researchId": "DJ-093",
+      "dbId": null,
+      "status": "pending",
+      "reason": "범위 보류: no_match",
+      "matchKind": "no_match"
+    },
+    {
+      "researchId": "DJ-094",
+      "dbId": null,
+      "status": "pending",
+      "reason": "범위 보류: no_match",
+      "matchKind": "no_match"
+    },
+    {
+      "researchId": "DJ-095",
+      "dbId": null,
+      "status": "pending",
+      "reason": "범위 보류: no_match",
+      "matchKind": "no_match"
+    },
+    {
+      "researchId": "DJ-096",
+      "dbId": "tourapi-12-128344",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-097",
+      "dbId": null,
+      "status": "pending",
+      "reason": "범위 보류: no_match",
+      "matchKind": "no_match"
+    },
+    {
+      "researchId": "DJ-098",
+      "dbId": null,
+      "status": "pending",
+      "reason": "범위 보류: no_match",
+      "matchKind": "no_match"
+    },
+    {
+      "researchId": "DJ-099",
+      "dbId": null,
+      "status": "pending",
+      "reason": "범위 보류: subsite_only",
+      "matchKind": "subsite_only"
+    },
+    {
+      "researchId": "DJ-100",
+      "dbId": "tourapi-12-129438",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-101",
+      "dbId": "tourapi-12-2605899",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "alias_address"
+    },
+    {
+      "researchId": "DJ-102",
+      "dbId": "tourapi-28-1720749",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-103",
+      "dbId": null,
+      "status": "pending",
+      "reason": "범위 보류: no_match",
+      "matchKind": "no_match"
+    },
+    {
+      "researchId": "DJ-104",
+      "dbId": "tourapi-12-2775506",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-105",
+      "dbId": "tourapi-12-1125480",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-106",
+      "dbId": "tourapi-14-2782788",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "exact_name"
+    },
+    {
+      "researchId": "DJ-107",
+      "dbId": null,
+      "status": "pending",
+      "reason": "범위 보류: no_match",
+      "matchKind": "no_match"
+    },
+    {
+      "researchId": "DJ-108",
+      "dbId": "tourapi-12-231937",
+      "status": "new",
+      "reason": "직접/별칭 매칭 대표점; 입구·현장 검증 아님",
+      "matchKind": "alias_address"
+    }
+  ],
+  "added": 72,
+  "linked": 3,
+  "pending": 33,
+  "updated": 0,
+  "quarantined": 39,
+  "imagesPublished": 0,
+  "continuousAccessUnverified": 108,
+  "records": 17468,
+  "backup": "C:\\Users\\이동주\\dev\\26_SVC_Seoul\\.pglite\\research-test-backups\\research-test-backup-1793699391233.tar.gz",
+  "first": {
+    "added": 0,
+    "updated": 0,
+    "recordsAdded": 0,
+    "recordsUnchanged": 17468
+  },
+  "second": {
+    "added": 0,
+    "updated": 0,
+    "recordsAdded": 0,
+    "recordsUnchanged": 17468
+  },
+  "databasePlaces": 20214,
+  "detailsWithResearchNotice": 75,
+  "existingPreserved": true
+}

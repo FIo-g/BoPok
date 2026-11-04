@@ -1,0 +1,27 @@
+{
+  "checkedAt": "2026-11-03T10:18:01.242Z",
+  "purpose": "서비스 이용권한 확인: 단기는 검증 격자, 중기는 전국 전망, 특보는 당일 현황",
+  "services": [
+    {
+      "name": "단기예보",
+      "httpStatus": 200,
+      "resultCode": "00",
+      "accessible": true,
+      "itemsReceived": 1
+    },
+    {
+      "name": "중기예보",
+      "httpStatus": 200,
+      "resultCode": "00",
+      "accessible": true,
+      "itemsReceived": 1
+    },
+    {
+      "name": "기상특보",
+      "httpStatus": 200,
+      "resultCode": "00",
+      "accessible": true,
+      "itemsReceived": 1
+    }
+  ]
+}

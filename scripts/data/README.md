@@ -1,7 +1,9 @@
 # 장소 데이터 작업
 
 담당: 이동주. 이번 브랜치는 장소 API와 시범 장소 적재를 다룬다.
-OSM 수집 구현은 별도 `geo/fetch-osm` 브랜치에 보존한다. TourAPI·TMAP은 후속 단계다.
+OSM 수집 구현은 별도 `geo/fetch-osm` 브랜치에 보존한다.
+대전시 음식점·메뉴 수집(`fetch-daejeon-food.mjs`)과 TourAPI 음식점·숙박 수집(`fetch-services.mjs`)의
+실행 방법·실제 수집 결과는 `data/services/README.md`를 참고한다. TMAP 장소 내부 구간 적재는 후속 단계다.
 
 ## 장소 API용 시범 데이터 적재
 

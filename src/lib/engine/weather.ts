@@ -145,7 +145,7 @@ function windCaution(forecast: WeatherForecast): WeatherCaution | null {
 }
 
 // 그날 예보로 띄울 안내. 경고(폭염·한파)가 먼저 온다. 특별한 것이 없으면 빈 배열 — 그래도 "괜찮아요"라고 말하지 않는다
-// (예보는 바뀔 수 있다). outdoorStops는 그날 일정의 야외 장소 수 (장소 정보의 indoor가 false인 것)
+// (예보는 바뀔 수 있다). outdoorStops는 그날 일정의 야외 관광지 수 (indoor가 false인 관광지 — 식당·카페·숙박의 false는 미확인이라 세지 않는다, weather-view)
 export function weatherCautions(forecast: WeatherForecast, opts: { outdoorStops: number }): WeatherCaution[] {
   const outdoor = Math.max(0, Math.floor(opts.outdoorStops))
   return [

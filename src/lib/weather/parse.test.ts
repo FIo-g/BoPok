@@ -45,6 +45,18 @@ describe('기상청 범주 읽기', () => {
 describe('parseShortForecast', () => {
   const base = { baseDate: '20261103', baseTime: '0500' }
 
+  it('단기예보 기간 밖의 다음 날 0시 자료를 하루 최고·최저로 만들지 않는다', () => {
+    const evening = { ...base, baseTime: '1700' }
+    const parsed = parseShortForecast([
+      ...shortDayItems({ ...evening, fcstDate: '20261107', hours: [9, 12, 15, 18], tmx: '9', tmn: '-1' }),
+      ...shortDayItems({ ...evening, fcstDate: '20261108', hours: [0], values: () => ({ TMP: '1' }) }),
+    ])
+    expect(parsed.get('2026-11-07')).toMatchObject({ tempMaxC: 9, tempMinC: -1 })
+    expect(parsed.has('2026-11-08')).toBe(false)
+    const morning = parseShortForecast(shortDayItems({ ...base, fcstDate: '20261107', hours: [0], values: () => ({ TMP: '1' }) }))
+    expect(morning.size).toBe(0)
+  })
+
   it('낮 시간(9~18시)의 비만 보고, 기온은 하루 최고·최저(TMX·TMN)를 쓴다', () => {
     const items = shortDayItems({
       ...base,

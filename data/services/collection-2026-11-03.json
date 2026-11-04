@@ -1,0 +1,55 @@
+{
+  "region": "대전광역시",
+  "snapshot": "2026-11-03",
+  "food": {
+    "status": "complete",
+    "source": "https://www.data.go.kr/data/15098146/openapi.do",
+    "places": 20000,
+    "uniqueIds": 20000,
+    "cafesByPublishedBusinessType": 2487,
+    "placesWithCoordinates": 20000,
+    "placesWithMenus": 14635,
+    "placesWithNumericMenuPrices": 14512,
+    "menuItems": 90450,
+    "numericMenuPrices": 89032,
+    "mismatchedMenuArrays": 0,
+    "pages": 400,
+    "collectionRequests": 400,
+    "offlineReplayRequests": 0,
+    "offlineReplayHashMatches": true,
+    "catalogPath": "data/raw/daejeon-food/2026-11-03/catalog.jsonl"
+  },
+  "tourapi": {
+    "status": "complete",
+    "source": "https://www.data.go.kr/data/15101578/openapi.do",
+    "contentTypes": ["32"],
+    "lodgingCollected": true,
+    "places": 22,
+    "uniqueIds": 22,
+    "placesWithCoordinates": 22,
+    "placesWithRoomDetails": 10,
+    "roomTypes": 40,
+    "placesWithNumericPublishedRoomRates": 3,
+    "placesWithImageLists": 14,
+    "pages": 93,
+    "collectionRequests": 93,
+    "offlineReplayRequests": 0,
+    "catalogPath": "data/raw/tourapi/daejeon-services/2026-11-03/catalog.json"
+  },
+  "attractions": {
+    "status": "complete",
+    "contentTypes": ["12", "14"],
+    "places": 184,
+    "touristPlaces": 132,
+    "culturalPlaces": 52,
+    "placesWithCoordinates": 184,
+    "canonicalPilotPlaces": 3,
+    "catalogPath": "data/raw/tourapi/daejeon-services/2026-11-03-attractions/catalog.json"
+  },
+  "prepared": { "places": 20206, "menus": 90313, "sharedDbApplied": false, "actualUpstageVerified": false },
+  "notes": [
+    "API에 수록된 자료의 수집 결과이며 현재 영업 여부·가격 최신성·대전 전체 업소 수를 보장하지 않음",
+    "메뉴의 숫자 가격은 1인분 가격으로 확정하지 않으며 수량 단위를 별도 확인해야 함",
+    "서비스 DB 적용·실제 Upstage 연결은 미완료, 화면·검색·비용 계산은 로컬 구현"
+  ]
+}

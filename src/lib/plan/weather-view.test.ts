@@ -21,11 +21,33 @@ const weather = (days: TripWeatherResponse['days']): TripWeatherResponse => ({ d
 
 const stop = (key: string, placeId: string | null): Stop => ({ key, placeId, name: key, visitMin: 60, arriveBy: 'car' }) as Stop
 const place = (id: string, indoor: boolean) => ({ id, indoor }) as PlaceDetail
+const placeOfKind = (id: string, indoor: boolean, kind: PlaceDetail['kind']) => ({ id, indoor, kind }) as PlaceDetail
 
 describe('outdoorStopCount', () => {
   it('장소 정보에서 야외인 곳만 센다 (직접 적은 곳은 모른다)', () => {
     const places = { a: place('a', false), b: place('b', true) }
     expect(outdoorStopCount([stop('1', 'a'), stop('2', 'b'), stop('3', null), stop('4', 'x')], places)).toBe(1)
+  })
+
+  it('야외 관광지만 센다 — 식당·카페·숙박은 indoor false여도 미확인이라 안 센다', () => {
+    const places = {
+      r: placeOfKind('r', false, 'restaurant'),
+      c: placeOfKind('c', false, 'cafe'),
+      l: placeOfKind('l', false, 'lodging'),
+      t: placeOfKind('t', false, 'attraction'),
+    }
+    expect(outdoorStopCount([stop('1', 'r'), stop('2', 'c'), stop('3', 'l'), stop('4', 't')], places)).toBe(1)
+  })
+
+  it('kind가 없는 장소는 관광지로 본다', () => {
+    expect(outdoorStopCount([stop('1', 'a')], { a: place('a', false) })).toBe(1)
+  })
+
+  it('식당만 있는 비 오는 날은 야외 장소 안내를 내지 않는다', () => {
+    const w = weather([{ day: 1, date: '2026-11-04', status: 'ok', forecast: forecast() }])
+    const view = weatherSlotView({ weather: w, day: 1, stops: [stop('1', 'r')], places: { r: placeOfKind('r', false, 'restaurant') } })
+    if (view.kind !== 'forecast') throw new Error('forecast')
+    expect(view.preps.flatMap(c => c.tips).join('\n')).not.toContain('야외 장소')
   })
 })
 

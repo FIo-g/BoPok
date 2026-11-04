@@ -108,6 +108,9 @@ export function parseShortForecast(items: ShortItem[]): Map<string, WeatherForec
   const out = new Map<string, WeatherForecast>()
   for (const [fcstDate, dateItems] of byDate) {
     const { baseDate, baseTime } = dateItems[0]
+    // 응답 끝의 다음 날 0시 한 줄을 하루 예보로 채택하면 중기예보를 가린다.
+    const lastDay = Number(baseTime.slice(0, 2)) <= 14 ? 3 : 4
+    if (daysBetween(dashed(baseDate), dashed(fcstDate)) > lastDay) continue
     const qualitative = isQualitative(fcstDate, baseDate, baseTime)
     // 시각별 값. TMX·TMN은 하루 값이라 따로 둔다
     const hours = new Map<number, Map<string, string>>()

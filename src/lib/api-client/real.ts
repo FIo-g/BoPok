@@ -114,6 +114,8 @@ export const realApi: Api = {
       const params = new URLSearchParams()
       if (query.q) params.set('q', query.q)
       if (query.styles?.length) params.set('styles', query.styles.join(','))
+      if (query.kind) params.set('kind', query.kind)
+      if (query.limit) params.set('limit', String(query.limit))
       const qs = params.toString()
       return request(`/api/places${qs ? `?${qs}` : ''}`, { schema: z.array(PlaceSummarySchema) })
     },

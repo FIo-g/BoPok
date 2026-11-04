@@ -2,7 +2,7 @@
 // 이름·인자는 역할 문서(account-trip.md, data-geo.md)에서 그대로 왔다.
 // 실제 실행은 real-deps.ts가 실제 함수로 채우고, 테스트는 같은 모양의 개발용 가짜(dev-deps.ts)를 쓴다.
 import 'server-only'
-import type { ChatMessage, Budget, FoodTag, Opinion, PlaceDetail, PlaceSummary, Transport, Traveler, TripVersion, TripWeatherDay, Coord } from '@/lib/contracts'
+import type { ChatMessage, Budget, FoodTag, Opinion, PlaceDetail, PlaceSummary, PlaceKind, Transport, Traveler, TripVersion, TripWeatherDay, Coord } from '@/lib/contracts'
 import type { StartMode, InterviewState, AiFallback, ApiErrorCode } from '@/lib/contracts'
 import type { Stop, Leg, LegRequest } from '@/lib/contracts'
 import type { callJson } from './client'
@@ -29,6 +29,8 @@ export type CandidateQuery = {
   transport: Transport
   avoidStairs: boolean
   limit: number
+  query?: string
+  kind?: PlaceKind
 }
 
 // 김경선 trip_interviews 테이블 — AI는 테이블을 직접 쓰지 않고 이 연결 지점으로만 저장·조회한다

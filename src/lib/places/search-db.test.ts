@@ -4,13 +4,14 @@ import { readFileSync } from 'node:fs'
 import { sql } from 'drizzle-orm'
 import { drizzle } from 'drizzle-orm/pglite'
 import { migrate } from 'drizzle-orm/pglite/migrator'
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { PlaceSummaryListSchema, PlaceSummarySchema, type StairsStatus } from '@/lib/contracts'
 import * as schema from '@/lib/db/schema'
-import { placeNodes, placeSegments } from '@/lib/db/schema/places'
+import { placeNodes, places, placeSegments } from '@/lib/db/schema/places'
 import { matchPlaceByName, searchCandidates } from './search'
 import { insertPilotPlaces, PilotPlaceSchema } from './seed'
 import type { PlaceCandidateQuery } from './validation'
+import { importPreparedCatalog, prepareFoodCatalog } from './catalog-import'
 
 const client = new PGlite('memory://')
 const db = drizzle(client, { schema })
@@ -18,13 +19,16 @@ const pilots = ['hanbat', 'art', 'leeungno'].map(id => PilotPlaceSchema.parse(
   JSON.parse(readFileSync(new URL(`../../../data/places/${id}.json`, import.meta.url), 'utf8')),
 ))
 
-beforeAll(async () => { await migrate(db, { migrationsFolder: './drizzle' }) }, 30000)
+beforeAll(async () => {
+  vi.stubEnv('UPSTAGE_API_KEY', '')
+  await migrate(db, { migrationsFolder: './drizzle' })
+}, 30000)
 beforeEach(async () => {
   // 이 테스트가 새로 만든 memory:// 안에서만 초기화한다. 디스크 DB는 열지 않는다.
   await db.execute(sql`truncate table places cascade`)
   await insertPilotPlaces(db, pilots)
 })
-afterAll(async () => { await client.close() })
+afterAll(async () => { await client.close(); vi.unstubAllEnvs() })
 
 function query(overrides: Partial<PlaceCandidateQuery> = {}): PlaceCandidateQuery {
   return { styles: [], transport: 'car', avoidStairs: false, limit: 30, ...overrides }
@@ -47,6 +51,19 @@ async function addSegments(placeId: string, statuses: StairsStatus[]) {
 }
 
 describe('searchCandidates', () => {
+  it('많은 식당이 들어와도 관광지 후보를 남기고 종류별 검색을 지원한다', async () => {
+    const entries = Array.from({ length: 40 }, (_, index) => prepareFoodCatalog({ raw: {
+      REST_ID: index + 1, REST_NM: `가상 식당 ${index}`, TOB_INFO: '한식',
+      ADDR: '대전광역시 가상 주소', LOT: '127.38', LAT: '36.35', MENU_KORN_NM: [], MENU_AMT: [],
+    }, retrievedAt: '2026-11-03T00:00:00.000Z' }))
+    await importPreparedCatalog(db, entries)
+    const mixed = await searchCandidates(query({ limit: 10 }), db)
+    expect(mixed).toHaveLength(10)
+    expect(mixed.filter(place => !place.kind || place.kind === 'attraction')).toHaveLength(3)
+    expect((await searchCandidates(query({ kind: 'restaurant', query: '가상 식당', limit: 2 }), db)).every(place => place.kind === 'restaurant')).toBe(true)
+    const attractions = await searchCandidates(query({ kind: 'attraction', limit: 100 }), db)
+    expect(attractions.map(place => place.id).sort()).toEqual(['hanbat', 'art', 'leeungno'].sort())
+  })
   it('스타일이 맞는 곳을 앞에 두고 나머지도 뒤에 붙인다', async () => {
     expect(ids(await searchCandidates(query({ styles: ['자연·산책'] }), db))).toEqual(['hanbat', 'art', 'leeungno'])
     expect(ids(await searchCandidates(query({ styles: ['문화·역사'] }), db))).toEqual(['art', 'leeungno', 'hanbat'])
@@ -70,6 +87,17 @@ describe('searchCandidates', () => {
 
   it('스타일 앞뒤 공백은 무시한다', async () => {
     expect(ids(await searchCandidates(query({ styles: [' 자연·산책 '] }), db))).toEqual(['hanbat', 'art', 'leeungno'])
+  })
+
+  it('걷기 구간이 기록된 장소는 이름순으로 밀려나지 않는다', async () => {
+    // 가져온 관광지는 스타일이 없어 이름순만 남는다. 이름이 앞선 관광지가 많아도 구간이 있는 시범 장소는 남아야 한다.
+    await db.insert(places).values(Array.from({ length: 12 }, (_, index) => ({
+      id: `imported-${index}`, name: `가 관광지 ${String(index).padStart(2, '0')}`, category: '관광지', kind: 'attraction' as const,
+      styles: [], lng: 127.38, lat: 36.35, seated: false, indoor: false,
+      source: '테스트용 가상 자료', checkedAt: '2026-11-03', confidence: 'C' as const,
+    })))
+    await addSegments('hanbat', ['unknown'])
+    expect(ids(await searchCandidates(query({ kind: 'attraction', limit: 3 }), db))).toEqual(['hanbat', 'imported-0', 'imported-1'])
   })
 
   it('limit만큼만 자른다 (0이면 빈 목록)', async () => {
