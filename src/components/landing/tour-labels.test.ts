@@ -78,6 +78,24 @@ describe('관광지 이름표 목록', () => {
     expect(labels.map(l => l.id)).toEqual([...LANDMARKS.map(l => l.id), 'a', 'b'])
   })
 
+  it('랜드마크와 이름이 똑같고 1000m 안이면 관광지 이름표를 뺀다 (국립중앙과학관)', () => {
+    // 랜드마크 중심과 공유 DB 좌표가 약 332m 떨어진 같은 곳
+    const labels = buildTourLabels([place({ id: 'tourapi-14-129785', name: '국립중앙과학관', coord: [127.37905, 36.37595] })])
+    expect(labels.some(l => l.id === 'tourapi-14-129785')).toBe(false)
+    expect(labels.filter(l => l.name === '국립중앙과학관')).toHaveLength(1)
+  })
+
+  it('랜드마크 이름을 포함만 하는 다른 관광지(한밭수목원)는 남긴다', () => {
+    // 한밭수목원 본원은 열대식물원 랜드마크와 다른 곳이다. 약 500m 떨어져 있다
+    const labels = buildTourLabels([place({ id: 'hanbat', name: '한밭수목원', coord: [127.392562, 36.372284] })])
+    expect(labels.some(l => l.id === 'hanbat')).toBe(true)
+  })
+
+  it('랜드마크와 이름이 같아도 1000m 넘게 떨어지면 남긴다', () => {
+    const labels = buildTourLabels([place({ id: 'far-same', name: '국립중앙과학관', coord: [127.39, 36.37532] })])
+    expect(labels.some(l => l.id === 'far-same')).toBe(true)
+  })
+
   it('목록 안의 중복(같은 이름, 같은 자리)은 첫 번째만 남긴다', () => {
     const labels = buildTourLabels([
       place({ id: 'p1', name: '작은 공원', coord: [127.3, 36.4] }),

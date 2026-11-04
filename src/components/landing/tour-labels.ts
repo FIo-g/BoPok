@@ -8,6 +8,8 @@ import type { MapLabel } from '../map/map-types'
 // 같은 장소로 볼 거리(m): 이름이 비슷하면 이 안에 있을 때 한 곳으로 친다. 이보다 더 가까우면 이름과 상관없이 같은 곳
 const SAME_NAME_M = 150
 const SAME_SPOT_M = 30
+// 랜드마크와 이름이 '똑같이' 같으면 이 거리 안을 같은 곳으로 본다. 공유 DB 좌표는 랜드마크 모형 중심과 수백 m 어긋나기도 해서 150m 로는 부족하다. 포함 관계로는 넓히지 않는다(한밭수목원 ≠ 한밭수목원 열대식물원)
+const SAME_LANDMARK_NAME_M = 1000
 
 type PlaceInput = Pick<PlaceSummary, 'id' | 'name' | 'coord' | 'kind'>
 
@@ -61,6 +63,12 @@ export function buildTourLabels(places: PlaceInput[], landmarks: Landmark[] = LA
     if (usedIds.has(p.id) || landmarkPlaceIds.has(p.id)) continue
     const candidate = { name, coord: p.coord }
     if (labels.some(label => isSamePlace(label, candidate))) continue
+    // 랜드마크 이름과 똑같은 관광지는 랜드마크 이름표 하나로 충분하다(placeId 가 이름이라 위 검사로는 못 거른다)
+    const sameAsLandmark = labels.some(label =>
+      label.emphasis === 'landmark' &&
+      normName(label.name) === normName(name) &&
+      distanceM(label.coord, p.coord) <= SAME_LANDMARK_NAME_M)
+    if (sameAsLandmark) continue
     labels.push({ id: p.id, name, coord: p.coord, emphasis: 'place' })
     usedIds.add(p.id)
   }
