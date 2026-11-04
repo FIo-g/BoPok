@@ -5,9 +5,11 @@ import type { DraftStop } from './stops'
 
 type Recommend = (input: PlaceRecommendationRequest) => Promise<PlaceRecommendationResponse>
 function serviceKind(name: string): 'restaurant' | 'cafe' | 'lodging' | null {
-  if (/숙박|숙소|호텔|체크인/.test(name)) return 'lodging'
-  if (/카페|커피/.test(name)) return 'cafe'
-  if (/식사|점심|저녁|아침|중식|석식/.test(name)) return 'restaurant'
+  // 이름 전체가 명시적인 빈 자리일 때만 채운다. '아침 산책' 같은 활동은 보존한다.
+  const label = name.replace(/\s+/g, '')
+  if (/^(?:(?:숙박|숙소|호텔)(?:장소)?(?:선택|체크인)?|체크인)$/.test(label)) return 'lodging'
+  if (/^(?:카페|커피)(?:휴식|장소)?(?:선택)?$/.test(label)) return 'cafe'
+  if (/^(?:식사|(?:아침|점심|저녁|조식|중식|석식)(?:식사)?)(?:장소)?(?:선택)?$/.test(label)) return 'restaurant'
   return null
 }
 

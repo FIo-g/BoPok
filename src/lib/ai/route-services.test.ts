@@ -8,6 +8,24 @@ const meal = { placeId: null, name: '점심 식사', seated: true }
 const response = (p: PlaceDetail, distanceM = 100): PlaceRecommendationResponse => ({ catalogReady: true, method: 'keyword', distanceBasis: 'straight_line', routeCheckRequired: true, items: [{ place: p, menus: [], distanceM }] })
 const options = { details: [spot], transport: 'car' as const }
 describe('AI 동선의 식사·숙박 연결', () => {
+  it.each(['아침 산책', '점심 산책', '저녁 한밭수목원 산책', '아침고요수목원', '식사 후 산책',
+    '점심 식사 후 카페까지 걷기', '호텔 주변 산책', '카페 거리 산책', '커피 박물관 관람'])('%s 활동은 이름 일부로 분류하지 않고 보존한다', async name => {
+    const recommend = vi.fn(async () => response(place('등록식당', 'restaurant')))
+    const drafts = [{ placeId: spot.id, name: spot.name }, { placeId: null, name, seated: false }]
+    expect(await fillRouteServices(drafts, options, recommend)).toEqual(drafts)
+    expect(recommend).not.toHaveBeenCalled()
+  })
+  it.each([
+    ['아침', 'restaurant'], ['점심 식사', 'restaurant'], ['저녁 식사 장소 선택', 'restaurant'],
+    ['조식', 'restaurant'], ['중식', 'restaurant'], ['석식', 'restaurant'], ['식사 장소 선택', 'restaurant'],
+    ['카페', 'cafe'], ['커피 휴식', 'cafe'], ['카페 장소 선택', 'cafe'],
+    ['숙소', 'lodging'], ['숙박 장소 선택', 'lodging'], ['호텔 체크인', 'lodging'], ['체크인', 'lodging'],
+  ] as const)('명시적인 %s 빈 자리는 %s 후보로 채운다', async (name, kind) => {
+    const recommend = vi.fn(async () => response(place('등록후보', kind)))
+    const out = await fillRouteServices([{ placeId: spot.id, name: spot.name }, { placeId: null, name }], options, recommend)
+    expect(out[1].placeId).toBe('등록후보')
+    expect(recommend).toHaveBeenCalledWith(expect.objectContaining({ kind }))
+  })
   it('빈 점심 자리를 가까운 등록 식당으로 바꾸며 좌표·종류를 DB에서 가져온다', async () => {
     const recommend = vi.fn(async () => response(place('등록식당', 'restaurant')))
     const out = await fillRouteServices([{ placeId: spot.id, name: spot.name }, meal], options, recommend)
