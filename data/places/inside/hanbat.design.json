@@ -1,0 +1,127 @@
+{
+  "course": {
+    "id": "hb-east",
+    "name": "동원 한 바퀴(연못·장미원)"
+  },
+  "georef": "방법: 공식 종합안내도(동원 확대, 2026-11-04 확인)의 길(베이지색) 화소를 뽑아 OSM 보행로(footway/path/pedestrian)와 맞추는 6변수 affine(회전·기울임·가로세로 배율 포함)으로 정합했다. 안내도는 입체 도식이라 가로 3.62px/m, 세로 2.76px/m로 배율이 다르다. 맞춤 기준점 6개와 잔차: 대전사랑동산 원형길 중심 4.2m, 분수광장 원형길 중심 3.3m, 장미원(원형길 2개 사이) 2.8m, 수생식물원 정자(way/1359264585) 9.6m, 수국원 사각길 중심 2.9m, 남쪽 출입구 화살표(OSM 계단 125253400 옆) 8.4m. 기준점에 쓰지 않은 검증점 8개의 오차는 화장실 node/1342141459 3.5m, 정자 쉼터 node/1391822816 10.7m, 후계목원 쉼터 node/1342141450 7.9m, 방문객안내센터 화장실 way/760110763 12.6m, 북쪽 화장실 node/1342141764 11.5m, 노란 정자 node/1342141792 8.8m, 천연기념물센터 15.3m, 붉은 지붕 쉼터 node/1391823368 19.4m다(중앙값 약 11m, 최대 약 19m). 그래서 안내도에서 따온 정원 지점의 오차는 약 12m(최대 20m)로 적는다. 동원 남쪽은 보정 점이 없어 바깥쪽으로 갈수록 어긋난다(열대식물원 node/4194746989는 약 25m 차이). 이 때문에 동원 밖(주차장·정류장)은 OSM 좌표를 그대로 쓰고 안내도로 맞추지 않았다. 안내도로 정한 지점은 가장 가까운 OSM 보행로 node로 맞춰서 모두 길 위에 있다. 동원 경계(way/30614864, 위도 36.36725~36.37086, 경도 127.38844~127.39324) 안이거나 바로 옆이다. 기준 변환값은 /private/tmp/claude-501/-Users-taehyeong-Documents-GitHub-BoPok/5066e5c3-3811-40b9-95a0-1569b986dcae/scratchpad/hanbat/fitB.json 이다. 안내도 그림은 저작물이라 저장소에 넣지 않는다.",
+  "nodes": [
+    {
+      "id": "hb-p",
+      "kind": "parking",
+      "name": "1주차장(연정국악원 앞)",
+      "restType": "none",
+      "lng": 127.389375,
+      "lat": 36.365458,
+      "basis": "osm:way/128270595 (노상 주차장, 장애인 주차 칸 있음 capacity:disabled=yes) 중심. 안내도의 1주차장 위치(연정국악원 남쪽)와 맞다."
+    },
+    {
+      "id": "hb-s",
+      "kind": "stop",
+      "name": "한밭수목원 정류장",
+      "restType": "none",
+      "lng": 127.389036,
+      "lat": 36.364979,
+      "basis": "osm:node/11338234780 (버스 정류장 '한밭수목원', ref 34740, 쉼터 있음 shelter=yes)"
+    },
+    {
+      "id": "hb-in",
+      "kind": "entrance",
+      "name": "동원 남쪽 출입구",
+      "restType": "none",
+      "lng": 127.390402,
+      "lat": 36.367234,
+      "basis": "osm:node/1391822797 (보행로가 동원 경계 남쪽 변과 만나는 끝점). 안내도 남쪽 출입구 화살표와 2.4m 안에서 일치. 바로 옆에 OSM 계단 way/125253400이 있어 계단 없이 이어지는 path 125253464 쪽 점을 입구로 잡았다."
+    },
+    {
+      "id": "hb-wc",
+      "kind": "toilet",
+      "name": "화장실(특산식물원 옆)",
+      "restType": "none",
+      "lng": 127.390173,
+      "lat": 36.367686,
+      "basis": "osm:node/1342141459 (amenity=toilets, fee=no). 안내도 '약용식물원·특산식물원 사이' 화장실 아이콘과 3.5m 차이로 일치. wheelchair 태그 없음."
+    },
+    {
+      "id": "hb-hydrangea",
+      "kind": "sight",
+      "name": "수국원",
+      "restType": "none",
+      "guideNo": 17,
+      "lng": 127.390011,
+      "lat": 36.368209,
+      "basis": "guide-map-georef(오차 약 12m). 안내도 수국원 사각길 중심을 맞춘 뒤 가장 가까운 OSM 보행로 node/1342141524(3.6m)에 붙였다. OSM에 사각길 중심은 127.389995,36.368188."
+    },
+    {
+      "id": "hb-gazebo",
+      "kind": "rest",
+      "name": "수생식물원 정자",
+      "restType": "outdoor",
+      "guideNo": 13,
+      "lng": 127.390456,
+      "lat": 36.368199,
+      "basis": "osm:way/1359264585 (amenity=shelter, shelter_type=gazebo) 중심. 안내도 연못 속 팔각 정자와 같은 곳(8~10m 차이). 연못 위로 난 보행로(way 119442419) 끝에 있다."
+    },
+    {
+      "id": "hb-herb",
+      "kind": "sight",
+      "name": "허브원",
+      "restType": "none",
+      "guideNo": 2,
+      "lng": 127.390331,
+      "lat": 36.368798,
+      "basis": "guide-map-georef(오차 약 12m). 안내도 허브원 번호 2 위치를 맞춘 뒤 OSM 보행로 교차점 node/1391822937(3.4m)에 붙였다."
+    },
+    {
+      "id": "hb-rose",
+      "kind": "sight",
+      "name": "장미원",
+      "restType": "none",
+      "guideNo": 1,
+      "lng": 127.389823,
+      "lat": 36.368891,
+      "basis": "osm:node/1417906038 (장미원 원형길 way/128270535·way/128270537 두 개의 한가운데, 동서 중앙길 위). 안내도 장미원 사각 화단 중심과 2.8m 안에서 일치. 번호 1이 장미원(서쪽 큰 원 쪽)과 장미과원 근처에 두 번 나오므로 장미원은 동서 중앙길의 것으로 잡았다."
+    },
+    {
+      "id": "hb-food",
+      "kind": "sight",
+      "name": "식이식물원",
+      "restType": "none",
+      "guideNo": 12,
+      "lng": 127.391671,
+      "lat": 36.36879,
+      "basis": "guide-map-georef(오차 약 12~20m). 안내도 식이식물원 번호 12를 맞춘 뒤 안쪽 순환 보행로 node/1391822935(21m 근처)에 붙였다. 동원 동쪽은 안내도 변환 오차가 커서 약 20m까지 본다."
+    },
+    {
+      "id": "hb-shelter",
+      "kind": "rest",
+      "name": "화밀원 쪽 쉼터",
+      "restType": "outdoor",
+      "lng": 127.392199,
+      "lat": 36.3688,
+      "basis": "osm:node/1391822939 (amenity=shelter, shelter_type=picnic_shelter). 가장 가까운 보행로(node 1391822918)에서 약 9m 떨어져 있다. 안내도에는 이 쉼터 그림이 없다."
+    },
+    {
+      "id": "hb-out",
+      "kind": "exit",
+      "name": "동원 남쪽 출구",
+      "restType": "none",
+      "lng": 127.390402,
+      "lat": 36.367234,
+      "basis": "osm:node/1391822797 (입구와 같은 문, kind만 exit로 따로 둔 지점). 마지막 관람 구간이 계단 없이 이 점에 닿는다."
+    }
+  ],
+  "segments": [
+    { "id": "hb-a1", "from": "hb-p", "to": "hb-in", "order": 0, "optional": false, "role": "access" },
+    { "id": "hb-a2", "from": "hb-s", "to": "hb-in", "order": 0, "optional": false, "role": "access" },
+    { "id": "hb-t1", "from": "hb-in", "to": "hb-wc", "order": 1, "optional": false, "role": "tour" },
+    { "id": "hb-t2", "from": "hb-wc", "to": "hb-hydrangea", "order": 2, "optional": false, "role": "tour" },
+    { "id": "hb-t3", "from": "hb-hydrangea", "to": "hb-gazebo", "order": 3, "optional": false, "role": "tour" },
+    { "id": "hb-t4", "from": "hb-gazebo", "to": "hb-herb", "order": 4, "optional": false, "role": "tour" },
+    { "id": "hb-t5", "from": "hb-herb", "to": "hb-rose", "order": 5, "optional": true, "role": "tour" },
+    { "id": "hb-t6", "from": "hb-rose", "to": "hb-herb", "order": 6, "optional": true, "role": "tour" },
+    { "id": "hb-t7", "from": "hb-herb", "to": "hb-food", "order": 7, "optional": false, "role": "tour" },
+    { "id": "hb-t8", "from": "hb-food", "to": "hb-shelter", "order": 8, "optional": false, "role": "tour" },
+    { "id": "hb-t9", "from": "hb-shelter", "to": "hb-out", "order": 9, "optional": false, "role": "tour" }
+  ],
+  "notes": "【고른 이유】 동원 남쪽 출입구(연구관리동 옆)에서 시작해 한 바퀴 돌고 같은 문으로 나온다. 1주차장에서 가장 가깝고, 입구에서 화장실까지 약 80m, 첫 쉼터(연못 정자)까지 약 190m다. 볼거리는 평지처럼 보이는 정원 위주로 4곳(수국원 17, 허브원 2, 장미원 1, 식이식물원 12)을 넣었고, 쉼터는 2곳(연못 정자 13, 화밀원 쪽 쉼터), 화장실 1곳이다. 쉼터 사이 가장 긴 연속 걷기는 정자에서 화밀원 쉼터까지 약 490m(장미원 빼면 약 390m)다. 서쪽 출입구(OSM barrier=entrance node/5750035921, 중앙광장 쪽)는 주차장에서 약 490m로 멀어 고르지 않았다.\n\n【구간 길이: 이후 distanceM과 path를 채울 때 쓰는 값. OSM 보행로 최단 경로로 잰 근사치】 a1 주차장→입구 약 277m(way 484471867·484471859·484471862 service, 125253428·1466408328·1466408320·1466408319·1466408316 footway, 125253464 path), a2 정류장→입구 약 347m(정류장이 OSM 보행로에서 직선 38m 떨어져 있고 연결 확인 필요, 같은 길로 합류). 관람: t1 약 81m(way 125253464→119442379→119442429), t2 약 72m(119442429→119442407→119442414), t3 약 40m(119442419, 연못 위 보행로), t4 약 127m(119442419→119442430→119442403→119442381→119442414→125253470→125253480; 같은 연못 위 길을 되돌아 나온다), t5 약 48m(125253480→119442431), t6 약 48m(되돌아옴), t7 약 169m(125253480→125253413→125253479→125253397→125253458→125253444, 연못 허리 다리를 건너 동쪽으로), t8 약 97m(125253444→119442401), t9 약 297m(119442401→119442379→125253464). 합계 약 979m(장미원 다녀오기 t5·t6 포함), 선택 구간을 빼면 약 883m. 설계 지침 1~1.6km의 아래쪽 끝이며, 부모님 체력을 먼저 생각해 일부러 길게 늘리지 않았다. 구간 경로선 좌표는 /private/tmp/claude-501/-Users-taehyeong-Documents-GitHub-BoPok/5066e5c3-3811-40b9-95a0-1569b986dcae/scratchpad/hanbat/route.json 에 있다(OSM 보행로 경유점).\n\n【엔진 사용 메모】 t5·t6(장미원 갔다 오기)만 optional true라 '선택 구간 빼기' 수정안이 두 구간을 함께 뺀다. 빼도 t4(정자→허브원)와 t7(허브원→식이식물원)이 이어진다. 쉼터는 t3 도착(정자)과 t8 도착(화밀원 쪽 쉼터)에서 쉰다. 입구와 출구는 같은 좌표지만 id가 달라 접근·출발 계산이 서로 섞이지 않는다. 지점 id는 hb-p, hb-s, hb-in 등으로 목업과 같게 하되, 목업 좌표는 쓰지 않았다.\n\n【확인 못 한 것 — 데이터에 적을 때 그대로 남길 것】 (1) 경사와 계단 여부는 현장에서 확인하지 못했다. OSM 보행로에 steps 태그는 있지만 경사·노면 태그는 거의 없다. 모든 관람 구간의 stairsStatus는 unknown('계단 기록 없음 (지도 데이터 기준)')으로 두고, confirmed_none은 쓰지 않는다. slope는 스키마상 불리언이라 false로 넣되 '미확인'임을 근거에 적는다. 신뢰 등급은 B 이하(안내도+지도 측정)로, 안내도로 정한 지점은 C로 두는 것을 권한다. (2) 입구 바로 옆에 OSM 계단 way/125253400(단 2점, 길이 약 12m, 계단 수 모름)이 있다. 이 계단이 짧은 지름길이라 주차장→입구는 약 32m 더 도는 path 125253464로 안내했다. 이 우회 길이 휠체어·유모차로 이어지는지도 현장 확인이 필요하다. (3) 쉼터 두 곳은 앉을 자리(벤치) 유무를 확인하지 못했다. 정자는 OSM에 gazebo로, 화밀원 쪽은 picnic_shelter로만 적혀 있다. (4) 화장실 node/1342141459에는 wheelchair 태그가 없어 장애인 화장실 여부를 모른다. 방문객종합안내센터 화장실(way/760110763, wheelchair=yes)은 동원 밖 남서쪽으로 약 130m 떨어져 있다. (5) 정류장 연결은 OSM 보행로와 38m 떨어져 있어, 걸어서 닿는 길이 있는지 확인이 필요하다. (6) 안내도에서 정한 4곳(수국원·허브원·식이식물원)의 위치 오차는 약 12m(식이식물원은 최대 20m)다. 정원 안쪽 어디를 대표점으로 볼지는 현장에서 바뀔 수 있다. (7) 개장 시간·휴무일·공사 구간은 확인하지 않았다.\n\n【출처】 대전광역시 한밭수목원 공식 종합안내도(https://www.daejeon.go.kr/images/gar/images_2026/contents/sub/cont_m02_0501.jpg 계열), OpenStreetMap 추출(Overpass, ODbL, © OpenStreetMap contributors), 모두 2026-11-04 확인. OSM에서 가져온 좌표는 ODbL 출처 표시를 데이터의 source에 넣어야 한다."
+}

@@ -16,7 +16,8 @@
     "map:boundary": "node scripts/map/build-boundary.mjs",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "data:hanbat-inside": "node scripts/data/build-place-inside.mjs --id hanbat"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.3.0",

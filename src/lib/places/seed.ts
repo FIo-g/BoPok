@@ -6,11 +6,11 @@ import type { Db } from '@/lib/db/client'
 import { places } from '@/lib/db/schema/places'
 import { toPlaceSummary } from './index'
 
-// 이번 시범 적재에는 조사하지 않은 내부 지점·구간·방문 시간을 허용하지 않는다.
+// 시범 파일은 장소 기본 칸과 함께 장소 안 지점·구간·코스를 담을 수 있다 (한밭수목원 동원 코스).
+// 이 함수는 기본 칸만 넣고, 지점·구간은 fillPlaceInside가 빈 장소에만 넣는다. 방문 시간은 여전히 허용하지 않는다.
 export const PilotPlaceSchema = PlaceDetailSchema.extend({
   id: PlaceIdInputSchema,
   source: z.url(), checkedAt: z.iso.date(),
-  nodes: z.array(z.never()).length(0), segments: z.array(z.never()).length(0),
   visitMin: z.undefined().optional(),
 }).strict()
 

@@ -77,7 +77,7 @@ Invoke-RestMethod 'http://localhost:3000/api/places/details' -Method Post -Conte
 
 장소 ID는 `hanbat`(한밭수목원), `art`(대전시립미술관), `leeungno`(이응노미술관)이다.
 주소·연락처·대표 지도 좌표의 근거와 분류 기준은 `data/places/README.md`를 참고한다.
-주차장·입구·볼거리·쉼터·화장실 지점과 내부 경로는 아직 조사하지 않아 `nodes: []`,
+한밭수목원 동원 코스만 장소 안 지점·구간이 있다(OSM 보행로 + 안내도 대조, `data/places/README.md`). 나머지 두 곳은 `nodes: []`,
 `segments: []`이다. `visitMin`은 생략한다. 거리·보행 시간·계단 수나 `confirmed_none`을 만들지 않는다.
 좌표는 장소 대표 표시이며 **입구 좌표로 검증되지 않았다**. 이동 경로 출발점으로 확정하지 않는다.
 빈 내부 경로를 "걷기 0분" 또는 "계단 없음"으로 해석하면 안 된다.
