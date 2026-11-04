@@ -3,12 +3,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ACTIONS, BACK_FLY_MS, DRIFT_METERS, DRIFT_MS, EXIT, EXPLORE_VIEW, FLY_MS, GLYPH, GLYPH_SEEN, HINT_MS, INTRO_VIEW, LEAD,
-  MAP_FILTER_MS, DRIFT_AFTER_EXTRAS_MS, EXTRAS_AFTER_INTRO_MS, prefetchTileUrls, MOBILE_MAX_WIDTH, READY_TIMEOUT_MS, PLACE_PINS, QUIET_MAP_FILTER, SEEN_KEY, TITLE_LINES, TITLE_TEXT, TOUR_MS, TOUR_RESUME_MS,
+  MAP_FILTER_MS, DRIFT_AFTER_EXTRAS_MS, EXTRAS_AFTER_INTRO_MS, prefetchTileUrls, MOBILE_MAX_WIDTH, READY_TIMEOUT_MS, LABEL_FOCUS, PLACE_PINS, QUIET_MAP_FILTER, SEEN_KEY, TITLE_LINES, TITLE_TEXT, TOUR_MS, TOUR_RESUME_MS,
   TOUR_WAYPOINTS, VEIL, VEIL_FADE_MS, exitHalfMs, exitTotalMs, introTimeline,
 } from './landing-intro'
 import { LandmarkDetail } from '@/components/landmark/LandmarkDetail'
 import { useLandmarkDetail } from '@/components/landmark/useLandmarkDetail'
-import { BUILDINGS_TILES, LANDMARKS, LazyMapView, PALETTE, createCameraLoop, metersToLon, type CameraLoop, type MapInstance, type MapPin } from '@/components/map'
+import { api } from '@/lib/api-client'
+import type { PlaceSummary } from '@/lib/contracts'
+import { BUILDINGS_TILES, LANDMARKS, LazyMapView, PALETTE, createCameraLoop, metersToLon, type CameraLoop, type MapInstance, type MapLabel, type MapPin } from '@/components/map'
+import { buildTourLabels } from './tour-labels'
 import './hero.css'
 
 const reduced = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -40,9 +43,12 @@ export function Hero({ onStart }: { onStart: () => void }) {
   const [compact, setCompact] = useState(false)   // 휴대폰
   const [seen, setSeen] = useState(false)         // 이번 탭에서 이미 한 번 봄
   const [titleKey, setTitleKey] = useState(0)
+  const [attractions, setAttractions] = useState<PlaceSummary[] | null>(null) // 둘러보기 이름표용 관광지(공개 목록). null = 아직 안 받음
 
   const driftRef = useRef<CameraLoop | null>(null)
   const tourRef = useRef<CameraLoop | null>(null)
+  // 이름표의 관광지를 골랐으면 자동 둘러보기를 다시 이어가지 않는다(처음으로·다시 둘러보기 때 푼다)
+  const pinnedRef = useRef(false)
   const flight = useRef(0) // 카메라 이동 번호. 나중에 시작한 이동이 먼저 시작한 이동의 끝 처리를 덮어쓰지 않게
   const timers = useRef<number[]>([])
   const later = useCallback((fn: () => void, ms: number) => {
@@ -146,13 +152,13 @@ export function Hero({ onStart }: { onStart: () => void }) {
     const release = () => {
       touching = false
       window.clearTimeout(resume)
-      resume = window.setTimeout(() => { if (!touching) tour.start() }, TOUR_RESUME_MS)
+      resume = window.setTimeout(() => { if (!touching && !pinnedRef.current) tour.start() }, TOUR_RESUME_MS)
     }
     const downs = ['mousedown', 'touchstart'] as const
     const ups = ['mouseup', 'touchend', 'touchcancel', 'dragend', 'rotateend'] as const
     downs.forEach(e => map.on(e, pause))
     ups.forEach(e => map.on(e, release))
-    tour.start()
+    if (!pinnedRef.current) tour.start()
     return () => {
       window.clearTimeout(resume)
       downs.forEach(e => map.off(e, pause))
@@ -164,6 +170,7 @@ export function Hero({ onStart }: { onStart: () => void }) {
   // 지도 둘러보기: 글자가 위로 빠지다가 절반쯤 빠졌을 때 지도 색이 돌아오기 시작하고 카메라가 내려앉는다
   const explore = () => {
     if (!map || phaseRef.current === 'exploring') return
+    pinnedRef.current = false
     setPhase('exploring')
     const fast = reduced()
     later(() => {
@@ -184,6 +191,7 @@ export function Hero({ onStart }: { onStart: () => void }) {
   // 처음으로: 카메라가 첫 화면 위치(평면)로 돌아가고 제목이 다시 내려앉는다
   const back = () => {
     if (!map) return
+    pinnedRef.current = false
     tourRef.current?.stop()
     const mine = ++flight.current
     setArrived(false)
@@ -200,6 +208,24 @@ export function Hero({ onStart }: { onStart: () => void }) {
     })
     map.flyTo({ center: INTRO_VIEW.center, zoom: INTRO_VIEW.zoom, pitch: INTRO_VIEW.pitch, bearing: INTRO_VIEW.bearing, duration: reduced() ? 0 : BACK_FLY_MS, essential: true })
   }
+
+  // 둘러보기 이름표: 둘러보기로 도착한 뒤에만 보인다. 관광지 목록은 처음 둘러볼 때 한 번 받는다(실패하면 랜드마크 이름만 보인다)
+  useEffect(() => {
+    if (phase !== 'exploring' || attractions !== null || mapFailed) return
+    let cancelled = false
+    api.places.list({ kind: 'attraction', limit: 300 })
+      .then(list => { if (!cancelled) setAttractions(list) })
+      .catch(() => { if (!cancelled) setAttractions([]) })
+    return () => { cancelled = true }
+  }, [phase, attractions, mapFailed])
+  const labels = useMemo<MapLabel[] | null>(() => (phase === 'exploring' && arrived ? buildTourLabels(attractions ?? []) : null), [phase, arrived, attractions])
+  // 관광지 이름을 누르면 그 자리로 부드럽게 다가간다. 자동 둘러보기는 멈추고 다시 이어가지 않는다
+  const onSelectLabel = useCallback((label: MapLabel) => {
+    if (!map) return
+    pinnedRef.current = true
+    tourRef.current?.stop()
+    map.flyTo({ center: label.coord, zoom: LABEL_FOCUS.zoom, pitch: LABEL_FOCUS.pitch, bearing: map.getBearing(), duration: reduced() ? 0 : LABEL_FOCUS.durationMs, essential: true })
+  }, [map])
 
   // 등장 타임라인(다시 들어온 경우는 더 짧고 빠르게)
   const timing = seen ? GLYPH_SEEN : GLYPH
@@ -260,6 +286,8 @@ export function Hero({ onStart }: { onStart: () => void }) {
           deferExtras={!(introDone || exploring)}
           initialView={INTRO_VIEW}
           pins={exploring && arrived ? placePins : []}
+          labels={labels}
+          onSelectLabel={onSelectLabel}
           onMapReady={onMapReady}
           onFail={onMapFail}
           onSelectLandmark={onSelectLandmark}

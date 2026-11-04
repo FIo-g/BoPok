@@ -25,6 +25,14 @@ export type RouteProps = {
 
 export type RouteCollection = FeatureCollection<LineString, RouteProps>
 
+// 둘러보기 이름표. 랜드마크(모형이 있는 곳)는 파란 큰 글씨로 먼저 보이고, 관광지는 작은 글씨로 보인다. id 는 랜드마크면 landmark id
+export type MapLabel = {
+  id: string
+  name: string
+  coord: Coord
+  emphasis: 'landmark' | 'place'
+}
+
 export type MapPinKind = 'start' | 'rest' | 'stairs' | 'toilet' | 'place' | 'stop' | 'link' | 'guide'
 
 export type MapPin = {

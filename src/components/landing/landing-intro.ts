@@ -40,21 +40,24 @@ export const INTRO_VIEW: LandingView = { center: [127.385, 36.372], zoom: 14.6, 
 export const DRIFT_METERS = 150              // 평면 지도가 천천히 흐르는 거리(왕복)
 export const DRIFT_MS = 30000
 // 단계 B: 내려앉아 도착하는 곳. 기울기는 줌별 제한(map-config 의 MAP_PITCH_LIMITS) 안으로 맞춰진다
-export const EXPLORE_VIEW: LandingView = { center: [127.3845, 36.3705], zoom: 15.8, pitch: 62, bearing: -25 }
+// 줌 15.5 는 둔산·엑스포 일대가 한 화면에 들어오는 가장 넓은 값이다(이보다 낮으면 기울기 제한 때문에 60도가 안 나온다, map-config MAP_PITCH_LIMITS)
+export const EXPLORE_VIEW: LandingView = { center: [127.3845, 36.3705], zoom: 15.5, pitch: 62, bearing: -25 }
 // 둘러보기 웨이포인트(권역 안). 첫 곳은 도착 지점과 같다
 export const TOUR_MS = 14000
 export const TOUR_RESUME_MS = 5000           // 만진 뒤 이만큼 안 만지면 자동 이동을 다시 이어간다
 export const TOUR_WAYPOINTS: LandingView[] = [
   EXPLORE_VIEW,
-  // 대전예술의전당·대전시립미술관 모형 (map/landmarks.ts)
-  { center: [127.3847, 36.3669], zoom: 16.4, pitch: 62, bearing: 20 },
-  // 엑스포다리·대전엑스포 시민광장 모형
-  { center: [127.3881, 36.3733], zoom: 16.2, pitch: 64, bearing: 30 },
-  // 기초과학연구원 도서관 모형
-  { center: [127.3872, 36.3771], zoom: 16.6, pitch: 62, bearing: 80 },
+  // 대전예술의전당(모형)·대전시립미술관(data/places/art.json) 일대
+  { center: [127.3847, 36.3672], zoom: 15.8, pitch: 62, bearing: 20 },
+  // 한밭수목원(data/places/hanbat.json)과 열대식물원 모형
+  { center: [127.3885, 36.3665], zoom: 15.8, pitch: 62, bearing: 60 },
+  // 엑스포과학공원 한빛탑·대전엑스포 시민광장·엑스포다리
+  { center: [127.3872, 36.3735], zoom: 15.8, pitch: 62, bearing: 30 },
   // 국립중앙과학관 모형
-  { center: [127.3758, 36.3753], zoom: 16.4, pitch: 64, bearing: -35 },
+  { center: [127.3758, 36.3753], zoom: 16, pitch: 64, bearing: -35 },
 ]
+// 이름표의 관광지를 누르면 그 자리로 다가가는 줌·시간
+export const LABEL_FOCUS = { zoom: 16.2, pitch: 60, durationMs: 1800 }
 
 // 시연 장소 핀. 랜드마크 모형이 있는 곳은 모두 이름 라벨과 파란 핀을 두지 않고 모형 자체를 눌러 장소로 간다(map/landmarks.ts).
 // 지금은 모형이 없는 시연 장소가 없어 비어 있다. 모형이 없는 장소를 더하면 여기에 핀으로 둔다

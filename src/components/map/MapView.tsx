@@ -8,11 +8,12 @@ import type { Feature, FeatureCollection, Polygon } from 'geojson'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import type { TreesLayer } from './treesLayer'
 import type { LandmarksLayer } from './landmarksLayer'
-import { LANDMARKS, LANDMARK_FADE_ZOOM, LANDMARK_HIDDEN_LAYER_ID, LANDMARK_HIDDEN_SHADOW_LAYER_ID, hiddenFids, landmarkCenter, type Landmark } from './landmarks'
+import { LANDMARKS, LANDMARK_FADE_ZOOM, LANDMARK_HIDDEN_LAYER_ID, LANDMARK_HIDDEN_SHADOW_LAYER_ID, hiddenFids, landmarkById, landmarkCenter, type Landmark } from './landmarks'
 import { maxPitchForZoom } from './map-limits'
 import { crossingBearing, focusZone, nearBuildingIds, veilPolygon } from './map-focus'
 import type { Coord } from '@/lib/contracts'
-import type { Bounds, CameraView, MapPin, RouteCollection } from './map-types'
+import type { Bounds, CameraView, MapLabel, MapPin, RouteCollection } from './map-types'
+import { LABEL_LAYER_IDS, LABEL_SOURCE_ID, labelDotLayer, labelTextLayer, labelsGeoJSON } from './map-labels'
 import {
   MAP_BEARING, MAP_BG_COLOR, MAP_CENTER, MAP_FLAT_DURATION_MS, MAP_FONT_FAMILY,
   MAP_MAX_BOUNDS, MAP_MAX_ZOOM, MAP_MIN_ZOOM, MAP_PITCH, MAP_STYLE_URL, MAP_WORKER_URL, MAP_ZOOM,
@@ -158,11 +159,14 @@ type Props = {
   onSelectLandmark?: (landmark: Landmark) => void
   // 상세 화면이 열린 랜드마크 id. 그 모형은 가장 강하게, 나머지는 살짝 흐리게 한다
   focusLandmarkId?: string | null
+  // 이름표(둘러보기). 없으면 아무것도 그리지 않는다. 누르면 랜드마크는 모형과 같이 onSelectLandmark, 관광지는 onSelectLabel 로 간다
+  labels?: MapLabel[] | null
+  onSelectLabel?: (label: MapLabel) => void
 }
 
 const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
-export default function MapView({ mode = 'plan', compact = false, interactive = false, initialView, onMapReady, deferExtras = false, flat = false, onFail, routes = null, pins = [], fit = null, focusPath = null, onSelectItem, onSelectLandmark, focusLandmarkId = null }: Props) {
+export default function MapView({ mode = 'plan', compact = false, interactive = false, initialView, onMapReady, deferExtras = false, flat = false, onFail, routes = null, pins = [], fit = null, focusPath = null, onSelectItem, onSelectLandmark, focusLandmarkId = null, labels = null, onSelectLabel }: Props) {
   const landing = mode === 'landing'
   // 처음 높이 배율(평면으로 시작하면 처음부터 0 으로 만들어 3D 가 번쩍 보이지 않게). 한 번 정하면 바꾸지 않는다
   const [initialFlat] = useState(flat)
@@ -187,6 +191,8 @@ export default function MapView({ mode = 'plan', compact = false, interactive = 
   const [debug] = useState(() => typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('debug') === 'landmarks')
   const [debugOpacity] = useState(() => (typeof window !== 'undefined' ? Number(new URLSearchParams(window.location.search).get('lmopacity') ?? 0.5) || 0.5 : 0.5))
   const flatRef = useRef(flat)
+  const labelData = useMemo(() => (labels ? labelsGeoJSON(labels) : null), [labels])
+  const hasLabels = labelData !== null && labelData.features.length > 0
   const [nearIds, setNearIds] = useState<number[] | null>(null)
 
   useEffect(() => {
@@ -378,16 +384,17 @@ export default function MapView({ mode = 'plan', compact = false, interactive = 
         localIdeographFontFamily={MAP_FONT_FAMILY}
         attributionControl={{ compact: true }}
         canvasContextAttributes={CANVAS_ATTRIBUTES}
-        interactiveLayerIds={routes ? ['route-hit'] : []}
+        interactiveLayerIds={[...(routes ? ['route-hit'] : []), ...(hasLabels ? LABEL_LAYER_IDS : [])]}
         cursor={cursor}
         onMouseEnter={() => { overRoute.current = true; setCursor('pointer') }}
         onMouseLeave={() => { overRoute.current = false; setCursor(overLandmark.current ? 'pointer' : '') }}
         onMouseMove={e => {
           // 모형을 누를 수 있는 지도(onSelectLandmark 가 있을 때)에서만: 모형 위에서 손 모양 커서, 빛이 강해진다
-          if (!onSelectLandmark) return
-          const landmark = landmarksRef.current?.pick(e.point) ?? null
-          landmarksRef.current?.setHover(landmark?.id ?? null)
-          const hit = landmark != null
+          const landmark = onSelectLandmark ? landmarksRef.current?.pick(e.point) ?? null : null
+          if (onSelectLandmark) landmarksRef.current?.setHover(landmark?.id ?? null)
+          // 이름표 위에서도 손 모양 커서
+          const onLabel = hasLabels && e.target.queryRenderedFeatures(e.point, { layers: LABEL_LAYER_IDS }).length > 0
+          const hit = landmark != null || onLabel
           if (hit === overLandmark.current) return
           overLandmark.current = hit
           setCursor(hit || overRoute.current ? 'pointer' : '')
@@ -397,6 +404,17 @@ export default function MapView({ mode = 'plan', compact = false, interactive = 
           if (onSelectLandmark) {
             const landmark = landmarksRef.current?.pick(e.point)
             if (landmark) { onSelectLandmark(landmark); return }
+          }
+          // 이름표: 랜드마크 이름은 모형과 같이 상세 화면으로, 관광지 이름은 바깥(Hero)이 그 자리로 다가가게 넘긴다
+          const labelFeature = e.features?.find(f => f.layer?.id !== undefined && LABEL_LAYER_IDS.includes(f.layer.id))
+          if (labelFeature) {
+            const label = labels?.find(l => l.id === labelFeature.properties?.id)
+            if (label) {
+              const landmark = label.emphasis === 'landmark' ? landmarkById(label.id) : undefined
+              if (landmark && onSelectLandmark) onSelectLandmark(landmark)
+              else onSelectLabel?.(label)
+            }
+            return
           }
           const id = e.features?.[0]?.properties?.itemId
           if (typeof id === 'string') onSelectItem?.(id)
@@ -449,6 +467,12 @@ export default function MapView({ mode = 'plan', compact = false, interactive = 
           <Layer id="daejeon-boundary-glow" type="line" layout={{ 'line-join': 'round' }} paint={{ 'line-color': BOUNDARY_GLOW.color, 'line-width': BOUNDARY_GLOW.width, 'line-blur': BOUNDARY_GLOW.blur, 'line-opacity': BOUNDARY_GLOW.opacity }} />
           <Layer id="daejeon-boundary-line" type="line" layout={{ 'line-join': 'round' }} paint={{ 'line-color': BOUNDARY_LINE.color, 'line-width': BOUNDARY_LINE.width }} />
         </Source>
+        {labelData && hasLabels && (
+          <Source id={LABEL_SOURCE_ID} type="geojson" data={labelData}>
+            <Layer {...labelDotLayer} />
+            <Layer {...labelTextLayer} />
+          </Source>
+        )}
         {pins.map(pin => (
           <Marker key={pin.id} longitude={pin.coord[0]} latitude={pin.coord[1]} anchor={pin.kind === 'stairs' ? 'bottom' : 'center'} style={{ zIndex: pin.kind === 'stairs' ? 4 : pin.kind === 'stop' ? 3 : 2 }}>
             {pin.kind === 'place' ? (
