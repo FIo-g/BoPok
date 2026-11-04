@@ -13,8 +13,11 @@ function serviceKind(name: string): 'restaurant' | 'cafe' | 'lodging' | null {
   return null
 }
 
-// 부모님과 앉아서 먹는 식사 자리에 맞지 않는 업종(업종명 기준). 카페·숙박 자리에는 적용하지 않는다.
-const NOT_SEATED_MEAL_CATEGORY = /패스트푸드|호프|통닭|주점|술집|포장마차|편의점/
+// 부모님과 앉아서 먹는 식사 자리에 맞지 않는 업종. 대전 빅데이터 TOB_INFO 업종 12종(한식, 카페·디저트, 치킨, 분식,
+// 일식, 양식, 중식, 야식, 패스트푸드, 아시안, 기타, 브런치) 중 실제 값만 적는다. 야식은 호프·포차가 주로 든 업종이다.
+// 카페·숙박 자리에는 적용하지 않는다.
+const NOT_SEATED_MEAL_CATEGORIES = ['패스트푸드', '야식'] as const
+const isNotSeatedMealCategory = (category: string): boolean => NOT_SEATED_MEAL_CATEGORIES.some(excluded => category.includes(excluded))
 
 // AI가 만든 빈 식사 자리만 DB 장소로 채운다. 직접 고른 장소·예약·꼭 갈 곳은 건드리지 않는다.
 export async function fillRouteServices(drafts: DraftStop[], options: {
@@ -54,7 +57,7 @@ export async function fillRouteServices(drafts: DraftStop[], options: {
         new Promise<null>(resolve => { timer = setTimeout(() => resolve(null), Math.max(1, deadline - Date.now())) }),
       ])
       const choice = result?.items.find(item => placeKindOf(item.place) === kind && !used.has(item.place.id) &&
-        !(kind === 'restaurant' && NOT_SEATED_MEAL_CATEGORY.test(item.place.category)) &&
+        !(kind === 'restaurant' && isNotSeatedMealCategory(item.place.category)) &&
         !item.menus.some(menu => menu.foodTags.some(tag => options.avoidFoodTags?.includes(tag))) &&
         (item.distanceM ?? straightLineDistanceM(near, item.place.coord)) <= maxDistanceM &&
         (item.straightLineDetourM === undefined || item.straightLineDetourM <= maxDistanceM))
