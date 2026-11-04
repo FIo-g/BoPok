@@ -118,8 +118,8 @@ for (const way of ways) {
       steps: way.tags.highway === 'steps',
       stepCount: way.tags.step_count === undefined ? undefined : Number(way.tags.step_count),
       incline: way.tags.incline !== undefined && !['no', '0'].includes(way.tags.incline),
-      // 출입이 막힌 길(access=no·private)은 원천 지도에 있을 때만 알 수 있다. 경로에 쓰이면 보고서에 적는다.
-      restricted: ['no', 'private'].includes(way.tags.access),
+      // 출입이 막힌 길(access=no·private, 또는 도보 금지 foot=no 서비스 도로)은 원천 지도에 있을 때만 알 수 있다. 경로에 쓰이면 보고서에 적는다.
+      restricted: ['no', 'private'].includes(way.tags.access) || way.tags.foot === 'no',
     })
   }
 }
