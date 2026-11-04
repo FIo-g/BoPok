@@ -72,7 +72,7 @@ describe('장소 마이그레이션과 계약 호환', () => {
     const detail = PlaceDetailSchema.parse({
       ...row, kind: row.kind ?? undefined, coord: [row.lng, row.lat], visitMin: row.visitMin ?? undefined,
       address: row.address ?? undefined, phone: row.phone ?? undefined, homepage: row.homepage ?? undefined,
-      nodes: nodes.map(node => ({ ...node, coord: [node.lng, node.lat] })),
+      nodes: nodes.map(node => ({ ...node, coord: [node.lng, node.lat], floor: node.floor ?? undefined, guideNo: node.guideNo ?? undefined })),
       segments: segments.map(item => ({ ...item, stairsCount: item.stairsCount ?? undefined, detourOf: item.detourOf ?? undefined })),
     })
     expect(detail.nodes).toHaveLength(2)

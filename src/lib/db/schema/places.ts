@@ -70,10 +70,15 @@ export const placeNodes = pgTable('place_nodes', {
   restType: placeRestType('rest_type'),
   lng: doublePrecision('lng').notNull(),
   lat: doublePrecision('lat').notNull(),
+  // 1=1층, -1=지하 1층. 계약과 같이 생략 가능하므로 null을 허용한다.
+  floor: integer('floor'),
+  // 현장 안내도에 적힌 번호. 없으면 null (계약의 optional과 맞춘다).
+  guideNo: integer('guide_no'),
 }, table => [
   // parking 같은 지점 ID를 서로 다른 장소에서 재사용할 수 있다.
   primaryKey({ columns: [table.placeId, table.id] }),
   check('place_nodes_coord_range', sql`${table.lng} between -180 and 180 and ${table.lat} between -90 and 90`),
+  check('place_nodes_guide_no_positive', sql`${table.guideNo} is null or ${table.guideNo} >= 1`),
 ])
 
 export const placeSegments = pgTable('place_segments', {

@@ -1,4 +1,8 @@
 {
+  "osmFile": "data/places/osm/hanbat-east-osm-20261104.json",
+  "boundaryWay": 30614864,
+  "source": "OpenStreetMap 보행로 최단 경로(© OpenStreetMap contributors) · 지점: 한밭수목원 종합안내도(대전광역시) 대조",
+  "checkedAt": "2026-11-04",
   "course": {
     "id": "hb-east",
     "name": "동원 한 바퀴(연못·장미원)"

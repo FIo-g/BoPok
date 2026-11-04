@@ -50,6 +50,13 @@
       "when": 1793760557518,
       "tag": "0006_trip-cost-plans",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793801770460,
+      "tag": "0007_place-node-guide-floor",
+      "breakpoints": true
     }
   ]
 }

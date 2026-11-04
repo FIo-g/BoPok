@@ -77,3 +77,36 @@ node --conditions=react-server scripts/data/load-places.mjs
 상세 실행·프론트 연결은 `src/lib/places/README.md`와 `scripts/data/README.md`에 있다.
 출처·날짜·등급·좌표를 검사하며, 같은 데이터는 건너뛴다. 기존 ID의 내용이 다르면
 덮어쓰거나 삭제하지 않고 실패한다. 다른 장소나 기존 내부 지점·구간은 수정하지 않는다.
+
+## 다른 장소에 장소 안 데이터 만들기 (범용)
+
+한밭수목원 말고 공유 DB에 있는 다른 장소(예: `tourapi-12-125994`)도 같은 방법으로 만든다.
+장소 안 지점·구간은 손으로 적은 **설계 파일**과 **OSM 보행로 추출본**으로 만들고, 결과는 DB에 넣기 전에 파일로 검사한다.
+
+1. 설계 파일 `data/places/inside/<id>.design.json`을 만든다. 한밭수목원 설계 파일(`hanbat.design.json`)을 본뜬다.
+   - `osmFile`: OSM 추출본 경로 (없으면 `data/places/osm/<id>-osm-*.json` 하나를 찾는다)
+   - `source`(출처 문구), `checkedAt`(확인 날짜): 둘 다 필수. 결과의 모든 구간·코스에 붙는다.
+   - `course`: `{ id, name }`. 관람 구간(`role: "tour"`)이 있으면 필수.
+   - `boundaryWay`(선택): 관람 지점이 이 way 안이나 30m 안에 있는지 검사한다. 없으면 검사하지 않는다.
+   - `nodes`: `id`, `kind`, `name`, `restType`, `lng`, `lat`, 선택 `guideNo`(안내도 번호), `floor`(층, 1=1층, -1=지하 1층).
+   - `segments`: `id`, `from`, `to`, `order`, `optional`, `role`(`access` 또는 `tour`).
+2. 지점·구간을 만든다. 시범 장소 파일(`data/places/<id>.json`)이 있으면 그 파일을 고치고, 없으면 `data/places/inside/<id>.json`을 쓴다.
+   ```bash
+   node scripts/data/build-place-inside.mjs --id tourapi-12-125994
+   ```
+   결과는 장소 계약(`PlaceDetailSchema` 또는 장소 안 전용 계약)으로 검사한 뒤에만 쓴다. DB는 건드리지 않는다.
+3. 공용 DB를 읽기만 확인한다(넣을 개수·지금 상태·칸 유무만 출력).
+   ```bash
+   node --conditions=react-server --env-file-if-exists=.env.local scripts/data/load-place-inside.mjs --id tourapi-12-125994
+   ```
+4. 빈 장소에 넣는다 (지점·구간이 0개일 때만, 총괄 확인 후): `... --id <id> --apply`
+5. 이미 넣은 장소의 안내도 번호·층만 채운다. DB 값이 null인 칸만 채우고, 다른 칸은 건드리지 않으며, 값이 다르면 바꾸지 않고 `conflicts`로 알린다.
+   ```bash
+   node --conditions=react-server --env-file-if-exists=.env.local scripts/data/load-place-inside.mjs --id <id> --sync-labels          # dry-run (읽기만)
+   node --conditions=react-server --env-file-if-exists=.env.local scripts/data/load-place-inside.mjs --id <id> --sync-labels --apply  # 총괄 확인 후
+   ```
+
+**주의**
+- 마이그레이션 `0007_place-node-guide-floor`(`place_nodes`의 `guide_no`·`floor` 칸)가 공용 DB에 적용되기 전에는 `--apply`와 `--sync-labels --apply`가 멈추고, dry-run은 "마이그레이션 먼저"라고 안내한다. 마이그레이션은 main에 머지된 뒤 총괄이 적용한다.
+- 공용 DB에 쓰는 명령은 총괄 확인 후에만 실행한다. `DATABASE_URL`이 `.neon.tech` 주소가 아니면 스크립트가 멈춘다.
+- 신뢰 등급·확인 날짜·출처는 설계 파일의 값을 그대로 쓴다. 현장 확인 없이 `confirmed_none`(계단 없음)으로 바꾸지 않는다.

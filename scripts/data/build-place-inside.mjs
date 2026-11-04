@@ -1,37 +1,68 @@
-// 장소 안 지점·구간을 만든다: 설계 파일(지점·구간 목록) + OSM 보행로 추출 → data/places/hanbat.json.
+// 장소 안 지점·구간을 만든다: 설계 파일(data/places/inside/<id>.design.json) + OSM 보행로 추출.
+// 결과: 시범 장소 파일(data/places/<id>.json)이 있으면 그 파일의 nodes/segments/courses를 바꾸고,
+// 없으면 data/places/inside/<id>.json에 { placeId, nodes, segments, courses }를 쓴다.
 // 같은 입력이면 항상 같은 결과가 나온다(시간·난수 없음). DB는 건드리지 않는다 (적재는 load-place-inside.mjs).
+// 설계 파일에는 osmFile(OSM 추출본 경로), source(출처 문구), checkedAt(확인 날짜), course, 선택으로 boundaryWay(경계 way)를 적는다.
 // 실행: node scripts/data/build-place-inside.mjs --id hanbat
+//       node scripts/data/build-place-inside.mjs --id tourapi-12-125994  (설계 파일과 OSM 추출본이 있을 때)
 import { createRequire } from 'node:module'
-import { readFile, writeFile } from 'node:fs/promises'
-import { dirname, join, resolve } from 'node:path'
+import { existsSync } from 'node:fs'
+import { readFile, readdir, writeFile } from 'node:fs/promises'
+import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 process.chdir(root)
 const { values } = parseArgs({ options: { id: { type: 'string' } } })
-const id = values.id ?? 'hanbat'
-if (id !== 'hanbat') throw new Error('지금은 hanbat(한밭수목원 동원 코스)만 만든다.')
+const id = values.id
+if (!id || !/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(id)) throw new Error('--id 장소 ID를 주세요. 예: --id hanbat')
 
 const require = createRequire(import.meta.url)
 const requireKit = createRequire(require.resolve('drizzle-kit'))
 requireKit('tsx/cjs/api').register()
-const { PlaceDetailSchema } = require('../../src/lib/contracts/place.ts')
+const { PlaceDetailSchema, PlaceNodeSchema, PlaceSegmentSchema, PlaceCourseSchema, PlaceIdInputSchema } = require('../../src/lib/contracts/place.ts')
+const { z } = require('zod')
+const PlaceInsideFileSchema = z.object({
+  placeId: PlaceIdInputSchema,
+  nodes: PlaceNodeSchema.array(),
+  segments: PlaceSegmentSchema.array(),
+  courses: PlaceCourseSchema.array(),
+})
 
 const SNAP_LIMIT_M = 40 // 지점을 그래프에 붙일 때 이보다 멀면 실패
-const BOUNDARY_LIMIT_M = 30 // 동원 지점은 경계 안이거나 이 거리 안이어야 한다
+const BOUNDARY_LIMIT_M = 30 // 관람 지점은 경계 안이거나 이 거리 안이어야 한다 (설계에 boundaryWay가 있을 때만)
 const WALK_HIGHWAYS = new Set(['footway', 'path', 'pedestrian', 'steps', 'service', 'living_street', 'track'])
-const CHECKED_AT = '2026-11-04'
-const SOURCE = 'OpenStreetMap 보행로 최단 경로(© OpenStreetMap contributors) · 지점: 한밭수목원 종합안내도(대전광역시) 대조'
-const COURSE_ID = 'hb-east'
-const BOUNDARY_WAY = 30614864
 
 const designPath = join(root, `data/places/inside/${id}.design.json`)
-const osmPath = join(root, 'data/places/osm/hanbat-east-osm-20261104.json')
-const placePath = join(root, `data/places/${id}.json`)
+if (!existsSync(designPath)) throw new Error(`설계 파일이 없습니다: data/places/inside/${id}.design.json`)
 const design = JSON.parse(await readFile(designPath, 'utf8'))
+
+// OSM 추출본: 설계 파일의 osmFile, 없으면 data/places/osm/<id>-osm-*.json 하나.
+async function findOsmPath() {
+  if (design.osmFile) return join(root, design.osmFile)
+  const dir = join(root, 'data/places/osm')
+  const names = (await readdir(dir)).filter(name => name.startsWith(`${id}-osm-`) && name.endsWith('.json'))
+  if (names.length !== 1) throw new Error(`OSM 추출본을 하나로 정하지 못했습니다(${names.length}개). 설계 파일에 osmFile을 적어 주세요.`)
+  return join(dir, names[0])
+}
+const osmPath = await findOsmPath()
 const osm = JSON.parse(await readFile(osmPath, 'utf8'))
-const base = JSON.parse(await readFile(placePath, 'utf8'))
+
+// 출처·확인 날짜는 설계 파일에서 읽는다. 없으면 결과에 근거를 남길 수 없어 멈춘다 (AGENTS 6장).
+if (!design.source || !design.checkedAt) throw new Error('설계 파일에 source(출처)와 checkedAt(확인 날짜)를 적어 주세요.')
+const SOURCE = design.source
+const CHECKED_AT = design.checkedAt
+const COURSE_ID = design.course?.id
+const BOUNDARY_WAY = design.boundaryWay
+
+// 시범 장소 파일이 있으면 그 파일에 쓰고, 없으면 장소 안 전용 파일을 만든다.
+const placePath = join(root, `data/places/${id}.json`)
+const insidePath = join(root, `data/places/inside/${id}.json`)
+const hasPilotFile = existsSync(placePath)
+const base = hasPilotFile ? JSON.parse(await readFile(placePath, 'utf8')) : null
+if (base && base.id !== id) throw new Error(`data/places/${id}.json의 id가 ${base.id}입니다.`)
+const placeId = id
 
 // ---- 기하 ----
 const R = 6371000
@@ -61,8 +92,9 @@ const lerp = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]
 const ways = osm.elements.filter(e => e.type === 'way' && e.geometry && e.tags?.highway && (
   WALK_HIGHWAYS.has(e.tags.highway) || (e.tags.highway === 'cycleway' && ['yes', 'designated'].includes(e.tags.foot))
 ))
-const boundary = osm.elements.find(e => e.type === 'way' && e.id === BOUNDARY_WAY)
-if (!boundary) throw new Error('OSM 추출에 동원 경계 way가 없습니다.')
+// 경계 way가 없는 장소는 경계 검사를 건너뛴다(설계가 정하지 않은 장소의 지점을 임의로 막지 않는다).
+const boundary = BOUNDARY_WAY === undefined ? null : osm.elements.find(e => e.type === 'way' && e.id === BOUNDARY_WAY)
+if (BOUNDARY_WAY !== undefined && !boundary) throw new Error('OSM 추출에 설계의 경계 way가 없습니다.')
 
 const baseEdges = []
 for (const way of ways) {
@@ -255,7 +287,7 @@ function stairsOf(used) {
 const slopeOf = used => used.some(({ index }) => edges[index].incline)
 
 // ---- 경계 검사 ----
-const boundaryPts = boundary.geometry.map(p => [p.lon, p.lat])
+const boundaryPts = boundary ? boundary.geometry.map(p => [p.lon, p.lat]) : []
 function insidePolygon([x, y]) {
   let inside = false
   for (let i = 0, j = boundaryPts.length - 1; i < boundaryPts.length; j = i++) {
@@ -265,6 +297,7 @@ function insidePolygon([x, y]) {
   return inside
 }
 function distanceToBoundary(p) {
+  if (boundaryPts.length < 2) return 0
   let best = Infinity
   for (let i = 0; i + 1 < boundaryPts.length; i++) {
     const a = boundaryPts[i], b = boundaryPts[i + 1]
@@ -275,16 +308,17 @@ function distanceToBoundary(p) {
 
 // ---- 지점 만들기 ----
 const nodes = designNodes.map(n => {
-  if (!['parking', 'stop'].includes(n.kind)) {
+  if (boundary && !['parking', 'stop'].includes(n.kind)) {
     const d = insidePolygon(n.coord) ? 0 : distanceToBoundary(n.coord)
-    if (d > BOUNDARY_LIMIT_M) throw new Error(`지점 ${n.id}가 동원 경계에서 ${d.toFixed(1)}m 떨어져 있습니다.`)
+    if (d > BOUNDARY_LIMIT_M) throw new Error(`지점 ${n.id}가 장소 경계에서 ${d.toFixed(1)}m 떨어져 있습니다.`)
   }
   const node = {
-    id: n.id, placeId: base.id, kind: n.kind, name: n.name,
+    id: n.id, placeId, kind: n.kind, name: n.name,
     restType: n.restType === 'none' ? null : n.restType,
     coord: n.coord,
   }
   if (n.guideNo !== undefined) node.guideNo = n.guideNo
+  if (n.floor !== undefined) node.floor = n.floor
   return node
 })
 
@@ -295,7 +329,7 @@ const report = { detours: [], accessSteps: [] }
 function makeSegment(seg, route, extra) {
   const stairs = stairsOf(route.used)
   return {
-    id: seg.id, placeId: base.id, fromNodeId: seg.from, toNodeId: seg.to, order: seg.order,
+    id: seg.id, placeId, fromNodeId: seg.from, toNodeId: seg.to, order: seg.order,
     distanceM: Math.round(pathLength(route.path)), path: route.path.map(p => [p[0], p[1]]),
     stairsStatus: stairs.stairsStatus,
     ...(stairs.stairsCount === undefined ? {} : { stairsCount: stairs.stairsCount }),
@@ -316,6 +350,7 @@ for (const seg of sorted) {
       report.accessSteps.push(seg.id)
     }
   }
+  if (isTour && !COURSE_ID) throw new Error('관람 구간이 있으면 설계 파일에 course.id가 필요합니다.')
   const tourExtra = isTour ? { courseId: COURSE_ID } : {}
   segments.push(makeSegment(seg, route, { ...tourExtra, source: SOURCE, checkedAt: CHECKED_AT, confidence: 'B' }))
 
@@ -339,32 +374,47 @@ for (const s of segments) {
   }
 }
 
-const courses = [{
+const courses = design.course ? [{
   id: COURSE_ID, name: design.course.name, recommended: true,
   source: SOURCE, checkedAt: CHECKED_AT, confidence: 'B',
-}]
+}] : []
 
-// 기존 장소 칸은 그대로 두고 지점·구간·코스만 바꾼다.
-const placeRow = { ...base }
-delete placeRow.nodes
-delete placeRow.segments
-const out = { ...placeRow, nodes, segments, courses }
-const parsed = PlaceDetailSchema.safeParse(out)
-if (!parsed.success) {
-  console.error(JSON.stringify(parsed.error.issues.slice(0, 5), null, 2))
-  throw new Error('장소 계약 검사에 실패해 파일을 쓰지 않았습니다.')
+// 시범 장소 파일은 기존 장소 칸을 그대로 두고 지점·구간·코스만 바꾼다. 전용 파일은 장소 안 칸만 쓴다.
+let outPath
+let out
+if (base) {
+  const placeRow = { ...base }
+  delete placeRow.nodes
+  delete placeRow.segments
+  out = { ...placeRow, nodes, segments, courses }
+  const parsed = PlaceDetailSchema.safeParse(out)
+  if (!parsed.success) {
+    console.error(JSON.stringify(parsed.error.issues.slice(0, 5), null, 2))
+    throw new Error('장소 계약 검사에 실패해 파일을 쓰지 않았습니다.')
+  }
+  outPath = placePath
+} else {
+  out = { placeId, nodes, segments, courses }
+  const parsed = PlaceInsideFileSchema.safeParse(out)
+  if (!parsed.success) {
+    console.error(JSON.stringify(parsed.error.issues.slice(0, 5), null, 2))
+    throw new Error('장소 안 계약 검사에 실패해 파일을 쓰지 않았습니다.')
+  }
+  outPath = insidePath
 }
-await writeFile(placePath, JSON.stringify(out, null, 2) + '\n')
+await writeFile(outPath, JSON.stringify(out, null, 2) + '\n')
 
 const tourSegments = segments.filter(s => s.courseId && s.detourOf === undefined)
 const tourMain = tourSegments.filter(s => !s.optional)
 const snapReport = Object.fromEntries(designNodes.map(n => [n.id, Math.round(snaps[n.id].d * 10) / 10]))
 console.log(JSON.stringify({
-  file: 'data/places/hanbat.json',
+  file: relative(root, outPath),
   nodes: nodes.length,
   segments: segments.length,
   detourSegments: segments.filter(s => s.detourOf !== undefined).length,
   courses: courses.length,
+  guideNumbers: nodes.filter(n => n.guideNo !== undefined).map(n => ({ id: n.id, guideNo: n.guideNo })),
+  floors: nodes.filter(n => n.floor !== undefined).map(n => ({ id: n.id, floor: n.floor })),
   tourMeters: tourMain.reduce((sum, s) => sum + s.distanceM, 0),
   tourMetersWithOptional: tourSegments.reduce((sum, s) => sum + s.distanceM, 0),
   stairsPresentSegments: segments.filter(s => s.stairsStatus === 'present').map(s => s.id),

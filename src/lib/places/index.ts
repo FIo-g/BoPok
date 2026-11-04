@@ -25,6 +25,14 @@ export async function hasPlaceCatalog(db: Db): Promise<boolean> {
   return rows[0]?.ready ?? false
 }
 
+// 지점의 층·안내도 번호도 같은 방식으로 읽는다. 마이그레이션 0007 적용 전에는 칸이 없어 null이 된다.
+const placeNodeColumns = {
+  id: placeNodes.id, placeId: placeNodes.placeId, kind: placeNodes.kind, name: placeNodes.name,
+  restType: placeNodes.restType, lng: placeNodes.lng, lat: placeNodes.lat,
+  floor: sql<number | null>`nullif(to_jsonb(${placeNodes})->>'floor', '')::int`,
+  guideNo: sql<number | null>`nullif(to_jsonb(${placeNodes})->>'guide_no', '')::int`,
+}
+
 export function toPlaceSummary(row: PlaceRow): PlaceSummary {
   return PlaceSummarySchema.parse({
     id: row.id, name: row.name, category: row.category, kind: row.kind ?? undefined, styles: row.styles,
@@ -58,7 +66,7 @@ export async function getPlaceDetails(ids: string[], database?: Db): Promise<Pla
   if (!rows.length) return []
   const foundIds = rows.map(row => row.id)
   // PGlite는 한 연결을 사용하므로 관련 조회도 순서대로 실행한다.
-  const nodes = await db.select().from(placeNodes).where(inArray(placeNodes.placeId, foundIds)).orderBy(asc(placeNodes.id))
+  const nodes = await db.select(placeNodeColumns).from(placeNodes).where(inArray(placeNodes.placeId, foundIds)).orderBy(asc(placeNodes.id))
   const segments = await db.select().from(placeSegments).where(inArray(placeSegments.placeId, foundIds))
     .orderBy(asc(placeSegments.order), asc(placeSegments.id))
   const menus = await hasPlaceCatalog(db)
@@ -79,6 +87,9 @@ export async function getPlaceDetails(ids: string[], database?: Db): Promise<Pla
     nodes: nodes.filter(node => node.placeId === row.id).map(node => ({
       id: node.id, placeId: node.placeId, kind: node.kind, name: node.name,
       restType: node.restType, coord: [node.lng, node.lat],
+      // null이면 칸을 빼서 계약의 optional과 맞춘다.
+      ...(node.floor === null ? {} : { floor: node.floor }),
+      ...(node.guideNo === null ? {} : { guideNo: node.guideNo }),
     })),
     segments: segments.filter(segment => segment.placeId === row.id).map(segment => ({
       ...segment, stairsCount: segment.stairsCount ?? undefined, detourOf: segment.detourOf ?? undefined,
