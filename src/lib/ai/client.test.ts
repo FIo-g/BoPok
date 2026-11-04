@@ -304,16 +304,16 @@ function sdkError(status: number, type: string): Error {
 }
 
 describe('providersFromEnv — Claude', () => {
-  it('키가 있으면 맨 앞, 모델 기본값은 claude-opus-5-5', () => {
+  it('키가 있으면 맨 앞, 모델 기본값은 claude-sonnet-5-5', () => {
     const env = { ANTHROPIC_API_KEY: 'ka', UPSTAGE_API_KEY: 'ku', OPENCODE_API_KEY: 'ko', OPENCODE_MODEL: 'm2' }
     expect(providersFromEnv(env).map(p => p.name)).toEqual(['claude', 'upstage', 'opencode'])
-    expect(providersFromEnv(env)[0]).toEqual({ name: 'claude', model: 'claude-opus-5-5', apiKey: 'ka' })
+    expect(providersFromEnv(env)[0]).toEqual({ name: 'claude', model: 'claude-sonnet-5-5', apiKey: 'ka' })
   })
 
   it('ANTHROPIC_MODEL로 모델을 바꾸고, 빈 값·공백이면 기본값', () => {
     expect(providersFromEnv({ ANTHROPIC_API_KEY: 'ka', ANTHROPIC_MODEL: 'claude-x' })[0]?.model).toBe('claude-x')
-    expect(providersFromEnv({ ANTHROPIC_API_KEY: 'ka', ANTHROPIC_MODEL: '  ' })[0]?.model).toBe('claude-opus-5-5')
-    expect(providersFromEnv({ ANTHROPIC_API_KEY: 'ka', ANTHROPIC_MODEL: '' })[0]?.model).toBe('claude-opus-5-5')
+    expect(providersFromEnv({ ANTHROPIC_API_KEY: 'ka', ANTHROPIC_MODEL: '  ' })[0]?.model).toBe('claude-sonnet-5-5')
+    expect(providersFromEnv({ ANTHROPIC_API_KEY: 'ka', ANTHROPIC_MODEL: '' })[0]?.model).toBe('claude-sonnet-5-5')
   })
 
   it('키가 없거나 공백이면 Claude는 없고 나머지 순서는 그대로', () => {
@@ -334,7 +334,7 @@ describe('callJson — Claude', () => {
     expect(http.calls).toHaveLength(0)
   })
 
-  it('요청 꼴: 공식 SDK beta.messages, 재시도 0, 낮은 effort, 서버 쪽 대체 모델, temperature 없음', async () => {
+  it('요청 꼴: 공식 SDK beta.messages, 재시도 0, effort medium, 서버 쪽 대체 모델, temperature 없음', async () => {
     const sdk = fakeClaude(() => textReply('{"ok":true}'))
     await callJson(
       {
@@ -361,7 +361,7 @@ describe('callJson — Claude', () => {
         { role: 'assistant', content: '{"ok":"아니야"}' },
         { role: 'user', content: '다시' },
       ],
-      output_config: { effort: 'low' },
+      output_config: { effort: 'medium' },
       betas: ['server-side-fallback-2026-07-01'],
       fallbacks: 'default',
     })

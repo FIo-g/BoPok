@@ -32,7 +32,11 @@ export function listMockHealth(db: MockDb, tripId: string, viewerUserId: string)
 function loadForEdit(db: MockDb, tripId: string, travelerId: string, actorUserId: string): TravelerHealth | undefined {
   const traveler = travelersOf(db, tripId).find(t => t.id === travelerId) ?? fail(404, 'not_found', '그 여행자를 찾을 수 없어요')
   const existing = db.health.find(h => h.tripId === tripId && h.travelerId === travelerId)
-  if (!canEditHealth(existing ?? null, actorUserId, traveler.userId ?? null)) fail(403, 'forbidden', '이 건강 정보는 고칠 수 없어요')
+  if (!canEditHealth(existing ?? null, actorUserId, traveler.userId ?? null)) {
+    fail(403, 'forbidden', traveler.userId
+      ? '계정이 연결된 분의 건강 정보는 그분만 고칠 수 있어요'
+      : '다른 가족이 먼저 넣어 둔 건강 정보라 고칠 수 없어요. 처음 넣은 분께 부탁해 주세요')
+  }
   return existing
 }
 

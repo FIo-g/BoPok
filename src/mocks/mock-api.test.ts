@@ -475,7 +475,7 @@ describe('목업 건강 정보 API', () => {
     const forbidden = await api.health.put(TRIP, 'tr-mom', input({ conditions: ['diabetes'] })).catch((e: unknown) => e)
     const notFound = await api.health.put(TRIP, 'nobody', input({ conditions: ['diabetes'] })).catch((e: unknown) => e)
     const invalid = await api.health.put(TRIP, 'tr-me', input({ conditions: ['diabetes'], consent: false })).catch((e: unknown) => e)
-    expect(forbidden).toMatchObject({ status: 403, message: '이 건강 정보는 고칠 수 없어요' })
+    expect(forbidden).toMatchObject({ status: 403, message: '계정이 연결된 분의 건강 정보는 그분만 고칠 수 있어요' })
     expect(notFound).toMatchObject({ status: 404, message: '그 여행자를 찾을 수 없어요' })
     expect(invalid).toMatchObject({ status: 400, message: '요청 내용이 형식에 맞지 않아요' })
   })

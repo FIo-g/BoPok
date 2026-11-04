@@ -253,6 +253,18 @@ describe('고칠 수 있는 사람', () => {
     expect(only).toMatchObject({ conditions: ['gout'], enteredByUserId: SON })
   })
 
+  it('못 고치면 까닭을 알려 준다 — 누가 넣었는지·무슨 내용인지는 말하지 않는다 (설계 4.4 알려진 한계)', async () => {
+    const { tripId } = await setup()
+    await put(tripId, 't2', SON, { conditions: ['gout'] })
+
+    const firstEntered = await put(tripId, 't2', OWNER).catch((error: unknown) => error)
+    expect(firstEntered).toBeInstanceOf(HttpError)
+    expect((firstEntered as HttpError).message).toBe('다른 가족이 먼저 넣어 둔 건강 정보라 고칠 수 없어요. 처음 넣은 분께 부탁해 주세요')
+
+    const accountLinked = await put(tripId, 't1', SON).catch((error: unknown) => error)
+    expect((accountLinked as HttpError).message).toBe('계정이 연결된 분의 건강 정보는 그분만 고칠 수 있어요')
+  })
+
   it('나중에 계정이 연결되면 첫 입력자는 그대로 두고 연결된 본인이 고친다', async () => {
     const { tripId } = await setup()
     await put(tripId, 't3', SON) // 아들이 '나'(t3)를 대신 넣었다

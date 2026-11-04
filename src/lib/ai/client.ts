@@ -20,7 +20,10 @@ export type ClaudeClient = {
 }
 export type ClaudeClientFactory = (options: ClaudeClientOptions) => ClaudeClient
 
-const DEFAULT_CLAUDE_MODEL = 'claude-opus-5-5'
+// Sonnet medium (김태형 11/4): 쓸 수 있는 API 예산이 $50라 토큰값이 Opus의 절반인 Sonnet으로,
+// 후보에서 고르고 시간을 맞추는 일이라 effort는 low보다 한 단계 위로 둔다
+const DEFAULT_CLAUDE_MODEL = 'claude-sonnet-5-5'
+const CLAUDE_EFFORT = 'medium'
 // 서버 쪽 대체 모델(fallbacks: 'default')을 쓰려면 이 베타 헤더가 있어야 한다
 const CLAUDE_FALLBACK_BETA = 'server-side-fallback-2026-07-01'
 
@@ -192,7 +195,7 @@ async function askClaude(
       max_tokens: 16000,
       ...(system ? { system } : {}),
       messages: turns,
-      output_config: { effort: 'low' },
+      output_config: { effort: CLAUDE_EFFORT },
       betas: [CLAUDE_FALLBACK_BETA],
       fallbacks: 'default',
     })

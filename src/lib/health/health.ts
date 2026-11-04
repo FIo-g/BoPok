@@ -86,7 +86,12 @@ async function loadForEdit(
 
   const existing = await findHealthRow(args.tripId, args.travelerId, db)
   if (!canEditHealth(existing ?? null, args.actorUserId, traveler.userId ?? null)) {
-    throw new HttpError(403, 'forbidden', '이 건강 정보는 고칠 수 없어요')
+    // 왜 못 고치는지 알려 준다. 기록이 있다는 사실은 403만으로도 이미 드러나서(설계 4.4 알려진 한계)
+    // 더 새는 것은 없고, 누가 넣었는지·무슨 내용인지는 말하지 않는다
+    const why = traveler.userId
+      ? '계정이 연결된 분의 건강 정보는 그분만 고칠 수 있어요'
+      : '다른 가족이 먼저 넣어 둔 건강 정보라 고칠 수 없어요. 처음 넣은 분께 부탁해 주세요'
+    throw new HttpError(403, 'forbidden', why)
   }
   return existing
 }

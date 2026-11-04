@@ -305,7 +305,7 @@ describe('PUT /api/trips/:id/travelers/:tid/health (저장)', () => {
     expect(forbidden.status).toBe(403)
     expect(notFound.status).toBe(404)
     expect(invalid.status).toBe(400)
-    expect(ApiErrorSchema.parse(await readBody(forbidden)).error.message).toBe('이 건강 정보는 고칠 수 없어요')
+    expect(ApiErrorSchema.parse(await readBody(forbidden)).error.message).toBe('다른 가족이 먼저 넣어 둔 건강 정보라 고칠 수 없어요. 처음 넣은 분께 부탁해 주세요')
     expect(ApiErrorSchema.parse(await readBody(notFound)).error.message).toBe('그 여행자를 찾을 수 없어요')
     expect(ApiErrorSchema.parse(await readBody(invalid)).error.message).toBe('요청 내용이 형식에 맞지 않아요')
   })
