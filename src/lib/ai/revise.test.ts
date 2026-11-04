@@ -5,6 +5,7 @@ import {
   AiErrorSchema,
   ApiErrorSchema,
   ReviseResponseSchema,
+  type PlaceDetail,
   type ChatMessage,
   type Opinion,
   type Stop,
@@ -1179,5 +1180,56 @@ describe('handleRevise: 날씨 참고 줄', () => {
     await handleRevise(makeRequest({ tripId: 'trip-dev', versionId }), { ...deps, getWeather })
     expect(getWeather).not.toHaveBeenCalled()
     expect(calls[0]).not.toContain('날씨 예보')
+  })
+})
+
+// 배포에서 실제로 난 버그(11/4): AI가 한밭수목원을 두 번 주고 점심 자리가 사라졌다.
+describe('같은 날 같은 장소가 두 번 든 AI 답 (배포 버그 11/4)', () => {
+  const museumStop = () => stop({ key: 'k1', placeId: 'museum', name: '대전시립미술관' })
+  const hanbatStop = () => stop({ key: 'k2', placeId: 'hanbat', name: '한밭수목원' })
+  const opinions = [opinion({ id: 'o1', versionId: 'v1' })]
+  const buggyAi: AiPayload = {
+    stops: [
+      { placeId: 'museum', name: '대전시립미술관', startTime: '09:30' },
+      { placeId: 'hanbat', name: '한밭수목원', startTime: '12:00' },
+      { placeId: 'hanbat', name: '점심(한밭수목원 근처)', startTime: '12:30', seated: true },
+      { placeId: 'hanbat', name: '한밭수목원', startTime: '14:30' },
+    ],
+    appliedOpinionIds: ['o1'],
+  }
+
+  it('한밭수목원은 한 번만 남고, 식사 뜻인 중복은 점심 식사 빈 자리가 된다', async () => {
+    const { deps, versionId } = await setup({ versionStops: [museumStop(), hanbatStop()], opinions, ai: [buggyAi] })
+    const response = await handleRevise(makeRequest({ tripId: 'trip-dev', versionId }), deps)
+    expect(response.status).toBe(200)
+    const body = ReviseResponseSchema.parse(await response.json())
+    expect(body.version.stops.map(one => [one.name, one.placeId])).toEqual([
+      ['대전시립미술관', 'museum'],
+      ['한밭수목원', 'hanbat'],
+      ['점심 식사', null],
+    ])
+  })
+
+  it('빈 점심 자리는 근처 등록 식당으로 채워진다', async () => {
+    const nearbyLunch: PlaceDetail = {
+      id: 'lunch-near', name: '근처식당', kind: 'restaurant', category: '식당', coord: [127.381, 36.351],
+      styles: [], seated: true, indoor: true, confidence: 'B', nodes: [], segments: [],
+    }
+    const { deps, versionId } = await setup({ versionStops: [museumStop(), hanbatStop()], opinions, ai: [buggyAi] })
+    const withRestaurant: AiDeps = {
+      ...deps,
+      recommendServicePlaces: async () => ({
+        catalogReady: true, method: 'keyword', distanceBasis: 'straight_line', routeCheckRequired: true,
+        items: [{ place: nearbyLunch, menus: [], distanceM: 120 }],
+      }),
+    }
+    const response = await handleRevise(makeRequest({ tripId: 'trip-dev', versionId }), withRestaurant)
+    expect(response.status).toBe(200)
+    const body = ReviseResponseSchema.parse(await response.json())
+    expect(body.version.stops.map(one => [one.name, one.placeId])).toEqual([
+      ['대전시립미술관', 'museum'],
+      ['한밭수목원', 'hanbat'],
+      ['근처식당', 'lunch-near'],
+    ])
   })
 })

@@ -27,6 +27,7 @@ import { readWeatherLine } from './weather-notes'
 import { planJudgeSave, type PlanAttempt, type PlanAttemptResult } from './plan-and-save'
 import {
   arrangeDraftsByDay,
+  dedupeSameDayPlaces,
   dropTimesOutsideWindow,
   enforceMustStops,
   keepEveryDay,
@@ -56,6 +57,7 @@ const AiReviseSchema = z.object({
 
 const SYSTEM_PROMPT =
   '가족 여행 일정을 의견에 맞게 다시 짠다. 후보 목록의 id로만 골라라. 식사 자리는 placeId null + 이름으로 넣는다. ' +
+  '같은 날 같은 id를 두 번 쓰지 마라. 식사·카페 자리는 placeId null로, 이름은 \'아침 식사\'·\'점심 식사\'·\'저녁 식사\'·\'카페 휴식\' 중 하나로만 쓴다. ' +
   '꼭 갈 곳·예약된 장소는 손대지 마라(이미 정해진 표시를 그대로 쓴다). 의견이 서로 부딪히면 [부모님] 의견을 따르라(부모님을 위한 서비스). ' +
   '반영한 의견 id를 appliedOpinionIds에 넣어라. 걷는 시간·거리·계단 수는 쓰지 마라. 메모와 식사 자리 이름에 건강·식단 이야기를 쓰지 마라. ' +
   '반드시 JSON으로만 답하라. 모양: {"stops":[{"placeId":"장소 id 또는 null","name":"장소 이름","startTime":"HH:mm","visitMin":60,"seated":false}],"appliedOpinionIds":["의견 id"],"note":"한 줄 메모"}'
@@ -411,7 +413,9 @@ export async function handleRevise(
             if (idFiltered.length === 0) {
               throw new AiCallError('invalid_output', 'AI가 고른 장소가 없어요')
             }
-            const nullFiltered = filterNullDrafts(idFiltered, version.stops, name => hasDietTalk(name, avoidTags))
+            // 같은 날 같은 장소 두 번은 하나로 줄인다. 이름은 DB 이름으로 바꾸기 전 AI 이름으로 본다 (식사 뜻이면 빈 식사 자리로).
+            const deduped = dedupeSameDayPlaces(arrangeDraftsByDay(idFiltered, lastDay))
+            const nullFiltered = filterNullDrafts(deduped, version.stops, name => hasDietTalk(name, avoidTags))
             if (nullFiltered.length === 0) {
               throw new AiCallError('invalid_output', 'AI가 고른 장소가 없어요')
             }

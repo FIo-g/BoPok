@@ -25,6 +25,7 @@ import { readWeatherLine } from './weather-notes'
 import { planJudgeSave, type PlanAttempt } from './plan-and-save'
 import {
   arrangeDraftsByDay,
+  dedupeSameDayPlaces,
   dropTimesOutsideWindow,
   enforceMustStops,
   mustVisitWithinWindow,
@@ -64,7 +65,8 @@ function multiDayPrompt(dayCount: number): string {
 
 const SYSTEM_PROMPT =
   '대전 하루 여행 일정을 짠다. 이 목록의 id로만 골라라. 식사 자리는 placeId null + 이름으로 넣는다. ' +
-  '출발·귀가 시간 안에 3~5곳을 고른다. 꼭 갈 곳은 반드시 넣고 예약 시간 그대로 둔다. ' +
+  '출발·귀가 시간 안에 3~5곳을 고른다. 같은 날 같은 id를 두 번 쓰지 마라. 식사·카페 자리는 placeId null로, 이름은 \'아침 식사\'·\'점심 식사\'·\'저녁 식사\'·\'카페 휴식\' 중 하나로만 쓴다. ' +
+  '꼭 갈 곳은 반드시 넣고 예약 시간 그대로 둔다. ' +
   '걷는 시간·거리·계단 수는 쓰지 마라. 메모와 식사 자리 이름에 건강·식단 이야기를 쓰지 마라. ' +
   '반드시 JSON으로만 답하라. 모양: {"stops":[{"placeId":"장소 id 또는 null","name":"장소 이름","startTime":"HH:mm","visitMin":60,"seated":false}],"note":"한 줄 메모"}'
 
@@ -142,6 +144,8 @@ function filterDrafts(
       drafts.push({
         placeId: stop.placeId,
         name,
+        // DB 이름으로 덮어쓰기 전 AI 이름 (같은 날 중복을 거를 때 식사 뜻인지 본다)
+        sourceName: stop.name,
         ...(stop.day !== undefined ? { day: stop.day } : {}),
         ...(stop.startTime !== undefined ? { startTime: stop.startTime } : {}),
         // 머무는 시간은 DB visitMin이 있으면 그것이 우선이다.
@@ -397,9 +401,9 @@ export async function handleGenerate(
         }
         // 날을 정리한 뒤 꼭 갈 곳을 맞추고, 되돌려 넣은 꼭 갈 곳에도 날을 붙인다(앞 장소의 날).
         // 하루짜리는 모두 1일차가 되어 day 칸이 저장되지 않는다(draftsToStops) — 지금 저장 모양과 같다.
-        const drafts = dedupConsecutive(
-          arrangeDraftsByDay(applyMustVisit(arrangeDraftsByDay(filtered, dayCount), musts), dayCount),
-        )
+        // 같은 날 같은 장소 두 번은 꼭 갈 곳을 맞추기 전에 줄인다 (식사 뜻이면 빈 식사 자리로, 근처 식당이 채운다).
+        const deduped = dedupeSameDayPlaces(arrangeDraftsByDay(filtered, dayCount))
+        const drafts = dedupConsecutive(arrangeDraftsByDay(applyMustVisit(deduped, musts), dayCount))
         if (drafts.length === 0) {
           throw new AiCallError('invalid_output', 'AI가 고른 장소가 없어요')
         }

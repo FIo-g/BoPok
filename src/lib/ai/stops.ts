@@ -17,6 +17,8 @@ export type DraftStop = {
   skipSegmentIds?: string[]
   detourMap?: Record<string, string>
   restNodeIds?: string[]
+  // AI가 처음 지은 이름. DB 이름으로 덮어쓰기 전에 적어 두고, 같은 날 중복을 거를 때 쓴다.
+  sourceName?: string
 }
 
 // 공백을 뺀 뒤 한쪽이 다른 쪽을 포함하면 같은 곳으로 본다 (예: 성심당·성심당 본점).
@@ -184,6 +186,60 @@ function onSameDay(must: DraftStop, draft: DraftStop): boolean {
 
 function timeKey(draft: DraftStop): string | undefined {
   return draft.reservedAt ?? draft.startTime
+}
+
+// 같은 날 같은 장소가 두 번 나오면 뒤의 것을 버린다 (배포 버그 11/4: 한밭수목원이 같은 날 두 번 들어감).
+// 버리는 항목이 식사 뜻이면 placeId 없는 식사 자리로 남겨 근처 식당이 채워지게 한다.
+// 꼭 갈 곳·예약이 붙은 항목은 버리지 않는다. 다른 날의 같은 장소(예: 숙소)는 건드리지 않는다.
+export function dedupeSameDayPlaces(drafts: DraftStop[]): DraftStop[] {
+  const seen = new Set<string>()
+  const out: DraftStop[] = []
+  for (const draft of drafts) {
+    if (draft.placeId === null) {
+      out.push(draft)
+      continue
+    }
+    const key = `${draft.day ?? 1}\u0000${draft.placeId}`
+    const keep = draft.mustVisit === true || draft.reservedAt !== undefined
+    if (!seen.has(key) || keep) {
+      seen.add(key)
+      out.push(draft)
+      continue
+    }
+    // 이름 판단은 DB 이름으로 바꾸기 전 AI 이름으로 한다
+    const meal = mealPlaceholderOf(draft, draft.sourceName ?? draft.name)
+    if (meal !== null) out.push(meal)
+  }
+  return out
+}
+
+// 버린 중복이 식사 뜻이면 바꿀 빈 자리. 아니면 null (그냥 버린다).
+function mealPlaceholderOf(draft: DraftStop, original: string): DraftStop | null {
+  const mealWord = /식사|밥|아침|점심|저녁/.test(original)
+  if (!mealWord && draft.seated !== true) return null
+  const name = mealName(draft, original)
+  if (name === null) return null
+  return {
+    placeId: null,
+    name,
+    seated: true,
+    ...(draft.day !== undefined ? { day: draft.day } : {}),
+    ...(draft.startTime !== undefined ? { startTime: draft.startTime } : {}),
+    ...(draft.visitMin !== undefined ? { visitMin: draft.visitMin } : {}),
+  }
+}
+
+// 식사 자리 이름. 원래 이름의 끼니 말을 먼저 보고, 없으면 시각으로 정한다 (HH:mm 문자열 비교).
+function mealName(draft: DraftStop, original: string): string | null {
+  if (original.includes('아침')) return '아침 식사'
+  if (original.includes('점심')) return '점심 식사'
+  if (original.includes('저녁')) return '저녁 식사'
+  // 카페 자리는 식사가 아니라 카페 휴식으로 남긴다 (앉는 자리라도 점심으로 바꾸지 않는다)
+  if (/카페|커피/.test(original)) return '카페 휴식'
+  const time = draft.startTime
+  if (time !== undefined && time >= '11:00' && time <= '14:59') return '점심 식사'
+  if (time !== undefined && time >= '17:00' && time <= '20:59') return '저녁 식사'
+  return '식사'
 }
 
 // AI 초안에 원래 꼭 갈 곳·예약 표시를 되돌린다 (generate·revise 공통, 설계 6.4).

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { StopSchema, type Coord, type PlaceSummary } from '@/lib/contracts'
 import {
   arriveByFor,
+  dedupeSameDayPlaces,
   draftsToStops,
   dropTimesOutsideWindow,
   enforceMustStops,
@@ -283,5 +284,85 @@ describe('여행 시간대 밖 시간 버리기', () => {
       { name: '한밭수목원', reservedAt: '14:00' },
       { name: '국립중앙과학관' },
     ])
+  })
+})
+
+describe('dedupeSameDayPlaces', () => {
+  it('같은 날 같은 장소가 다시 나오면 뒤의 것을 버린다', () => {
+    const drafts: DraftStop[] = [
+      { placeId: 'hanbat', name: '한밭수목원', startTime: '12:00' },
+      { placeId: 'museum', name: '대전시립미술관', startTime: '10:00' },
+      { placeId: 'hanbat', name: '한밭수목원', startTime: '14:30' },
+    ]
+    expect(dedupeSameDayPlaces(drafts)).toEqual([drafts[0], drafts[1]])
+  })
+
+  it('버리는 항목이 식사 뜻(seated)이면 placeId null 식사 자리로 남기고 시각으로 이름을 정한다', () => {
+    const out = dedupeSameDayPlaces([
+      { placeId: 'hanbat', name: '한밭수목원', startTime: '11:00' },
+      { placeId: 'hanbat', name: '한밭수목원', startTime: '12:30', visitMin: 40, seated: true, day: 1 },
+    ])
+    expect(out[1]).toEqual({ placeId: null, name: '점심 식사', startTime: '12:30', visitMin: 40, seated: true, day: 1 })
+  })
+
+  it('원래 이름에 점심이 있으면 점심 식사 (DB 이름으로 덮어쓰기 전 이름을 본다)', () => {
+    const out = dedupeSameDayPlaces([
+      { placeId: 'hanbat', name: '한밭수목원', startTime: '11:00' },
+      { placeId: 'hanbat', name: '한밭수목원', sourceName: '점심(한밭수목원 근처)', startTime: '12:30', seated: true },
+    ])
+    expect(out[1]).toEqual({ placeId: null, name: '점심 식사', startTime: '12:30', seated: true })
+  })
+
+  it('원래 이름의 끼니 말과 시각으로 식사 이름을 고른다 (저녁·그 밖은 식사)', () => {
+    const out = dedupeSameDayPlaces([
+      { placeId: 'hanbat', name: '한밭수목원' },
+      { placeId: 'hanbat', name: '한밭수목원', sourceName: '아침 산책 겸 식사', startTime: '09:00', seated: true },
+      { placeId: 'hanbat', name: '한밭수목원', startTime: '18:30', seated: true },
+      { placeId: 'hanbat', name: '한밭수목원', startTime: '16:00', seated: true },
+    ])
+    expect(out.map(draft => draft.name)).toEqual(['한밭수목원', '아침 식사', '저녁 식사', '식사'])
+  })
+
+  it('원래 이름이 카페면 카페 휴식 자리로 남긴다', () => {
+    const out = dedupeSameDayPlaces([
+      { placeId: 'museum', name: '대전시립미술관' },
+      { placeId: 'museum', name: '대전시립미술관', sourceName: '한밭수목원 근처 카페에서 휴식', startTime: '13:30', seated: true },
+    ])
+    expect(out[1]).toEqual({ placeId: null, name: '카페 휴식', startTime: '13:30', seated: true })
+  })
+
+  it('식사 뜻이 아니면 그냥 버린다', () => {
+    const out = dedupeSameDayPlaces([
+      { placeId: 'hanbat', name: '한밭수목원', startTime: '12:00' },
+      { placeId: 'hanbat', name: '한밭수목원', startTime: '14:30' },
+    ])
+    expect(out).toEqual([{ placeId: 'hanbat', name: '한밭수목원', startTime: '12:00' }])
+  })
+
+  it('꼭 갈 곳·예약이 붙은 중복은 버리지 않는다 (첫 번째가 아니어도)', () => {
+    const drafts: DraftStop[] = [
+      { placeId: 'hanbat', name: '한밭수목원', startTime: '10:00' },
+      { placeId: 'hanbat', name: '한밭수목원', startTime: '14:00', mustVisit: true, reservedAt: '14:00' },
+      { placeId: 'hanbat', name: '한밭수목원', startTime: '15:00', mustVisit: true },
+    ]
+    expect(dedupeSameDayPlaces(drafts)).toEqual(drafts)
+  })
+
+  it('다른 날의 같은 장소(예: 숙소)는 건드리지 않는다', () => {
+    const drafts: DraftStop[] = [
+      { placeId: 'hotel', name: '숙소', day: 1 },
+      { placeId: 'hotel', name: '숙소', day: 2 },
+      { placeId: 'hanbat', name: '한밭수목원', day: 2 },
+    ]
+    expect(dedupeSameDayPlaces(drafts)).toEqual(drafts)
+  })
+
+  it('중복이 없으면 그대로 돌려준다', () => {
+    const drafts: DraftStop[] = [
+      { placeId: 'hanbat', name: '한밭수목원', startTime: '10:00' },
+      { placeId: null, name: '점심 식사', seated: true, startTime: '12:00' },
+      { placeId: 'museum', name: '대전시립미술관', startTime: '14:00' },
+    ]
+    expect(dedupeSameDayPlaces(drafts)).toEqual(drafts)
   })
 })

@@ -96,6 +96,26 @@ describe('handleGenerate', () => {
     expect(body.version.note).toBe('덜 걷는 일정')
   })
 
+  it('같은 날 같은 장소가 두 번 오면 한 번만 두고, 식사 뜻인 두 번째는 점심 식사 자리로 바꾼다', async () => {
+    const { deps } = depsWithAi([
+      {
+        stops: [
+          { placeId: 'science', name: '국립중앙과학관', startTime: '10:00' },
+          { placeId: 'science', name: '점심(국립중앙과학관 근처)', startTime: '12:30', seated: true },
+        ],
+      },
+    ])
+    await deps.interviews.save('trip-dev', doneState({ transport: 'car' }))
+
+    const response = await handleGenerate(makeRequest({ tripId: 'trip-dev' }), deps)
+    expect(response.status).toBe(200)
+    const body = PlanResponseSchema.parse(await response.json())
+    expect(body.version.stops.map(stop => [stop.name, stop.placeId])).toEqual([
+      ['국립중앙과학관', 'science'],
+      ['점심 식사', null],
+    ])
+  })
+
   it('꼭 갈 곳은 빠져도 넣음', async () => {
     const { deps } = depsWithAi([{ stops: [{ placeId: 'science', name: '국립중앙과학관' }] }])
     await deps.interviews.save(
@@ -535,20 +555,13 @@ describe('handleGenerate', () => {
   it('첫 시도 선택 시 메모도 첫 시도 것', async () => {
     const { deps } = depsWithAi([
       { stops: [{ placeId: 'hanbat', name: '한밭수목원' }], note: '첫 메모' },
-      {
-        stops: [
-          { placeId: 'hanbat', name: '한밭수목원' },
-          { placeId: 'science', name: '국립중앙과학관' },
-          { placeId: 'hanbat', name: '한밭수목원' },
-        ],
-        note: '둘째 메모',
-      },
+      // 두 번째 답은 목록 밖 id만 있어 고를 수 없다 — 첫 일정과 그 메모가 저장된다
+      { stops: [{ placeId: 'nope', name: '없는 곳' }], note: '둘째 메모' },
     ])
     await deps.interviews.save('trip-dev', doneState({ transport: 'car' }))
     const response = await handleGenerate(makeRequest({ tripId: 'trip-dev' }), deps)
     expect(response.status).toBe(200)
     const body = PlanResponseSchema.parse(await response.json())
-    // 첫 일정(위반 1)이 두 번째(위반 2)보다 나아서 첫 결과가 저장된다
     expect(body.version.stops).toHaveLength(1)
     expect(body.version.note).toBe('첫 메모')
   })
