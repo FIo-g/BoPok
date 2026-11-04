@@ -1,0 +1,401 @@
+/* 홀 실내 보기. 색은 상세 화면(.ind-root)이 정한 변수를 이어받고, 없으면 같은 값을 쓴다.
+   글자는 rem 이라 가/가+ 글자 크기 설정에서 함께 커진다. */
+
+/* 탭을 바꿀 때: 아래에서 위로, 흐림에서 또렷하게 (상세 화면 등장과 같은 연출, 500ms) */
+.ind-appear {
+  animation: ind-appear 500ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes ind-appear {
+  from { opacity: 0; transform: translateY(32px); filter: blur(8px); }
+  to { opacity: 1; transform: none; filter: none; }
+}
+
+/* ───────── 왼쪽: 탭 + 무대 ───────── */
+.ind-left {
+  position: relative;
+  height: 100%;
+  min-height: 0;
+}
+.ind-tabs {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  right: 74px;
+  z-index: 4;
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px;
+  scrollbar-width: none;
+}
+.ind-tabs::-webkit-scrollbar {
+  display: none;
+}
+.ind-tab,
+.ind-backBtn,
+.ind-floorChip,
+.ind-pick {
+  flex: none;
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1px solid var(--card-line, #e6e1ea);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--card-ink, #1f2a1c);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ind-tab[aria-selected='true'],
+.ind-floorChip[aria-pressed='true'],
+.ind-pick[aria-pressed='true'] {
+  background: var(--blue, #1d4ed8);
+  border-color: var(--blue, #1d4ed8);
+  color: #fff;
+}
+.ind-tab:focus-visible,
+.ind-backBtn:focus-visible,
+.ind-floorChip:focus-visible,
+.ind-pick:focus-visible {
+  outline: 3px solid var(--blue, #1d4ed8);
+  outline-offset: 2px;
+}
+
+.ind-stageCard {
+  position: relative;
+  height: 100%;
+  border-radius: 24px;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid var(--card-line, #e6e1ea);
+  min-height: 0;
+}
+.ind-stage {
+  position: relative;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 66px 14px 14px; /* 위 66px: 탭 자리 */
+  min-height: 0;
+}
+.ind-stageTop {
+  position: absolute;
+  top: 66px;
+  left: 20px;
+  right: 20px;
+  z-index: 3;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  pointer-events: none;
+}
+.ind-stageTop > * {
+  pointer-events: auto;
+}
+.ind-stage[data-view='plan'] {
+  padding-top: 118px; /* 탭 + 층 칩 줄 */
+}
+.ind-floorChips {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.ind-zoomWrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: auto;
+  container-type: size;
+  touch-action: pan-x pan-y; /* 두 손가락 모으기는 우리가 처리한다 */
+}
+.ind-box {
+  position: relative;
+  flex: none;
+  margin: auto; /* 확대해서 넘칠 때도 왼쪽·위가 잘리지 않게 */
+  width: calc(min(100cqw, 100cqh * var(--ar)) * var(--zoom, 1));
+  aspect-ratio: var(--ar);
+  overflow: hidden;
+}
+.ind-box img {
+  display: block;
+  user-select: none;
+}
+.ind-box > img:not(.ind-planImg) {
+  width: 100%;
+  height: 100%;
+}
+.ind-planImg {
+  position: absolute;
+  max-width: none;
+}
+.ind-swap {
+  animation: ind-appear 500ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.ind-planIn {
+  animation: ind-planIn 300ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes ind-planIn {
+  from { opacity: 0; transform: scale(0.88); }
+  to { opacity: 1; transform: none; }
+}
+.ind-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.ind-hit {
+  fill: transparent;
+  stroke: transparent;
+  stroke-width: 0.004;
+  cursor: pointer;
+  transition: fill 200ms ease, stroke 200ms ease;
+}
+.ind-hit:hover,
+.ind-hit:focus-visible {
+  fill: rgba(29, 78, 216, 0.16);
+  stroke: var(--blue, #1d4ed8);
+  outline: none;
+}
+.ind-floorLabel {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(31, 42, 28, 0.12);
+  color: var(--card-ink, #1f2a1c);
+  font-size: 0.8125rem;
+  font-weight: 800;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* 경로 선: pathLength=1 이라 길이와 상관없이 1 → 0 으로 그려진다 */
+.ind-route {
+  fill: none;
+  stroke: #1d4ed8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.ind-route[data-animated='true'] {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: ind-draw var(--draw, 1200ms) linear forwards;
+}
+@keyframes ind-draw {
+  to { stroke-dashoffset: 0; }
+}
+.ind-routeEnd {
+  fill: #1d4ed8;
+}
+.ind-pulse {
+  fill: none;
+  stroke: #1d4ed8;
+  stroke-width: 2px;
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.ind-pulse[data-animated='true'] {
+  animation: ind-pulse 600ms ease-out var(--draw, 1200ms) 1 both;
+}
+@keyframes ind-pulse {
+  from { opacity: 0.7; transform: scale(1); }
+  to { opacity: 0; transform: scale(2.6); }
+}
+
+.ind-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.8125rem;
+}
+.ind-legend li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.ind-legendDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+.ind-legendDashed {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1.5px dashed #6b645a;
+}
+.ind-demoChip {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  z-index: 3;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: #fff;
+  border: 1px solid var(--card-line, #e6e1ea);
+  color: #5b564e;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+/* ───────── 오른쪽: 정보 카드 안쪽 ───────── */
+.ind-info {
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 18px; /* 아래 고정 버튼의 흰 그림자가 글을 가리지 않게 */
+}
+.ind-hallName {
+  margin: 0 0 8px;
+  font-family: 'Noto Serif KR', serif;
+  font-size: 1.7rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+.ind-seatText {
+  margin: 0 0 10px;
+  font-size: 0.9375rem;
+  line-height: 1.6;
+}
+.ind-notice {
+  margin: 0 0 18px;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: #6b645a;
+}
+.ind-routeBox {
+  display: block;
+}
+.ind-routeTitle {
+  margin: 0 0 10px;
+  font-size: 1rem;
+  font-weight: 800;
+}
+.ind-chipRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+.ind-pick[data-small] {
+  min-height: 36px;
+  font-size: 0.8125rem;
+}
+.ind-hint {
+  margin: 4px 0 0;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: #6b645a;
+}
+.ind-summaryChip {
+  display: inline-block;
+  margin: 6px 0 8px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: #e8efff;
+  color: #1e3a8a;
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1.5;
+}
+.ind-summaryChip[data-tone='warn'] {
+  background: #fff7e6;
+  color: #7a4b00;
+}
+.ind-warnings {
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.8125rem;
+  color: #7a4b00;
+}
+.ind-warnings li::before {
+  content: '⚠ ';
+}
+.ind-steps {
+  margin: 0;
+  padding-left: 1.4em;
+  font-size: 0.9375rem;
+  line-height: 1.8;
+}
+
+/* ───────── 좌표 편집기(개발용) ───────── */
+.ind-editor {
+  position: fixed;
+  left: 12px;
+  bottom: 12px;
+  z-index: 200;
+  width: min(420px, calc(100vw - 24px));
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid #999;
+  border-radius: 10px;
+  background: #fffbe6;
+  color: #222;
+  font-size: 12px;
+}
+.ind-editor p {
+  margin: 0;
+}
+.ind-editor textarea {
+  width: 100%;
+  font: 11px/1.4 monospace;
+}
+.ind-editorRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+/* ───────── 모바일 ───────── */
+@media (max-width: 1023px) {
+  .ind-left {
+    flex: none;
+    height: auto;
+  }
+  .ind-stageCard {
+    height: min(66dvh, 560px);
+  }
+  /* 닫기 버튼(시트 오른쪽 위에 고정)과 겹치지 않게 탭은 오른쪽을 비우고, 층 칩 줄은 한 줄 아래로 */
+  .ind-tabs {
+    right: 64px;
+  }
+  .ind-stageTop {
+    top: 92px;
+  }
+  .ind-stage[data-view='plan'] {
+    padding-top: 140px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ind-appear,
+  .ind-swap,
+  .ind-planIn {
+    animation: none;
+  }
+  .ind-route[data-animated='true'] {
+    animation: none;
+    stroke-dasharray: none;
+    stroke-dashoffset: 0;
+  }
+  .ind-hit {
+    transition: none;
+  }
+}
