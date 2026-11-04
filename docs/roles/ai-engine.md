@@ -12,9 +12,11 @@
 
 1. ✅ (11/2 main) **일정 화면 뼈대 — 가장 먼저** (설계 6.5): 날짜 탭, 고른 날 기준 판정·지도·목록·빠른 수정안, 직접 고치기 순서 번호 바꾸기, 빠른 수정안은 그날만 바꿔 끼우기, 기능별 빈 자리 `src/components/trip/slots/` 4개. 리뷰어 오하연
 2. ✅ (11/3 main) **② 건강 정보·식단 주의** (설계 4.4 "만든 것"): 주의 규칙 표 조사(질병관리청·식약처 근거 구절), 엔진 `dietCautions`, 건강 정보 저장 API·DB(키는 tripId+travelerId, cascade 금지), 동의 화면, `HealthSlot`, AI 일정 짜기에 반영, 공용 문장에 병·약·식단 이유 금지(`text-guard`). 리뷰어 김경선(API·DB), 오하연(화면)
-3. ✅ (11/3 main, 콜드 스타트는 한국에서 다시 잴 것, Vercel Production에 `ANTHROPIC_API_KEY`·`TOURAPI_SERVICE_KEY` 넣음 11/3, 모델은 Sonnet medium 11/4) **⑦ Claude 먼저** (설계 4.7): 공급자 순서 Claude → Upstage → opencode, `.env.example`에 키 이름. **콜드 스타트 측정**: 배포 응답 헤더 `x-vercel-id`가 sin1인지, 첫 로그인 시간
+3. ✅ (11/3 main, 콜드 스타트 11/4 한국에서 잼: 첫 화면 0.06~0.12초, API 첫 호출 2.0초 → 이후 0.15~0.28초, Vercel Production에 `ANTHROPIC_API_KEY`·`TOURAPI_SERVICE_KEY` 넣음 11/3, 모델은 Sonnet medium 11/4) **⑦ Claude 먼저** (설계 4.7): 공급자 순서 Claude → Upstage → opencode, `.env.example`에 키 이름. **콜드 스타트 측정**: 배포 응답 헤더 `x-vercel-id`가 sin1인지, 첫 로그인 시간
 4. **⑧ 피로도·체력** (설계 6.2): ✅ 인터뷰에 "일주일에 운동 몇 번"(근거 찾기 전까지 판정 숫자에 안 씀) · ✅ (11/3 main) 계단·경사·키 보정을 논문 값으로(근거 노트 `docs/superpowers/specs/evidence/2026-11-03-engine-evidence.md`, 75세 이상 쉬지 않고 걷기 기본값 15분·85세 이상·보조기구 10분 — 11/3 결정) · ✅ (11/3) 폭염 주의 → 날씨 전체로 넓힘(설계 4.8: 기상청 단기·중기예보, 폭염은 경고·비·눈·추위·바람은 여행 준비, 판정은 그대로, AI는 실내 위주 참고 줄. 근거 노트 `docs/superpowers/specs/evidence/2026-11-03-weather.md`) · ✅ (11/3) 한파도 경고, 기상청 기상특보(발효·예비특보), 확정 화면에도 날씨 카드
 5. ✅ (11/3) **여러 날 일정 처음 짜기**(인터뷰 기간으로 날마다 3~5곳, 앞 7일까지)와 **새 안 바로 고르기**(slot의 `onNewVersion`, 대화 → AI 뒤 새로 고침 없이)
+6. ✅ (11/4) **일정에서 바뀐 곳 표시**: AI가 일정을 바꿨는데 걷는 구간이 같으면 "바뀐 점 없음"만 보이던 것 → 엔진 `diffStops`/`formatStopDiff`로 그날의 새로 넣은 곳·뺀 곳·시각 바뀐 곳을 "일정에서 바뀐 곳" 줄로 보인다(시각은 저장된 값 그대로, 걷기 숫자 줄과 구분)
+7. ✅ (11/4) **한밭수목원 동원 코스 장소 안 데이터**(⑤ 데모 버그 — 하연 님 일을 대신 시작): 지점 11·구간 13, OSM 보행로 최단 경로 + 공식 종합안내도 대조, 계단은 OSM `steps`가 지나는 구간만 "있음"(우회로 함께), 나머지는 "기록 없음". 공유 DB에는 `scripts/data/load-place-inside.mjs --apply`로 빈 장소에만 채운다
 
 ## 맡는 폴더
 
@@ -72,7 +74,7 @@ AI 실패 시: 붙여넣기는 "장소를 직접 골라 주세요"로, 처음부
   - `getPlaceDetails(ids)` → `PlaceDetail[]` — 연결됨. 형식이 틀린 id는 빼고 묻는다
   - `getLegs(requests)` → `Leg[]` — `getLegsPartial`을 20개씩 나눠 부른다. 걷는 구간(walk)만 묻고, 받지 못한 경로는 빼서 엔진이 '정보 부족'으로 판정한다
   - `searchCandidates({ styles, budget?, transport, avoidStairs, limit, query?, kind? })`, `matchPlaceByName(name)`, `searchPoi(name)` — **11/3 이동주 실제 함수로 연결**(PR #29, `src/lib/places/search.ts`·`src/lib/geo/poi.ts`). 후보는 SQL로 종류·계단을 보고, 스타일 점수 → 걷는 길 기록이 있는 장소 → 이름 순서다. 장소 DB에 식당·카페가 2만 곳이라 이름 맞추기의 "입력 안에 이름이 통째로 들어 있음"은 **세 글자 이상** 이름만 본다(두 글자 식당 "시장"이 "한밭 전통시장"에 맞지 않게)
-  - **AI 일정 짜기·다시 짜기 후보는 관광지만**(`kind: 'attraction'`) **[결정: 김태형 11/4]**: 가져온 식당·카페에는 위치 기준 순위가 아직 없어 대전 어디든 이름순으로 뽑히기 때문이다. 식사는 전처럼 식사 자리(placeId null)로 두고, 사람이 고른 식당·꼭 갈 곳은 그대로 쓴다(다시 짜기는 지금 버전의 장소를 모두 후보에 더한다). 방문지 근처 식당 추천(`/api/places/recommendations`의 `near`)을 AI에 붙이는 것은 다음 일
+  - **AI 일정 짜기·다시 짜기 후보는 관광지만**(`kind: 'attraction'`) **[결정: 김태형 11/4]**: 가져온 식당·카페에는 위치 기준 순위가 아직 없어 대전 어디든 이름순으로 뽑히기 때문이다. 식사는 전처럼 식사 자리(placeId null)로 두고, 사람이 고른 식당·꼭 갈 곳은 그대로 쓴다(다시 짜기는 지금 버전의 장소를 모두 후보에 더한다). 방문지 근처 식당은 11/4 이동주 #35가 AI가 만든 빈 식사·카페·숙박 자리를 동선 근처 등록 장소로 채우는 방식으로 붙였다(`route-services.ts`)
   - 붙여넣기 정리는 장소마다 이름 맞추기·POI 검색을 동시에 부른다(TMAP POI 8초 제한이 차례로 쌓여 60초를 넘지 않게)
 
 ## 작업 순서
