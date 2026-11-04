@@ -89,6 +89,9 @@ node --conditions=react-server scripts/data/load-places.mjs
    - `course`: `{ id, name }`. 관람 구간(`role: "tour"`)이 있으면 필수.
    - `boundaryWay`(선택): 관람 지점이 이 way 안이나 30m 안에 있는지 검사한다. 없으면 검사하지 않는다.
    - `nodes`: `id`, `kind`, `name`, `restType`, `lng`, `lat`, 선택 `guideNo`(안내도 번호), `floor`(층, 1=1층, -1=지하 1층).
+   - `confidence`(선택, A/B/C, 기본 B): 설계 전체 신뢰 등급. 지점에 `confidence`를 주면 그 지점에 닿는 구간은 둘 중 낮은 등급을 쓴다.
+   - `snapLimitM`(선택, 0보다 크고 100 이하)과 `snapNote`(짝으로 필수): 보행로에서 기본 40m를 넘게 떨어진 지점의 붙임 한도와 그 이유 한 줄. 한도를 늘린 지점은 빌드 출력의 `snapLimitChanged`에 남는다.
+   - `extraWays`(선택): 추출본에 선이 없는 길을 그래프에 더한다. `{ id, note, coords }`. `note`(어떤 지형지물에서 좌표를 땄는지)는 필수이고, 양 끝 점은 보행망 위 10m 안이어야 한다. 계단·경사는 unknown으로 둔다.
    - `segments`: `id`, `from`, `to`, `order`, `optional`, `role`(`access` 또는 `tour`).
 2. 지점·구간을 만든다. 시범 장소 파일(`data/places/<id>.json`)이 있으면 그 파일을 고치고, 없으면 `data/places/inside/<id>.json`을 쓴다.
    ```bash
@@ -111,15 +114,15 @@ node --conditions=react-server scripts/data/load-places.mjs
 - 공용 DB에 쓰는 명령은 총괄 확인 후에만 실행한다. `DATABASE_URL`이 `.neon.tech` 주소가 아니면 스크립트가 멈춘다.
 - 신뢰 등급·확인 날짜·출처는 설계 파일의 값을 그대로 쓴다. 현장 확인 없이 `confirmed_none`(계단 없음)으로 바꾸지 않는다.
 
-## 시연 장소 장소 안 지점·구간 (2026-11-04, 세 곳)
+## 시연 장소 장소 안 지점·구간 (2026-11-04~05, 세 곳)
 
-영상 시연용 여행 일정에 넣을 장소 세 곳의 장소 안 데이터 작업 결과다. 설계 파일(`data/places/inside/<id>.design.json`)은 세 곳 모두 저장했고, 빌드는 세 곳 중 한 곳만 성공했다. 실패한 두 곳은 설계를 바꾸지 않았고 빌드 결과 파일(`data/places/inside/<id>.json`)을 만들지 않았다.
+영상 시연용 여행 일정에 넣을 장소 세 곳의 장소 안 데이터 결과다(빌드 2026-11-05). 설계 파일(`data/places/inside/<id>.design.json`)과 빌드 결과 파일(`data/places/inside/<id>.json`)은 세 곳 모두 있다. 국립중앙과학관·유림공원은 처음 빌드가 실패한 원인(붙임 거리, 끊긴 보행망)을 설계의 붙임 한도(`snapLimitM`)와 `extraWays`로 풀었다.
 
 | ID | 장소 | 상태 | 지점 | 구간 | 관람 합계 |
 | --- | --- | --- | --- | --- | --- |
 | `tourapi-12-2738037` | 대전엑스포시민광장 | 빌드 성공 (`inside/tourapi-12-2738037.json`) | 9 | 9 (접근 2, 관람 7; 선택 2) | 주 경로 1272m, 선택 포함 1586m |
-| `tourapi-14-129785` | 국립중앙과학관 | 빌드 실패 (설계만 있음) | 9 | 9 | 빌드 안 됨 |
-| `tourapi-12-2674960` | 유림공원 | 빌드 실패 (설계만 있음) | 9 | 10 | 빌드 안 됨 |
+| `tourapi-14-129785` | 국립중앙과학관 | 빌드 성공 (`inside/tourapi-14-129785.json`) | 9 | 9 (접근 2, 관람 7; 선택 2) | 주 경로 1784m, 선택 포함 2082m (지침 초과) |
+| `tourapi-12-2674960` | 유림공원 | 빌드 성공 (`inside/tourapi-12-2674960.json`) | 9 | 10 (접근 2, 관람 8; 선택 2) | 주 경로 829m, 선택 포함 911m |
 
 **1. 대전엑스포시민광장 (`tourapi-12-2738037`, 코스 `ep-axis`, 시민광장 중앙축·곤충생태관 한 바퀴)**
 - 지점: 주차장(1주차장) 1, 정류장(한밭수목원) 1, 입구(남쪽 2·3게이트 사이) 1, 출구 1, 화장실 1, 볼거리 2(곤충생태관, 북쪽 원형광장), 쉼터 2(원형광장 정자, 남쪽 입구 쉼터). 안내도 번호 없음(`guideNo` 없음).
@@ -129,15 +132,30 @@ node --conditions=react-server scripts/data/load-places.mjs
 - 엔진 테스트: `src/lib/engine/ep-axis-data.test.ts` (unknown 없음, 관람 합계 300~2000m).
 - 공용 DB 읽기 확인(dry-run, `--apply` 없음): `placeInDb: true`, `nodesInDb: 0`, `segmentsInDb: 0`, `labelColumns: missing_run_migration_0007`(공용 DB에 마이그레이션 0007이 아직 없음), `wouldFill: true`. 쓰지 않았다.
 
-**2. 국립중앙과학관 (`tourapi-14-129785`, 코스 `sc-yard`) — 빌드 실패**
-- 실패 이유 1: 지점 `sc-hist`(역사의 광장)가 보행로에서 72.6m 떨어져 40m 제한을 넘는다. 광장 안에 보행로 선이 없다.
-- 실패 이유 2: 제한을 풀고 봐도 정류장 `sc-s`가 입구 `sc-in`과 같은 보행망에 이어지지 않는다(`sc-a2` 경로 없음). 타일에서 다리(`bridge`)가 면(폴리곤)으로만 있어 다리 양쪽 보행망이 끊긴다.
-- 조치: 설계 파일은 그대로 두었다. 두 문제(광장 동선·다리 중심선)를 해결한 뒤 다시 빌드한다.
+**2. 국립중앙과학관 (`tourapi-14-129785`, 코스 `sc-yard`, 야외 한 바퀴: 우주과학공원·역사의 광장)**
+- 지점 9: 주차장 1, 정류장 1, 정문(입구) 1, 화장실 1, 볼거리 3(우주과학공원 3, 야외음악당 4, 역사의 광장 2), 쉼터 1(원두막 5), 출구 1. 안내도 번호(`guideNo`)는 2·3·4·5다.
+- 구간 9: 접근 2(주차장→정문, 정류장→정문), 관람 7(주 5, 선택 2: 야외음악당 다녀오기 t3·t4).
+- 관람 길이: 주 경로 1784m, 선택 포함 2082m. 설계 메모의 지침(0.5~1.5km)을 넘는다(아래 계산 메모). 계단은 `present` 0개, 전 구간 `unknown`(계단 기록 없음).
+- 붙임 거리: 최대 72.6m(역사의 광장 `sc-hist`). 한도를 바꾼 지점은 이 하나다. `snapLimitM` 80(기본 40), 이유: 역사의 광장 면이 지도에 없고 광장 안을 지나는 보행로도 없어, 가장 가까운 보행로에서 광장 대표점까지 직선으로 잇는다. 나머지 지점은 28.8m 이내(우주과학공원 3이 28.8m).
+- `extraWays` 3개(각 `note`에 땐 지형지물을 적었다):
+  - `sc-stop-link` 4m: 정류장 앞에서 끊긴 두 보행로 끝을 잇는다.
+  - `sc-park-link` 9m: 우주과학공원 안 보행로 끝과 바깥 보행로 끝을 잇는다. 공원 안 3·4·5가 이 보행로에 붙는다.
+  - `sc-bridge` 25m: 정류장 쪽 보행로 끝에서 다리 서쪽 끝 중앙(정문 자리)까지. 다리는 OpenFreeMap 타일의 bridge 면이며 추출본에는 면이 없어 타일 원본 좌표를 썼다. 다리 가운데 선은 추출본 path와 3m 안에서 겹쳐 따로 그리지 않았다.
+- 신뢰 등급: 안내도로 맞춘 지점 `sc-wc`(화장실), `sc-music`(야외음악당), `sc-rest`(원두막 쉼터)는 설계에서 `confidence: "C"`다. 이 지점에 닿는 구간 t1~t6은 C, 접근 a1·a2와 t7은 B다. 코스는 B.
+- 계산 메모(추정치, 현장 확인 전): 공원 안 보행로가 추출본에서 바깥 보행로와 끊겨 있어 길이가 길어졌다. 쉼터→역사의 광장 t6 818m(설계 추정 약 360m), 화장실→우주과학공원 t2 547m, 정문→화장실 t1 194m, 주차장→정문 a1 427m(직선 약 177m). 우회 경로는 추출본 보행망을 따라 계산한 값이며, 길을 더 그리려면 현장이나 다른 지도 확인이 필요하다(선을 임의로 긋지 않았다).
+- 엔진 테스트: `src/lib/engine/sc-yard-data.test.ts` (unknown 없음, 관람 합계 300~2500m, guideNo가 있는 볼거리 있음).
+- 공용 DB 읽기 확인(dry-run, `--apply` 없음): `placeInDb: true`, `nodesInDb: 0`, `segmentsInDb: 0`, `labelColumns: ready`, `wouldFill: true`. 쓰지 않았다.
 
-**3. 유림공원 (`tourapi-12-2674960`, 코스 `yr-west`) — 빌드 실패**
-- 실패 이유: 지점 `yr-p`(궁동공영주차장)가 보행로에서 60.5m 떨어져 40m 제한을 넘는다. 설계 메모에도 주차장 중심과 보행로 사이 약 60m가 OSM에서 이어지지 않는다고 적혀 있다.
-- 참고: 제한을 풀고 보면 나머지 지점은 모두 4.8m 이내에 붙는다. 관람 주 경로 829m, 선택 포함 911m였다(저장하지 않은 진단 결과).
-- 조치: 설계를 바꾸지 않았다. 주차장 지점의 위치(보행로 연결 확인)를 정한 뒤 다시 빌드한다.
+**3. 유림공원 (`tourapi-12-2674960`, 코스 `yr-west`, 서쪽 분수·유림정 한 바퀴)**
+- 지점 9: 주차장(궁동공영주차장) 1, 정류장 1, 정문(서쪽 진입광장) 1, 볼거리 3(분수 5, 산수유길 9, 중앙광장 바닥분수 13), 쉼터 1(유림정 4), 화장실 1, 출구 1.
+- 구간 10: 접근 2(주차장→정문, 정류장→정문), 관람 8(주 6, 선택 2: 바닥분수 다녀오기 t5·t6).
+- 관람 길이: 주 경로 829m, 선택 포함 911m. 계단은 `present` 0개, 전 구간 `unknown`.
+- 붙임 거리: 최대 60.5m(주차장 `yr-p`). 설계에 `snapLimitM` 70, `snapNote` "주차장 면의 중심에서 가장 가까운 보행로까지 약 60m이고, 주차장 안에는 보행로가 그려져 있지 않아 직선으로 잇는다(모서리 기준 약 27m)"를 적었다. 나머지 지점은 4.8m 이내.
+- `extraWays` 없음.
+- 신뢰 등급: 설계 전체 `confidence: "C"`. 2022년 블로그 안내판 사진으로 맞춘 지점이 있고 안내판이 현행인지 확인하지 못해, 구간 10개와 코스를 모두 C로 적재한다.
+- 계산 메모: 주차장→정문 a1 411m(직선 약 294m). 주차장 중심에서 보행로까지 60m는 직선이다.
+- 엔진 테스트: `src/lib/engine/yr-west-data.test.ts` (unknown 없음, 관람 합계 300~2000m, guideNo가 있는 볼거리 있음).
+- 공용 DB 읽기 확인(dry-run): `placeInDb: true`, `nodesInDb: 0`, `segmentsInDb: 0`, `labelColumns: ready`, `wouldFill: true`. 쓰지 않았다.
 
 **출처와 저작권**
 - OSM 추출본: `data/places/osm/tourapi-12-2738037-osm-20261104.json`, `data/places/osm/tourapi-14-129785-osm-20261104.json`, `data/places/osm/tourapi-12-2674960-osm-20261104.json` (각 파일의 `attribution`에 ODbL 1.0 표기). 세 파일 모두 200KB 이하다. 국립중앙과학관 추출본은 OpenFreeMap 타일(OSM 기반)에서 만들었고 OSM 요소 번호가 없다.
@@ -147,6 +165,8 @@ node --conditions=react-server scripts/data/load-places.mjs
 **다시 만들기**
 ```bash
 node scripts/data/build-place-inside.mjs --id tourapi-12-2738037
-node --conditions=react-server --env-file-if-exists=.env.local scripts/data/load-place-inside.mjs --id tourapi-12-2738037          # dry-run (읽기만)
+node scripts/data/build-place-inside.mjs --id tourapi-14-129785
+node scripts/data/build-place-inside.mjs --id tourapi-12-2674960
+node --conditions=react-server --env-file-if-exists=.env.local scripts/data/load-place-inside.mjs --id tourapi-14-129785          # dry-run (읽기만)
 ```
 적재(`--apply`)는 main에 마이그레이션 0007이 머지되고 총괄이 확인한 뒤에만 한다.

@@ -3,6 +3,8 @@
 // 없으면 data/places/inside/<id>.json에 { placeId, nodes, segments, courses }를 쓴다.
 // 같은 입력이면 항상 같은 결과가 나온다(시간·난수 없음). DB는 건드리지 않는다 (적재는 load-place-inside.mjs).
 // 설계 파일에는 osmFile(OSM 추출본 경로), source(출처 문구), checkedAt(확인 날짜), course, 선택으로 boundaryWay(경계 way)를 적는다.
+// 설계 파일의 선택 칸: confidence(A/B/C, 기본 B, 지점별 confidence는 그 지점에 닿는 구간에 더 낮은 쪽으로 적용),
+//   지점의 snapLimitM(100 이하)과 snapNote(보행로에서 먼 이유, 한 줄 필수), extraWays([{ id, note, coords }] 추출본에 선이 없는 길).
 // 실행: node scripts/data/build-place-inside.mjs --id hanbat
 //       node scripts/data/build-place-inside.mjs --id tourapi-12-125994  (설계 파일과 OSM 추출본이 있을 때)
 import { createRequire } from 'node:module'
@@ -30,7 +32,9 @@ const PlaceInsideFileSchema = z.object({
   courses: PlaceCourseSchema.array(),
 })
 
-const SNAP_LIMIT_M = 40 // 지점을 그래프에 붙일 때 이보다 멀면 실패
+const SNAP_LIMIT_M = 40 // 지점을 그래프에 붙일 때 이보다 멀면 실패 (설계의 snapLimitM이 없을 때)
+const SNAP_LIMIT_MAX_M = 100 // 설계가 정할 수 있는 붙임 한도의 상한
+const EXTRA_END_LIMIT_M = 10 // extraWays의 양 끝은 보행망 위의 점에서 이 거리 안이어야 한다
 const BOUNDARY_LIMIT_M = 30 // 관람 지점은 경계 안이거나 이 거리 안이어야 한다 (설계에 boundaryWay가 있을 때만)
 const WALK_HIGHWAYS = new Set(['footway', 'path', 'pedestrian', 'steps', 'service', 'living_street', 'track'])
 
@@ -55,6 +59,13 @@ const SOURCE = design.source
 const CHECKED_AT = design.checkedAt
 const COURSE_ID = design.course?.id
 const BOUNDARY_WAY = design.boundaryWay
+// 신뢰 등급: 설계 전체 등급(기본 B)과 지점별 등급 중 낮은 쪽을 구간에 쓴다. 안내도 맞춤 지점은 설계에서 C로 적는다.
+const CONFIDENCE_RANK = { A: 0, B: 1, C: 2 }
+const DESIGN_CONFIDENCE = design.confidence ?? 'B'
+const nodeConfidence = new Map(design.nodes.map(n => [n.id, n.confidence ?? 'B']))
+for (const level of [DESIGN_CONFIDENCE, ...nodeConfidence.values()]) {
+  if (!['A', 'B', 'C'].includes(level)) throw new Error(`confidence는 A, B, C 중 하나여야 합니다: ${level}`)
+}
 
 // 시범 장소 파일이 있으면 그 파일에 쓰고, 없으면 장소 안 전용 파일을 만든다.
 const placePath = join(root, `data/places/${id}.json`)
@@ -112,10 +123,11 @@ for (const way of ways) {
 }
 if (baseEdges.length === 0) throw new Error('보행 간선이 없습니다.')
 
-// 지점마다 가장 가까운 간선 위 점을 찾는다.
+// 지점마다 가장 가까운 간선 위 점을 찾는다. extraWays는 붙임 대상이 아니므로 OSM 간선만 본다.
+const osmEdgeCount = baseEdges.length
 function nearestOnGraph(p) {
   let best = null
-  for (let i = 0; i < baseEdges.length; i++) {
+  for (let i = 0; i < osmEdgeCount; i++) {
     const e = baseEdges[i]
     const t = projectOnSegment(p, e.A, e.B)
     const q = lerp(e.A, e.B, t)
@@ -125,13 +137,38 @@ function nearestOnGraph(p) {
   return best
 }
 
-// 설계 지점 → 그래프 위 붙임 지점. 40m를 넘으면 실패하고 이유를 남긴다.
+// 설계 지점 → 그래프 위 붙임 지점. 한도(기본 40m)를 넘으면 실패한다. 한도를 바꾸려면 설계에 snapLimitM과 snapNote를 함께 적는다.
+function snapLimitOf(node) {
+  if (node.snapLimitM === undefined) return SNAP_LIMIT_M
+  if (!(node.snapLimitM > 0 && node.snapLimitM <= SNAP_LIMIT_MAX_M)) throw new Error(`지점 ${node.id}의 snapLimitM은 0보다 크고 ${SNAP_LIMIT_MAX_M} 이하여야 합니다.`)
+  if (!node.snapNote) throw new Error(`지점 ${node.id}에 snapLimitM을 주려면 snapNote(보행로에서 먼 이유)를 적어 주세요.`)
+  return node.snapLimitM
+}
 const designNodes = design.nodes.map(n => ({ ...n, coord: [n.lng, n.lat] }))
 const snaps = {}
 for (const node of designNodes) {
+  const limit = snapLimitOf(node)
   const hit = nearestOnGraph(node.coord)
-  if (hit.d > SNAP_LIMIT_M) throw new Error(`지점 ${node.id}가 보행로에서 ${hit.d.toFixed(1)}m 떨어져 붙이지 못했습니다.`)
+  if (hit.d > limit) throw new Error(`지점 ${node.id}가 보행로에서 ${hit.d.toFixed(1)}m 떨어져 붙이지 못했습니다(한도 ${limit}m).`)
   snaps[node.id] = hit
+}
+
+// 설계의 extraWays 양 끝도 보행망 위에 붙인다. 가운데 점은 그대로 쓰는 선이다.
+const extraWays = (design.extraWays ?? []).map(w => {
+  if (!w.id || !w.note) throw new Error(`extraWay ${w.id ?? '(id 없음)'}에 id와 note(어떤 지형지물에서 좌표를 땄는지)가 필요합니다.`)
+  if (!Array.isArray(w.coords) || w.coords.length < 2 || !w.coords.every(c => Array.isArray(c) && Number.isFinite(c[0]) && Number.isFinite(c[1]))) {
+    throw new Error(`extraWay ${w.id}의 coords는 [lng,lat] 점 두 개 이상이어야 합니다.`)
+  }
+  return w
+})
+if (new Set(extraWays.map(w => w.id)).size !== extraWays.length) throw new Error('extraWays의 id가 겹칩니다.')
+const extraReport = []
+for (const w of extraWays) {
+  for (const [end, coord] of [['start', w.coords[0]], ['end', w.coords[w.coords.length - 1]]]) {
+    const hit = nearestOnGraph(coord)
+    if (hit.d > EXTRA_END_LIMIT_M) throw new Error(`extraWay ${w.id}의 ${end} 점이 보행망에서 ${hit.d.toFixed(1)}m 떨어져 있습니다(한도 ${EXTRA_END_LIMIT_M}m).`)
+    snaps[`x:${w.id}:${end}`] = hit
+  }
 }
 
 // 붙임 지점이 간선 끝(교차점)에 거의 닿으면 그 교차점을 쓰고, 아니면 간선을 나눠 새 점을 넣는다.
@@ -169,6 +206,24 @@ for (let i = 0; i < baseEdges.length; i++) {
     })
   }
 }
+// extraWays 간선: 양 끝은 붙임 지점, 가운데 점은 그대로. 계단·경사 정보가 없으므로 unknown(경사 없음으로 둔다).
+for (const w of extraWays) {
+  const s = snaps[`x:${w.id}:start`], t = snaps[`x:${w.id}:end`]
+  const chain = [{ key: s.key, pt: s.q }]
+  for (const c of w.coords.slice(1, -1)) chain.push({ key: keyOf(c), pt: c })
+  chain.push({ key: t.key, pt: t.q })
+  let lengthM = 0
+  for (let j = 0; j + 1 < chain.length; j++) {
+    if (chain[j].key === chain[j + 1].key) continue
+    edges.push({
+      from: chain[j].key, to: chain[j + 1].key, pts: [chain[j].pt, chain[j + 1].pt],
+      wayId: `extra:${w.id}`, steps: false, stepCount: undefined, incline: false,
+    })
+    lengthM += haversine(chain[j].pt, chain[j + 1].pt)
+  }
+  extraReport.push({ id: w.id, note: w.note, lengthM: Math.round(lengthM) })
+}
+
 const adjacency = new Map()
 edges.forEach((edge, index) => {
   for (const [from, to] of [[edge.from, edge.to], [edge.to, edge.from]]) {
@@ -287,7 +342,8 @@ function stairsOf(used) {
 const slopeOf = used => used.some(({ index }) => edges[index].incline)
 
 // ---- 경계 검사 ----
-const boundaryPts = boundary ? boundary.geometry.map(p => [p.lon, p.lat]) : []
+// 추출본 way의 geometry는 [lng,lat] 배열이고, 예전 추출본은 {lon,lat} 객체였다. 두 모양을 모두 읽는다.
+const boundaryPts = boundary ? boundary.geometry.map(p => (Array.isArray(p) ? [p[0], p[1]] : [p.lon, p.lat])) : []
 function insidePolygon([x, y]) {
   let inside = false
   for (let i = 0, j = boundaryPts.length - 1; i < boundaryPts.length; j = i++) {
@@ -323,6 +379,9 @@ const nodes = designNodes.map(n => {
 })
 
 // ---- 구간 만들기 ----
+const segmentConfidence = seg => [DESIGN_CONFIDENCE, nodeConfidence.get(seg.from), nodeConfidence.get(seg.to)]
+  .filter(level => level !== undefined)
+  .reduce((worst, level) => (CONFIDENCE_RANK[level] > CONFIDENCE_RANK[worst] ? level : worst))
 const segments = []
 const report = { detours: [], accessSteps: [] }
 // 구간 한 줄. 계단·경사는 그 경로에서 읽은 값만 쓴다.
@@ -352,14 +411,14 @@ for (const seg of sorted) {
   }
   if (isTour && !COURSE_ID) throw new Error('관람 구간이 있으면 설계 파일에 course.id가 필요합니다.')
   const tourExtra = isTour ? { courseId: COURSE_ID } : {}
-  segments.push(makeSegment(seg, route, { ...tourExtra, source: SOURCE, checkedAt: CHECKED_AT, confidence: 'B' }))
+  segments.push(makeSegment(seg, route, { ...tourExtra, source: SOURCE, checkedAt: CHECKED_AT, confidence: segmentConfidence(seg) }))
 
   if (isTour && stairsOf(route.used).stairsStatus === 'present') {
     // 계단이 있는 관람 구간은 계단 없는 길로 우회하는 구간을 함께 둔다. 같은 순서, detourOf로 원 구간을 가리킨다.
     const detour = routeBetween(seg.from, seg.to, { avoidSteps: true })
     if (detour) {
       segments.push(makeSegment(seg, detour, {
-        id: `${seg.id}d`, detourOf: seg.id, courseId: COURSE_ID, source: SOURCE, checkedAt: CHECKED_AT, confidence: 'B',
+        id: `${seg.id}d`, detourOf: seg.id, courseId: COURSE_ID, source: SOURCE, checkedAt: CHECKED_AT, confidence: segmentConfidence(seg),
       }))
       report.detours.push(seg.id)
     }
@@ -376,7 +435,7 @@ for (const s of segments) {
 
 const courses = design.course ? [{
   id: COURSE_ID, name: design.course.name, recommended: true,
-  source: SOURCE, checkedAt: CHECKED_AT, confidence: 'B',
+  source: SOURCE, checkedAt: CHECKED_AT, confidence: DESIGN_CONFIDENCE,
 }] : []
 
 // 시범 장소 파일은 기존 장소 칸을 그대로 두고 지점·구간·코스만 바꾼다. 전용 파일은 장소 안 칸만 쓴다.
@@ -407,6 +466,7 @@ await writeFile(outPath, JSON.stringify(out, null, 2) + '\n')
 const tourSegments = segments.filter(s => s.courseId && s.detourOf === undefined)
 const tourMain = tourSegments.filter(s => !s.optional)
 const snapReport = Object.fromEntries(designNodes.map(n => [n.id, Math.round(snaps[n.id].d * 10) / 10]))
+const countBy = (list, key) => list.reduce((acc, item) => ({ ...acc, [item[key]]: (acc[item[key]] ?? 0) + 1 }), {})
 console.log(JSON.stringify({
   file: relative(root, outPath),
   nodes: nodes.length,
@@ -421,4 +481,8 @@ console.log(JSON.stringify({
   accessStepsAvoided: report.accessSteps,
   detoursOf: report.detours,
   snapMeters: snapReport,
+  snapMaxM: Math.max(...designNodes.map(n => Math.round(snaps[n.id].d * 10) / 10)),
+  snapLimitChanged: designNodes.filter(n => n.snapLimitM !== undefined).map(n => ({ id: n.id, snapLimitM: n.snapLimitM, snapNote: n.snapNote, snapMeters: snapReport[n.id] })),
+  extraWays: extraReport,
+  confidence: countBy(segments, 'confidence'),
 }, null, 2))
