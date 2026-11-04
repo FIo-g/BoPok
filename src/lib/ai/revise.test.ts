@@ -1208,6 +1208,8 @@ describe('같은 날 같은 장소가 두 번 든 AI 답 (배포 버그 11/4)', 
       ['한밭수목원', 'hanbat'],
       ['점심 식사', null],
     ])
+    // 중복 장소의 DB 체류 시간이 빈 점심 자리에 붙지 않는다
+    expect(body.version.stops[2].visitMin).toBeUndefined()
   })
 
   it('빈 점심 자리는 근처 등록 식당으로 채워진다', async () => {

@@ -214,6 +214,8 @@ export function dedupeSameDayPlaces(drafts: DraftStop[]): DraftStop[] {
 }
 
 // 버린 중복이 식사 뜻이면 바꿀 빈 자리. 아니면 null (그냥 버린다).
+// visitMin은 옮기지 않는다 — 중복 장소(관광지)의 체류 시간이 식사 자리에 붙으면 하루 시각이 밀린다.
+// 근처 식당이 채우면 식당의 visitMin을 쓰고, 못 채운 자리는 visitMin 없이 둔다.
 function mealPlaceholderOf(draft: DraftStop, original: string): DraftStop | null {
   const mealWord = /식사|밥|아침|점심|저녁/.test(original)
   if (!mealWord && draft.seated !== true) return null
@@ -225,7 +227,6 @@ function mealPlaceholderOf(draft: DraftStop, original: string): DraftStop | null
     seated: true,
     ...(draft.day !== undefined ? { day: draft.day } : {}),
     ...(draft.startTime !== undefined ? { startTime: draft.startTime } : {}),
-    ...(draft.visitMin !== undefined ? { visitMin: draft.visitMin } : {}),
   }
 }
 

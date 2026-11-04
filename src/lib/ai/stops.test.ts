@@ -302,7 +302,8 @@ describe('dedupeSameDayPlaces', () => {
       { placeId: 'hanbat', name: '한밭수목원', startTime: '11:00' },
       { placeId: 'hanbat', name: '한밭수목원', startTime: '12:30', visitMin: 40, seated: true, day: 1 },
     ])
-    expect(out[1]).toEqual({ placeId: null, name: '점심 식사', startTime: '12:30', visitMin: 40, seated: true, day: 1 })
+    // 중복 관광지의 체류 시간(visitMin 40)은 식사 자리에 옮기지 않는다
+    expect(out[1]).toEqual({ placeId: null, name: '점심 식사', startTime: '12:30', seated: true, day: 1 })
   })
 
   it('원래 이름에 점심이 있으면 점심 식사 (DB 이름으로 덮어쓰기 전 이름을 본다)', () => {

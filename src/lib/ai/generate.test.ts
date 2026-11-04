@@ -116,6 +116,26 @@ describe('handleGenerate', () => {
     ])
   })
 
+  it('중복을 식사 자리로 바꿔도 DB 체류 시간(visitMin)은 식사 자리에 붙지 않는다', async () => {
+    const { deps } = depsWithAi([
+      {
+        stops: [
+          { placeId: 'science', name: '국립중앙과학관', startTime: '10:00' },
+          { placeId: 'science', name: '점심(국립중앙과학관 근처)', startTime: '12:30', seated: true },
+        ],
+      },
+    ])
+    await deps.interviews.save('trip-dev', doneState({ transport: 'car' }))
+
+    const response = await handleGenerate(makeRequest({ tripId: 'trip-dev' }), deps)
+    expect(response.status).toBe(200)
+    const body = PlanResponseSchema.parse(await response.json())
+    // 관광지는 DB 체류 시간(120분)을 그대로 쓰고, 점심 자리에는 visitMin이 없어야 시각이 밀리지 않는다
+    expect(body.version.stops[0]).toMatchObject({ name: '국립중앙과학관', visitMin: 120 })
+    expect(body.version.stops[1]).toMatchObject({ name: '점심 식사', placeId: null, startTime: '12:30' })
+    expect(body.version.stops[1].visitMin).toBeUndefined()
+  })
+
   it('꼭 갈 곳은 빠져도 넣음', async () => {
     const { deps } = depsWithAi([{ stops: [{ placeId: 'science', name: '국립중앙과학관' }] }])
     await deps.interviews.save(
