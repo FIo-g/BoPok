@@ -4,7 +4,7 @@
 // 모바일은 아래에서 올라오는 시트(끌어 내리면 닫힘). 단계(phase)는 useLandmarkDetail 이 정하고, 여기서는 그리기·포커스·키보드만 한다.
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { LazyLandmarkMiniMap, type Landmark } from '@/components/map'
-import { shouldCloseOnKey, shouldCloseSheet, type DetailPhase } from './landmark-detail'
+import { landmarkSourceText, shouldCloseOnKey, shouldCloseSheet, type DetailPhase } from './landmark-detail'
 import { ARTS_CENTER_HALLS, hallById } from '@/lib/indoor/arts-center'
 import { IndoorInfo } from './indoor/IndoorInfo'
 import { IndoorProvider } from './indoor/IndoorProvider'
@@ -171,6 +171,8 @@ export function LandmarkDetail({ landmark, phase, onClose }: { landmark: Landmar
               <ul className="lmd-tags" aria-label="특징">
                 {landmark.tags.map(tag => <li key={tag}>{tag}</li>)}
               </ul>
+              {/* 설명은 팀이 쓴 문구라 출처·확인 날짜·신뢰 등급을 늘 함께 보인다 (AGENTS 6장 — 82e20ac에서 빠졌던 줄을 되살림) */}
+              <p className="lmd-source">{landmarkSourceText(landmark)}</p>
             </div>
           )}
           <button type="button" className="lmd-cta lmd-ctaCard" onClick={onClose}>지도 더 둘러보기</button>
