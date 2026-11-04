@@ -11,7 +11,6 @@ import { aiFailure, type AiFailure } from '@/lib/ai-fallback'
 import type { InterviewResponse, PlaceSummary, Stop, StartMode } from '@/lib/contracts'
 import { stopsFromPlaces } from '@/lib/plan/stop-edit'
 import { STYLE_OPTIONS } from '@/lib/trip-options'
-import { clearPlaceIntent, peekPlaceIntent, scheduleLineForPlace } from '@/lib/place-intent'
 import { errorMessage } from '@/lib/use-async'
 
 type Step =
@@ -71,12 +70,7 @@ function StartStep({ groupId, onCreated }: { groupId: string; onCreated: (tripId
 }
 
 function PasteStep({ tripId, onParsed }: { tripId: string; onParsed: (stops: Stop[], unmatched: string[]) => void }) {
-  // 첫 화면 지도에서 "이 장소로 일정 만들기"를 눌렀다면 그 장소를 한 줄로 넣어 둔다(place-intent.ts)
-  const [placeName] = useState(peekPlaceIntent)
-  const [text, setText] = useState(() => (placeName ? scheduleLineForPlace(placeName) : ''))
-  useEffect(() => {
-    clearPlaceIntent()
-  }, [])
+  const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<AiFailure | null>(null)
   const [pick, setPick] = useState(false)
@@ -101,7 +95,6 @@ function PasteStep({ tripId, onParsed }: { tripId: string; onParsed: (stops: Sto
       <Field label="짜 둔 일정을 붙여 넣어 주세요" hint="시간과 장소가 줄마다 있으면 더 잘 정리돼요. 예) 10:00 한밭수목원">
         <TextArea rows={8} value={text} onChange={e => setText(e.target.value)} maxLength={5000} placeholder={'10:00 한밭수목원\n12:00 점심\n14:00 국립중앙과학관'} />
       </Field>
-      {placeName && <Notice tone="info">첫 화면에서 고른 “{placeName}”를 한 줄 넣어 뒀어요. 시간을 고치고 다른 장소도 이어서 적어 주세요.</Notice>}
       {error && <ErrorNotice message={error.message} />}
       <div className="flex flex-wrap gap-2">
         {(error?.canRetry ?? true) && (

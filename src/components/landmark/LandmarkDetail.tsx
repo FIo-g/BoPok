@@ -1,6 +1,6 @@
 'use client'
 
-// 랜드마크 상세 화면: 왼쪽 사진, 오른쪽 위 정보 카드(이름·설명·칩·"이 장소로 일정 만들기"), 오른쪽 아래 위치 미니맵.
+// 랜드마크 상세 화면: 왼쪽 사진, 오른쪽 위 정보 카드(이름·설명·칩·"지도 더 둘러보기"), 오른쪽 아래 위치 미니맵.
 // 모바일은 아래에서 올라오는 시트(끌어 내리면 닫힘). 단계(phase)는 useLandmarkDetail 이 정하고, 여기서는 그리기·포커스·키보드만 한다.
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { LazyLandmarkMiniMap, type Landmark } from '@/components/map'
@@ -9,7 +9,7 @@ import './landmark-detail.css'
 
 const FOCUSABLE = 'button:not([disabled]), [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
 
-export function LandmarkDetail({ landmark, phase, onClose, onStartPlan }: { landmark: Landmark; phase: DetailPhase; onClose: () => void; onStartPlan: (landmark: Landmark) => void }) {
+export function LandmarkDetail({ landmark, phase, onClose }: { landmark: Landmark; phase: DetailPhase; onClose: () => void }) {
   const titleId = useId()
   const rootRef = useRef<HTMLDivElement>(null)
   const closeRef = useRef<HTMLButtonElement>(null)
@@ -118,13 +118,13 @@ export function LandmarkDetail({ landmark, phase, onClose, onStartPlan }: { land
             <ul className="lmd-tags" aria-label="특징">
               {landmark.tags.map(tag => <li key={tag}>{tag}</li>)}
             </ul>
-            <button type="button" className="lmd-cta lmd-ctaCard" onClick={() => onStartPlan(landmark)}>이 장소로 일정 만들기</button>
+            <button type="button" className="lmd-cta lmd-ctaCard" onClick={onClose}>지도 더 둘러보기</button>
           </section>
           <div className="lmd-mapBox lmd-stagger" style={{ '--i': 2 } as React.CSSProperties} role="img" aria-label={`${landmark.name} 위치 지도`}>
             <LazyLandmarkMiniMap landmark={landmark} />
           </div>
         </div>
-        <button type="button" className="lmd-cta lmd-ctaSticky" onClick={() => onStartPlan(landmark)}>이 장소로 일정 만들기</button>
+        <button type="button" className="lmd-cta lmd-ctaSticky" onClick={onClose}>지도 더 둘러보기</button>
       </div>
     </div>
   )

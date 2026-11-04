@@ -8,8 +8,7 @@ import {
 } from './landing-intro'
 import { LandmarkDetail } from '@/components/landmark/LandmarkDetail'
 import { useLandmarkDetail } from '@/components/landmark/useLandmarkDetail'
-import { rememberPlaceIntent } from '@/lib/place-intent'
-import { BUILDINGS_TILES, LANDMARKS, LazyMapView, PALETTE, createCameraLoop, metersToLon, type CameraLoop, type Landmark, type MapInstance, type MapPin } from '@/components/map'
+import { BUILDINGS_TILES, LANDMARKS, LazyMapView, PALETTE, createCameraLoop, metersToLon, type CameraLoop, type MapInstance, type MapPin } from '@/components/map'
 import './hero.css'
 
 const reduced = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -96,11 +95,7 @@ export function Hero({ onStart }: { onStart: () => void }) {
   })
   const detailActive = detail.state.phase !== 'closed' || detail.returning
   const onSelectLandmark = detail.open
-  // "이 장소로 일정 만들기": 장소를 기억해 두고 시작 흐름(로그인·그룹)으로 보낸다. 새 여행의 붙여넣기 칸에 들어간다
-  const startPlanAt = useCallback((landmark: Landmark) => {
-    rememberPlaceIntent(landmark.name)
-    onStart()
-  }, [onStart])
+
   // 지도가 늦거나 실패해도 글자는 보여야 한다
   useEffect(() => {
     const id = window.setTimeout(() => setReady(true), READY_TIMEOUT_MS)
@@ -317,7 +312,7 @@ export function Hero({ onStart }: { onStart: () => void }) {
         </div>
       )}
           {detail.landmark && detail.state.phase !== 'flying' && (
-        <LandmarkDetail landmark={detail.landmark} phase={detail.state.phase} onClose={detail.close} onStartPlan={startPlanAt} />
+        <LandmarkDetail landmark={detail.landmark} phase={detail.state.phase} onClose={detail.close} />
       )}
     </section>
   )
